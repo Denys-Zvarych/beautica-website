@@ -10,13 +10,20 @@ import { t } from "../i18n/t";
 </footer>
 
 <style>
+  /* Stacked on phones (a fixed two lines, so a font swap can never change the line count and shift the page);
+     a single row from tablet up. */
   .bar {
     display: flex;
-    flex-wrap: wrap;
+    flex-direction: column;
     align-items: center;
     justify-content: center;
-    column-gap: var(--vt-space-lg);
     padding-block: var(--vt-space-md);
+  }
+  @media (min-width: 600px) {
+    .bar {
+      flex-direction: row;
+      column-gap: var(--vt-space-lg);
+    }
   }
   .mail {
     display: inline-flex;

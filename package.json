@@ -12,7 +12,8 @@
     "preview": "astro preview",
     "check": "astro check",
     "check:tokens": "node scripts/check-tokens.mjs",
-    "check:responsive": "node scripts/check-responsive.mjs"
+    "check:responsive": "node scripts/check-responsive.mjs",
+    "check:cls": "node scripts/measure-cls.mjs"
   },
   "dependencies": {
     "@astrojs/cloudflare": "14.3.4",
