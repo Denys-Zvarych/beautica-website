@@ -24,7 +24,7 @@ const base = `http://127.0.0.1:${server.address().port}`;
 const executablePath = process.env.CHROMIUM_PATH ?? ["/usr/bin/chromium-browser", "/usr/bin/chromium"].find(existsSync);
 const browser = await chromium.launch({ executablePath, args: ["--no-sandbox"] });
 let worst = 0;
-for (const route of ["/", "/404"]) for (const width of [320, 360]) for (const motion of ["no-preference", "reduce"]) {
+for (const route of arg("--routes", "/,/404").split(",")) for (const width of [320, 360]) for (const motion of ["no-preference", "reduce"]) {
   const vals = [];
   for (let i = 0; i < RUNS; i++) {
     const ctx = await browser.newContext({ viewport: { width, height: 700 }, reducedMotion: motion });

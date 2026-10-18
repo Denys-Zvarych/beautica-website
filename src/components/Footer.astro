@@ -4,28 +4,49 @@ import { t } from "../i18n/t";
 
 <footer class="site-footer">
   <div class="vt-container bar">
+    <nav aria-label={t("footer.nav")}>
+      <ul class="links">
+        <li><a class="vt-body link" href="/privacy">{t("footer.privacy")}</a></li>
+        <li><a class="vt-body link" href="/terms">{t("footer.terms")}</a></li>
+      </ul>
+    </nav>
     <p class="vt-body">{t("footer.rights", { year: new Date().getFullYear() })}</p>
-    <a class="vt-body mail" href={`mailto:${t("site.supportEmail")}`}>{t("site.supportEmail")}</a>
+    <a class="vt-body link" href={`mailto:${t("site.supportEmail")}`}>{t("site.supportEmail")}</a>
   </div>
 </footer>
 
 <style>
-  /* Stacked on phones (a fixed two lines, so a font swap can never change the line count and shift the page);
+  /* Stacked on phones (fixed single lines, so a font swap can never change the line count and shift the page);
      a single row from tablet up. */
   .bar {
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
+    gap: var(--vt-space-sm);
     padding-block: var(--vt-space-md);
   }
-  @media (min-width: 600px) {
+  .links {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--vt-space-sm);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  @media (min-width: 1024px) {
     .bar {
+      flex-direction: row;
+      flex-wrap: wrap;
+      column-gap: var(--vt-space-lg);
+    }
+    .links {
       flex-direction: row;
       column-gap: var(--vt-space-lg);
     }
   }
-  .mail {
+  .link {
     display: inline-flex;
     align-items: center;
     min-height: var(--vt-touch-min);

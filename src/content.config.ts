@@ -1,0 +1,84 @@
+import { defineCollection } from "astro:content";
+import { readdirSync, readFileSync } from "node:fs";
+import { z } from "astro/zod";
+import { LEGAL_VARS } from "./config/legal.mjs";
+
+/** Replaces {{token}} with values from src/config/legal.mjs, so the operator name is edited in ONE place. */
+function applyLegalVars(markdown: string): string {
+  return markdown.replace(/\{\{(\w+)\}\}/g, (_, key: string) => {
+    if (!(key in LEGAL_VARS)) throw new Error(`legal: unknown token {{${key}}}`);
+    return LEGAL_VARS[key as keyof typeof LEGAL_VARS];
+  });
+}
+
+/**
+ * "## Заголовок {#guest}" -> plain "## Заголовок" plus the list of h2 headings (id + text) for the table of contents;
+ * the explicit ids (stable, linkable; Cyrillic auto-slugs are not) are applied to the rendered HTML by withExplicitIds.
+ */
+function withHeadingIds(markdown: string): { markdown: string; headings: { depth: number; slug: string; text: string }[] } {
+  const headings: { depth: number; slug: string; text: string }[] = [];
+  const out = markdown.replace(/^## (.+?) \{#([a-z][\w-]*)\}\s*$/gm, (_, text: string, slug: string) => {
+    headings.push({ depth: 2, slug, text });
+    return `## ${text}`;
+  });
+  return { markdown: out, headings };
+}
+
+function withExplicitIds(html: string, headings: { slug: string }[]): string {
+  // Matched by position, not text: smart punctuation rewrites quotes/apostrophes in the rendered heading text.
+  let i = 0;
+  const out = html.replace(/<h2 id="[^"]*">/g, () => `<h2 id="${headings[i++]?.slug ?? ""}">`);
+  if (i !== headings.length) throw new Error(`legal: ${headings.length} headings with ids, ${i} rendered <h2>`);
+  return out;
+}
+
+/** Minimal frontmatter reader for our own files: `key: value` lines, values either "double-quoted" (JSON string) or bare. */
+function parseFrontmatter(source: string): { data: Record<string, string>; body: string } {
+  const m = source.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/);
+  if (!m) throw new Error("legal: file has no frontmatter");
+  const data: Record<string, string> = {};
+  for (const line of m[1]!.split(/\r?\n/)) {
+    const kv = line.match(/^(\w+):\s*(.*)$/);
+    if (!kv) throw new Error(`legal: cannot parse frontmatter line "${line}"`);
+    const raw = kv[2]!.trim();
+    data[kv[1]!] = raw.startsWith('"') ? (JSON.parse(raw) as string) : raw;
+  }
+  return { data, body: m[2]! };
+}
+
+// Legal documents (Ukrainian today; EN later under src/content/legal/en/). One Markdown file per document.
+// A small custom loader (instead of glob) so {{tokens}} are substituted before the Markdown is rendered.
+const legal = defineCollection({
+  loader: {
+    name: "legal-markdown",
+    load: async ({ store, parseData, renderMarkdown, generateDigest, config }) => {
+      store.clear();
+      const dir = new URL("./content/legal/", config.srcDir);
+      for (const locale of readdirSync(dir)) {
+        for (const file of readdirSync(new URL(`${locale}/`, dir)).filter((f) => f.endsWith(".md"))) {
+          const id = `${locale}/${file.replace(/\.md$/, "")}`;
+          const source = readFileSync(new URL(`${locale}/${file}`, dir), "utf8");
+          const { data, body } = parseFrontmatter(source);
+          const parsed = await parseData({ id, data });
+          const { markdown, headings } = withHeadingIds(applyLegalVars(body));
+          const rendered = await renderMarkdown(markdown);
+          rendered.html = withExplicitIds(rendered.html, headings);
+          rendered.metadata = { ...rendered.metadata, headings };
+          store.set({ id, data: parsed, body, digest: generateDigest(applyLegalVars(source)), rendered });
+        }
+      }
+    },
+  },
+  schema: z.object({
+    title: z.string(),
+    /** <title> (Seo enforces <= 60) and meta description (<= 155). */
+    metaTitle: z.string(),
+    description: z.string(),
+    version: z.string(),
+    /** ISO date the current version takes effect ("Дата набрання чинності"). */
+    updated: z.coerce.date(),
+    locale: z.enum(["uk"]),
+  }),
+});
+
+export const collections = { legal };

@@ -39,7 +39,9 @@ for (const route of ROUTES) {
     await page.goto(base + route, { waitUntil: "networkidle" });
     await page.waitForTimeout(1500); // let entrance animations settle before measuring
     const r = await page.evaluate(() => {
+      // WCAG 2.5.8 "inline" exception: links inside running legal prose (.prose p/li) are not tap-target buttons.
       const targets = [...document.querySelectorAll("a[href], button, input, select, textarea, summary, [role=button]")]
+        .filter((el) => !el.closest(".prose p, .prose li"))
         .map((el) => ({ el, b: el.getBoundingClientRect() }))
         .filter((t) => t.b.width > 0 && t.b.height > 0)
         .map((t) => ({ tag: t.el.tagName + (t.el.className ? "." + String(t.el.className).split(" ")[0] : ""), x: t.b.x, y: t.b.y, w: t.b.width, h: t.b.height }));
