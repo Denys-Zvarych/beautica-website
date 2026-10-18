@@ -37,6 +37,7 @@ for (const route of ROUTES) {
   for (const width of WIDTHS) {
     const page = await browser.newPage({ viewport: { width, height: 800 } });
     await page.goto(base + route, { waitUntil: "networkidle" });
+    await page.waitForTimeout(1500); // let entrance animations settle before measuring
     const r = await page.evaluate(() => {
       const targets = [...document.querySelectorAll("a[href], button, input, select, textarea, summary, [role=button]")]
         .map((el) => ({ el, b: el.getBoundingClientRect() }))

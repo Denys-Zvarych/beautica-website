@@ -1,6 +1,5 @@
 ---
-import { Image } from "astro:assets";
-import logo from "../assets/logo.png";
+import LogoTile from "./LogoTile.astro";
 import { t } from "../i18n/t";
 
 interface Props {
@@ -15,7 +14,7 @@ if (links.length > 3) throw new Error("Header: at most 3 links (footer carries t
 <header class="site-header">
   <div class="vt-container bar">
     <a class="brand" href="/" aria-label={t("a11y.home")}>
-      <Image class="mark" src={logo} alt="" width={40} height={40} widths={[40, 80]} sizes="40px" format="webp" />
+      <LogoTile size="header" />
       <span class="vt-wordmark">{t("site.name")}</span>
     </a>
     {
@@ -47,14 +46,9 @@ if (links.length > 3) throw new Error("Header: at most 3 links (footer carries t
   .brand {
     display: inline-flex;
     align-items: center;
-    gap: var(--vt-space-sm);
+    gap: var(--vt-space-md);
     min-height: var(--vt-touch-min);
     text-decoration: none;
-  }
-  .mark {
-    width: calc(var(--vt-touch-min) - var(--vt-space-sm));
-    height: calc(var(--vt-touch-min) - var(--vt-space-sm));
-    border-radius: var(--vt-radius-button);
   }
   ul {
     display: flex;
