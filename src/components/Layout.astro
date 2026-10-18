@@ -1,0 +1,44 @@
+---
+import "../styles/fonts.css";
+import "../styles/tokens.css";
+import "../styles/base.css";
+import nunitoCyr from "@fontsource-variable/nunito/files/nunito-cyrillic-wght-normal.woff2?url";
+import comfortaaCyr from "@fontsource-variable/comfortaa/files/comfortaa-cyrillic-wght-normal.woff2?url";
+import Seo from "./Seo.astro";
+import Header from "./Header.astro";
+import Footer from "./Footer.astro";
+import { t, defaultLocale } from "../i18n/t";
+
+interface Props {
+  title: string;
+  description: string;
+  noindex?: boolean;
+  canonicalPath?: string;
+  image?: string;
+  jsonLd?: Record<string, unknown> | Record<string, unknown>[];
+  /** Hide the header (a hero page that already shows the logo). Default false. */
+  hideHeader?: boolean;
+}
+
+const { hideHeader = false, ...seo } = Astro.props;
+---
+
+<!doctype html>
+<html lang={defaultLocale}>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="icon" href="/favicon.ico" sizes="48x48" />
+    <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <link rel="preload" as="font" type="font/woff2" href={nunitoCyr} crossorigin />
+    <link rel="preload" as="font" type="font/woff2" href={comfortaaCyr} crossorigin />
+    <Seo {...seo} />
+  </head>
+  <body>
+    <a class="skip-link" href="#main">{t("a11y.skipToContent")}</a>
+    {!hideHeader && <Header />}
+    <slot />
+    <Footer />
+  </body>
+</html>

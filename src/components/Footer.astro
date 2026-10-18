@@ -1,0 +1,34 @@
+---
+import { t } from "../i18n/t";
+---
+
+<footer class="site-footer">
+  <div class="vt-container bar">
+    <p class="vt-body">{t("footer.rights", { year: new Date().getFullYear() })}</p>
+    <a class="vt-body mail" href={`mailto:${t("site.supportEmail")}`}>{t("site.supportEmail")}</a>
+  </div>
+</footer>
+
+<style>
+  /* Stacked on phones (a fixed two lines, so a font swap can never change the line count and shift the page);
+     a single row from tablet up. */
+  .bar {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding-block: var(--vt-space-md);
+  }
+  @media (min-width: 600px) {
+    .bar {
+      flex-direction: row;
+      column-gap: var(--vt-space-lg);
+    }
+  }
+  .mail {
+    display: inline-flex;
+    align-items: center;
+    min-height: var(--vt-touch-min);
+    color: var(--vt-color-accent-deep);
+  }
+</style>

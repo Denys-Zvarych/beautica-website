@@ -1,0 +1,44 @@
+---
+// Mirrors NeumorphicButton: 49 px, radius 16, latte->deep gradient, extrudedButtonAccent,
+// cream Comfortaa 13/700, pressed = scale(.97) + shadow off (shadow lives on ::before, opacity only).
+interface Props {
+  href: string;
+  class?: string;
+}
+const { href, class: className } = Astro.props;
+---
+
+<a class:list={["cta vt-cta", className]} href={href}>
+  <slot />
+</a>
+
+<style>
+  .cta {
+    position: relative;
+    isolation: isolate;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: var(--vt-size-cta);
+    padding-inline: var(--vt-space-lg);
+    border-radius: var(--vt-radius-button);
+    background: var(--vt-gradient-accent);
+    text-decoration: none;
+    transition: transform 120ms ease-out;
+  }
+  .cta::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    border-radius: inherit;
+    box-shadow: var(--vt-shadow-extruded-button-accent);
+    transition: opacity 120ms ease-out;
+  }
+  .cta:active {
+    transform: scale(0.97);
+  }
+  .cta:active::before {
+    opacity: 0;
+  }
+</style>

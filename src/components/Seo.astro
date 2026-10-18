@@ -1,0 +1,83 @@
+---
+import { locales, defaultLocale, t } from "../i18n/t";
+
+interface Props {
+  title: string;
+  description: string;
+  /** Path of the canonical URL; defaults to the current path. Query/UTM are always dropped. */
+  canonicalPath?: string;
+  /** Absolute path of the OG image under public/. */
+  image?: string;
+  imageAlt?: string;
+  /** noindex,nofollow meta (token routes, 404, 410). The matching header lives in _headers (phase 004). */
+  noindex?: boolean;
+  ogType?: string;
+  /** summary_large_image for static pages, summary for profiles. */
+  twitterCard?: "summary_large_image" | "summary";
+  /** JSON-LD object(s), built by typed builders. */
+  jsonLd?: Record<string, unknown> | Record<string, unknown>[];
+}
+
+const {
+  title,
+  description,
+  canonicalPath,
+  image = "/og-default.png",
+  imageAlt = t("site.name"),
+  noindex = false,
+  ogType = "website",
+  twitterCard = "summary_large_image",
+  jsonLd,
+} = Astro.props;
+
+// Hard SEO limits: fail the build instead of shipping a truncated snippet.
+if (title.length > 60) throw new Error(`Seo: title is ${title.length} chars (max 60): "${title}"`);
+if (description.length > 155) throw new Error(`Seo: description is ${description.length} chars (max 155)`);
+
+const site = Astro.site as URL;
+// build.format "file" makes Astro.url.pathname "/x.html" / "/index.html"; the public URL has neither.
+let path = (canonicalPath ?? Astro.url.pathname).replace(/(^|\/)index\.html$/, "$1").replace(/\.html$/, "");
+if (path === "") path = "/";
+if (path.length > 1) path = path.replace(/\/+$/, "");
+const canonical = new URL(path, site).href;
+const imageUrl = new URL(image, site).href;
+const ldBlocks = jsonLd === undefined ? [] : Array.isArray(jsonLd) ? jsonLd : [jsonLd];
+
+// hreflang only once a second locale exists (uk-only today, EN later under /en/).
+const alternates =
+  locales.length > 1
+    ? locales.map((l) => ({
+        hreflang: l,
+        href: new URL(l === defaultLocale ? path : `/${l}${path === "/" ? "" : path}`, site).href,
+      }))
+    : [];
+---
+
+<title>{title}</title>
+<meta name="description" content={description} />
+{!noindex && <link rel="canonical" href={canonical} />}
+<meta name="robots" content={noindex ? "noindex, nofollow" : "index, follow"} />
+{!noindex && alternates.map((a) => <link rel="alternate" hreflang={a.hreflang} href={a.href} />)}
+{!noindex && alternates.length > 0 && <link rel="alternate" hreflang="x-default" href={alternates[0]!.href} />}
+
+{
+  !noindex && (
+    <>
+      <meta property="og:site_name" content={t("site.name")} />
+      <meta property="og:type" content={ogType} />
+      <meta property="og:title" content={title} />
+      <meta property="og:description" content={description} />
+      <meta property="og:url" content={canonical} />
+      <meta property="og:image" content={imageUrl} />
+      <meta property="og:image:alt" content={imageAlt} />
+      <meta property="og:locale" content={t("site.locale")} />
+
+      <meta name="twitter:card" content={twitterCard} />
+      <meta name="twitter:title" content={title} />
+      <meta name="twitter:description" content={description} />
+      <meta name="twitter:image" content={imageUrl} />
+    </>
+  )
+}
+
+{ldBlocks.map((block) => <script type="application/ld+json" set:html={JSON.stringify(block)} />)}

@@ -1,0 +1,45 @@
+---
+import LogoTile from "../components/LogoTile.astro";
+import Layout from "../components/Layout.astro";
+import Chip from "../components/Chip.astro";
+import StoreIcon from "../components/StoreIcon.astro";
+import { t } from "../i18n/t";
+---
+
+<Layout title={t("index.metaTitle")} description={t("index.metaDescription")} hideHeader>
+  <main id="main" class="hero">
+    <div class="vt-container stack">
+      <LogoTile priority />
+      <h1 class="vt-display">{t("index.h1")}</h1>
+      <p class="vt-prose">{t("index.lead")}</p>
+      <ul class="chips">
+        <li><Chip><StoreIcon slot="icon" store="google-play" />{t("index.soonGooglePlay")}</Chip></li>
+        <li><Chip><StoreIcon slot="icon" store="app-store" />{t("index.soonAppStore")}</Chip></li>
+      </ul>
+    </div>
+  </main>
+</Layout>
+
+<style>
+  .hero {
+    display: flex;
+    align-items: center;
+    padding-block: var(--vt-space-xxl);
+  }
+  .stack {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--vt-space-md);
+    text-align: center;
+  }
+  .chips {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: var(--vt-space-md);
+    margin: var(--vt-space-sm) 0 0;
+    padding: 0;
+    list-style: none;
+  }
+</style>
