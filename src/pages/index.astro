@@ -1,0 +1,69 @@
+---
+import { Image } from "astro:assets";
+import logo from "../assets/logo.png";
+import Layout from "../components/Layout.astro";
+import Chip from "../components/Chip.astro";
+import { t } from "../i18n/t";
+---
+
+<Layout title={t("index.metaTitle")} description={t("index.metaDescription")} hideHeader>
+  <main id="main" class="hero">
+    <div class="vt-container stack">
+      <div class="tile">
+        <Image
+          src={logo}
+          alt=""
+          width={117}
+          height={117}
+          widths={[117, 234]}
+          sizes="117px"
+          format="webp"
+          loading="eager"
+          fetchpriority="high"
+        />
+      </div>
+      <h1 class="vt-display">{t("index.h1")}</h1>
+      <p class="vt-prose">{t("index.lead")}</p>
+      <ul class="chips">
+        <li><Chip>{t("index.soonGooglePlay")}</Chip></li>
+        <li><Chip>{t("index.soonAppStore")}</Chip></li>
+      </ul>
+    </div>
+  </main>
+</Layout>
+
+<style>
+  .hero {
+    display: flex;
+    align-items: center;
+    padding-block: var(--vt-space-xxl);
+  }
+  .stack {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--vt-space-md);
+    text-align: center;
+  }
+  .tile {
+    width: calc(var(--vt-size-logo-tile) * 1.5);
+    height: calc(var(--vt-size-logo-tile) * 1.5);
+    margin-bottom: var(--vt-space-sm);
+    border-radius: var(--vt-radius-logo-tile);
+    box-shadow: var(--vt-shadow-extruded-card);
+  }
+  .tile img {
+    width: 100%;
+    height: 100%;
+    border-radius: var(--vt-radius-logo-tile);
+  }
+  .chips {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: var(--vt-space-md);
+    margin: var(--vt-space-sm) 0 0;
+    padding: 0;
+    list-style: none;
+  }
+</style>

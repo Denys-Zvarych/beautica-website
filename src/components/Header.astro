@@ -1,0 +1,73 @@
+---
+import { Image } from "astro:assets";
+import logo from "../assets/logo.png";
+import { t } from "../i18n/t";
+
+interface Props {
+  /** At most 3 links; the store CTA joins once the app is published. No hamburger, ever. */
+  links?: { href: string; label: string }[];
+}
+
+const { links = [] } = Astro.props;
+if (links.length > 3) throw new Error("Header: at most 3 links (footer carries the rest)");
+---
+
+<header class="site-header">
+  <div class="vt-container bar">
+    <a class="brand" href="/" aria-label={t("a11y.home")}>
+      <Image class="mark" src={logo} alt="" width={40} height={40} widths={[40, 80]} sizes="40px" format="webp" />
+      <span class="vt-wordmark">{t("site.name")}</span>
+    </a>
+    {
+      links.length > 0 && (
+        <nav aria-label={t("a11y.primaryNav")}>
+          <ul>
+            {links.map((l) => (
+              <li>
+                <a class="link vt-label" href={l.href}>
+                  {l.label}
+                </a>
+              </li>
+            ))}
+          </ul>
+        </nav>
+      )
+    }
+  </div>
+</header>
+
+<style>
+  .bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--vt-space-md);
+    min-height: calc(var(--vt-touch-min) + var(--vt-space-md));
+  }
+  .brand {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--vt-space-sm);
+    min-height: var(--vt-touch-min);
+    text-decoration: none;
+  }
+  .mark {
+    width: calc(var(--vt-touch-min) - var(--vt-space-sm));
+    height: calc(var(--vt-touch-min) - var(--vt-space-sm));
+    border-radius: var(--vt-radius-button);
+  }
+  ul {
+    display: flex;
+    gap: var(--vt-space-sm);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  .link {
+    display: inline-flex;
+    align-items: center;
+    min-height: var(--vt-touch-min);
+    padding-inline: var(--vt-space-sm);
+    text-decoration: none;
+  }
+</style>

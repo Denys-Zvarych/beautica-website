@@ -1,0 +1,27 @@
+---
+import { t } from "../i18n/t";
+---
+
+<footer class="site-footer">
+  <div class="vt-container bar">
+    <p class="vt-body">{t("footer.rights", { year: new Date().getFullYear() })}</p>
+    <a class="vt-body mail" href={`mailto:${t("site.supportEmail")}`}>{t("site.supportEmail")}</a>
+  </div>
+</footer>
+
+<style>
+  .bar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: center;
+    column-gap: var(--vt-space-lg);
+    padding-block: var(--vt-space-md);
+  }
+  .mail {
+    display: inline-flex;
+    align-items: center;
+    min-height: var(--vt-touch-min);
+    color: var(--vt-color-accent-deep);
+  }
+</style>

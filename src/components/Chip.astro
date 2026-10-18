@@ -1,0 +1,35 @@
+---
+// Mirrors ServiceChip: 40 px tall, fully rounded, selected = gradient fill.
+// Non-interactive label by default; becomes a link only when `href` is passed (then >= 48 px tall).
+interface Props {
+  selected?: boolean;
+  href?: string;
+  class?: string;
+}
+const { selected = false, href, class: className } = Astro.props;
+const Tag = href ? "a" : "span";
+---
+
+<Tag class:list={["chip vt-pill", { selected, link: !!href }, className]} href={href}>
+  <slot />
+</Tag>
+
+<style>
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    min-height: calc(var(--vt-space-xl) + var(--vt-space-sm));
+    padding-inline: var(--vt-space-md);
+    border-radius: var(--vt-radius-pill);
+    background: var(--vt-color-base);
+    box-shadow: var(--vt-shadow-extruded-small);
+    text-decoration: none;
+  }
+  .chip.link {
+    min-height: var(--vt-touch-min);
+  }
+  .chip.selected {
+    background: var(--vt-gradient-accent);
+    color: var(--vt-color-cream);
+  }
+</style>

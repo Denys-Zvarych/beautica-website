@@ -1,0 +1,60 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [dev, main]
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  site:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - run: npm ci
+
+      - run: npm run build
+
+      - name: Link check (offline, built HTML)
+        uses: lycheeverse/lychee-action@v2
+        with:
+          args: --offline --no-progress --root-dir ${{ github.workspace }}/dist/client 'dist/client/**/*.html'
+          fail: true
+
+      - name: HTML validation
+        run: npx html-validate 'dist/client/**/*.html'
+
+      # Token parity needs the app theme. The mobile repo is public until release; if the checkout
+      # fails (repo made private, no token) the step below is skipped and the owner is warned.
+      - name: Checkout mobile theme (token source)
+        id: mobile
+        continue-on-error: true
+        uses: actions/checkout@v4
+        with:
+          repository: Denys-Zvarych/beautica-mobile
+          ref: dev
+          path: beautica-mobile
+          sparse-checkout: lib/core/theme
+
+      - name: Token parity (CSS vs Dart)
+        if: steps.mobile.outcome == 'success'
+        run: node scripts/check-tokens.mjs --mobile beautica-mobile
+
+      - name: Token parity skipped
+        if: steps.mobile.outcome != 'success'
+        run: echo "::warning::beautica-mobile not checkable (private?). Token parity NOT verified in CI; run node scripts/check-tokens.mjs locally."
+
+      - name: Lighthouse budget (mobile; perf>=95, a11y 100, SEO 100, CLS<0.02)
+        run: npx --yes @lhci/cli@0.15 autorun

@@ -1,0 +1,34 @@
+---
+import Layout from "../components/Layout.astro";
+import NeuCard from "../components/NeuCard.astro";
+import CtaButton from "../components/CtaButton.astro";
+import { t } from "../i18n/t";
+---
+
+<Layout title={t("notFound.metaTitle")} description={t("notFound.metaDescription")} noindex>
+  <main id="main" class="wrap">
+    <div class="vt-container">
+      <NeuCard class="card">
+        <h1 class="vt-heading">{t("notFound.h1")}</h1>
+        <p class="vt-prose">{t("notFound.text")}</p>
+        <CtaButton href="/">{t("notFound.cta")}</CtaButton>
+      </NeuCard>
+    </div>
+  </main>
+</Layout>
+
+<style>
+  .wrap {
+    display: flex;
+    align-items: center;
+    padding-block: var(--vt-space-xl);
+  }
+  .wrap :global(.card) {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--vt-space-md);
+    max-width: calc(var(--vt-max-width) / 2);
+    margin-inline: auto;
+  }
+</style>

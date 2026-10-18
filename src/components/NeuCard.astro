@@ -1,0 +1,22 @@
+---
+// Mirrors NeumorphicCard: radius 24, padding 24, extrudedCard. Extend additively (new props default off).
+interface Props {
+  /** Heading level semantics are the caller's job; `as` only swaps the wrapper element. */
+  as?: "div" | "section" | "article" | "li";
+  class?: string;
+}
+const { as: Tag = "div", class: className } = Astro.props;
+---
+
+<Tag class:list={["neu-card", className]}>
+  <slot />
+</Tag>
+
+<style>
+  .neu-card {
+    padding: var(--vt-space-lg);
+    border-radius: var(--vt-radius-card);
+    background: var(--vt-color-base);
+    box-shadow: var(--vt-shadow-extruded-card);
+  }
+</style>

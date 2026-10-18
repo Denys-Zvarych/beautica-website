@@ -1,0 +1,8 @@
+User-agent: *
+Allow: /
+Disallow: /l/
+Disallow: /invite/
+Disallow: /bookings/
+Disallow: /book/cancel/
+
+Sitemap: https://beautica.app/sitemap-index.xml

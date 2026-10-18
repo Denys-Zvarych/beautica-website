@@ -1,0 +1,120 @@
+/*
+ * VelvetTouch design tokens — derived from the app (beautica-mobile), code wins over docs.
+ *   lib/core/theme/brand_colors.dart   (BrandColors)
+ *   lib/core/theme/velvet_geometry.dart (VelvetRadii, VelvetSpacing, VelvetSizes, VelvetShadows, VelvetGradients)
+ *   lib/core/theme/velvet_text.dart     (VelvetText)
+ * Every line carries `@src <Dart.Symbol>`; `node scripts/check-tokens.mjs` diffs it against the Dart.
+ * Do not add a visual value without a @src or a web-only entry in the allow-list block below.
+ * One declaration per line (the checker is line-based).
+ */
+:root {
+  color-scheme: light;
+
+  /* --- Colour (BrandColors) --- */
+  --vt-color-base: #E6DDD0; /* @src BrandColors.base */
+  --vt-color-base-emphasis: #EDE4D5; /* @src BrandColors.baseEmphasis */
+  --vt-color-accent: #B89A7A; /* @src BrandColors.accent */
+  --vt-color-accent-deep: #6A4A28; /* @src BrandColors.accentDeep */
+  --vt-color-accent-latte: #8A6840; /* @src BrandColors.accentLatte */
+  --vt-color-accent-logo: #C4A988; /* @src BrandColors.accentLogo */
+  --vt-color-text: #4A3322; /* @src BrandColors.text */
+  --vt-color-text-secondary: #6E5743; /* @src BrandColors.textSecondary */
+  --vt-color-muted: #9A8367; /* @src BrandColors.muted */
+  --vt-color-placeholder: #AD9A82; /* @src BrandColors.placeholder */
+  --vt-color-faint: #BCAB95; /* @src BrandColors.faint */
+  --vt-color-cream: #F5EDE0; /* @src BrandColors.white */
+  --vt-color-shadow-light: #FFFBF4; /* @src BrandColors.shadowLightStrong */
+  --vt-color-shadow-dark-card: #C4B49E; /* @src BrandColors.shadowDarkCard */
+  --vt-color-shadow-dark-button: #C0AF98; /* @src BrandColors.shadowDarkButton */
+  --vt-color-error: #B0452F; /* @src BrandColors.error */
+  --vt-color-success: #5C7A4A; /* @src BrandColors.success */
+
+  /* --- Radii (VelvetRadii) --- */
+  --vt-radius-logo-tile: 24px; /* @src VelvetRadii.logoTile */
+  --vt-radius-field: 16px; /* @src VelvetRadii.field */
+  --vt-radius-button: 16px; /* @src VelvetRadii.button */
+  --vt-radius-card: 24px; /* @src VelvetRadii.card */
+  --vt-radius-pill: 999px; /* @src VelvetRadii.pill */
+
+  /* --- Spacing (VelvetSpacing) --- */
+  --vt-space-xs: 4px; /* @src VelvetSpacing.xs */
+  --vt-space-sm: 8px; /* @src VelvetSpacing.sm */
+  --vt-space-md: 16px; /* @src VelvetSpacing.md */
+  --vt-space-lg: 24px; /* @src VelvetSpacing.lg */
+  --vt-space-xl: 32px; /* @src VelvetSpacing.xl */
+  --vt-space-xxl: 48px; /* @src VelvetSpacing.xxl */
+
+  /* --- Sizes (VelvetSizes) --- */
+  --vt-size-field: 49px; /* @src VelvetSizes.field */
+  --vt-size-cta: 49px; /* @src VelvetSizes.cta */
+  --vt-size-logo-tile: 78px; /* @src VelvetSizes.logoTile */
+
+  /* --- Shadows (VelvetShadows) --- */
+  --vt-shadow-extruded-card: 8px 8px 18px #C4B49E, -8px -8px 18px #FFFBF4; /* @src VelvetShadows.extrudedCard */
+  --vt-shadow-extruded-button: 6px 6px 14px #C0AF98, -6px -6px 14px #FFFBF4; /* @src VelvetShadows.extrudedButton */
+  --vt-shadow-extruded-button-accent: 6px 6px 14px #8C6A44, -6px -6px 14px #FFFBF4; /* @src VelvetShadows.extrudedButtonAccent */
+  --vt-shadow-extruded-small: 5px 5px 12px #C0AF98, -5px -5px 12px #FFFBF4; /* @src VelvetShadows.extrudedSmall */
+  --vt-shadow-bordered-card: 0px 0px 10px rgba(196, 180, 158, 0.45); /* @src VelvetShadows.borderedCard */
+
+  /* --- Gradients (VelvetGradients) ---
+     CTA fill = accentLatte -> accentDeep, topLeft -> bottomRight. NeumorphicButton
+     (core/widgets/neumorphic.dart:676) uses the identical inline literal. */
+  --vt-gradient-accent: linear-gradient(to bottom right, #8A6840, #6A4A28); /* @src VelvetGradients.accentDiscFace */
+
+  /* --- Typography (VelvetText) --- */
+  --vt-font-display: "Comfortaa", ui-rounded, system-ui, sans-serif; /* @src VelvetText._headingStyle.fontFamily */
+  --vt-font-body: "Nunito", system-ui, sans-serif; /* @src VelvetText._bodyStyle.fontFamily */
+
+  --vt-fs-wordmark: 19px; /* @src VelvetText._wordmarkStyle.fontSize */
+  --vt-fw-wordmark: 700; /* @src VelvetText._wordmarkStyle.fontWeight */
+  --vt-ls-wordmark: 3.52px; /* @src VelvetText._wordmarkStyle.letterSpacing */
+
+  --vt-fs-heading: 21px; /* @src VelvetText._headingStyle.fontSize */
+  --vt-fw-heading: 700; /* @src VelvetText._headingStyle.fontWeight */
+  --vt-lh-heading: 1.25; /* @src VelvetText._headingStyle.height */
+
+  --vt-fs-subheading: 14px; /* @src VelvetText._subheadingStyle.fontSize */
+  --vt-fw-subheading: 600; /* @src VelvetText._subheadingStyle.fontWeight */
+
+  --vt-fs-cta: 13px; /* @src VelvetText._ctaStyle.fontSize */
+  --vt-fw-cta: 700; /* @src VelvetText._ctaStyle.fontWeight */
+  --vt-ls-cta: 0.3px; /* @src VelvetText._ctaStyle.letterSpacing */
+
+  --vt-fs-body: 12px; /* @src VelvetText._bodyStyle.fontSize */
+  --vt-fw-body: 600; /* @src VelvetText._bodyStyle.fontWeight */
+  --vt-lh-body: 1.5; /* @src VelvetText._bodyStyle.height */
+
+  --vt-fs-body-strong: 12px; /* @src VelvetText._bodyStrongStyle.fontSize */
+  --vt-fw-body-strong: 700; /* @src VelvetText._bodyStrongStyle.fontWeight */
+
+  --vt-fs-label: 11px; /* @src VelvetText._labelStyle.fontSize */
+  --vt-fw-label: 700; /* @src VelvetText._labelStyle.fontWeight */
+  --vt-ls-label: 0.6px; /* @src VelvetText._labelStyle.letterSpacing */
+
+  --vt-fs-card-title: 14px; /* @src VelvetText._cardTitleStyle.fontSize */
+  --vt-fw-card-title: 700; /* @src VelvetText._cardTitleStyle.fontWeight */
+  --vt-lh-card-title: 1.2; /* @src VelvetText._cardTitleStyle.height */
+
+  --vt-fs-pill: 11px; /* @src VelvetText._pillStyle.fontSize */
+  --vt-fw-pill: 800; /* @src VelvetText._pillStyle.fontWeight */
+  --vt-ls-pill: 0.2px; /* @src VelvetText._pillStyle.letterSpacing */
+
+  /* --- Web-only allow-list (no Dart source; reasons in README § D3 / phase 001) ---
+     Long-form reading text: 12 px paragraphs fail readability. Display: landing H1.
+     Breakpoints are documentation: CSS custom properties cannot be used inside @media,
+     the checker asserts every @media (min-width) equals one of these. */
+  --vt-fs-prose: 16px;
+  --vt-fw-prose: 400;
+  --vt-lh-prose: 1.6;
+  --vt-fs-display: 32px;
+  --vt-bp-tablet: 600px;
+  --vt-bp-desktop: 1024px;
+  --vt-max-width: 1120px;
+  --vt-touch-min: 48px;
+}
+
+@media (min-width: 1024px) {
+  :root {
+    --vt-fs-display: 40px;
+  }
+}
