@@ -15,11 +15,20 @@ npm run check                        # astro check (TypeScript)
 node scripts/check-tokens.mjs        # token parity vs ../beautica-mobile (mandatory before every PR)
 node scripts/check-responsive.mjs    # 320/360/768/1280 px: no h-scroll, taps >= 48 px (needs Chromium, set CHROMIUM_PATH)
 npx html-validate 'dist/client/**/*.html'
+lychee --offline --root-dir "$PWD/dist/client" 'dist/client/**/*.html'   # lychee 0.24.2 (GitHub release, sha256-verified)
 ```
 
 Design tokens live in `src/styles/tokens.css`, derived 1:1 from `beautica-mobile/lib/core/theme/*.dart`; every
 line carries `/* @src Dart.Symbol */`. Never edit values by hand without changing the app first.
 `src/styles/fonts.css` is hand-written (variable WOFF2 from `@fontsource-variable/*`). Icons/OG image: `node scripts/generate-assets.mjs`.
+
+## Overrides (`package.json`)
+
+- `sharp` -> `0.35.5`: one patched sharp for Astro's image pipeline and our asset script.
+- `miniflare` -> `undici 7.30.1`: the pinned `wrangler@4.142.0` pulls `miniflare` which pins `undici@7.29.0`
+  (high-severity advisories), and CI runs `npm audit --omit=dev --audit-level=high`. **Remove this override when
+  wrangler / `@astrojs/cloudflare` are bumped to a version whose miniflare depends on `undici >= 7.30.1`**
+  (check with `npm ls undici` and `npm audit --omit=dev`).
 
 ## Git flow
 
