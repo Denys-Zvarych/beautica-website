@@ -1,0 +1,32 @@
+{
+  "site": {
+    "name": "Beautica",
+    "locale": "uk_UA",
+    "supportEmail": "support@beautica.app"
+  },
+  "a11y": {
+    "skipToContent": "Перейти до вмісту",
+    "home": "Beautica — на головну",
+    "primaryNav": "Основна навігація"
+  },
+  "footer": {
+    "rights": "© {year} Beautica"
+  },
+  "index": {
+    "metaTitle": "Beautica — скоро в Google Play та App Store",
+    "metaDescription": "Beautica — пошук і запис до майстрів краси. Скоро в Google Play та App Store.",
+    "h1": "Beautica",
+    "lead": "Пошук і запис до майстрів краси.",
+    "soonGooglePlay": "Скоро в Google Play",
+    "soonAppStore": "Скоро в App Store"
+  },
+  "notFound": {
+    "metaTitle": "Сторінку не знайдено — Beautica",
+    "metaDescription": "Такої сторінки на beautica.app немає. Поверніться на головну.",
+    "h1": "Сторінку не знайдено",
+    "text": "Можливо, посилання застаріло або адресу введено з помилкою.",
+    "cta": "На головну",
+    "code": "404",
+    "support": "Написати в підтримку"
+  }
+}

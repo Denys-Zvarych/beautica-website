@@ -1,0 +1,116 @@
+name: Promotion Source
+
+# Promotion-source guard (ported from beautica-mobile, phase 370 D5), in its OWN workflow on `pull_request_target`.
+#
+# WHY NOT pull_request / pr-validate.yml (two bypasses that a pull_request job cannot close):
+#   1. Retargeting. `pull_request` has no `edited` trigger, so a PR opened against a free base and then
+#      retargeted to main/dev was never re-checked. This workflow listens to `edited` (base-branch and
+#      title changes both fire it).
+#   2. Self-editing. A `pull_request` run executes the PR's OWN copy of the workflow, so a PR could simply
+#      weaken its own guard. `pull_request_target` runs the workflow file from the repo's DEFAULT branch
+#      (`main`; GitHub change of 2025-12-08), so no PR into dev or main can change the rule applied to it.
+#
+# SAFETY CONTRACT (enforced by scripts/forbid_pull_request_target_outside_promotion.sh, run in ci.yml):
+#   * this is the ONLY workflow allowed to use `pull_request_target`;
+#   * `permissions: {}` (no token scopes at all);
+#   * NO checkout, no `uses:` step, no PR code or artifact is ever fetched or run;
+#   * every author-controlled value (branch names, PR title, head repo) reaches the shell ONLY through
+#     `env:`, never through expression interpolation inside `run:`.
+#
+# Rule:
+#   base main -> head must be `dev` (release) or `hotfix/*` (hotfix), from THIS repo (a fork branch named
+#                `dev` is not the dev branch)
+#   base dev  -> head must not be `main`, unless the PR title starts with `sync:` (hotfix sync-back)
+#   any other base is rejected (the `branches` filter below means it never runs for one).
+#
+# ENFORCEMENT (website repo): this repo is PRIVATE on GitHub Free, so rulesets / required status checks
+# are impossible. The check is ADVISORY: a red X on a bad promotion path, nothing blocks the merge button.
+# It becomes enforcing only after an upgrade to Pro (then require the two job names below).
+#   * The job name embeds the PR's base branch: `Promotion source (<base.ref expression>)`, spelled out on the `name:` line of the job below.
+#     The `branches` filter below limits base.ref to main or dev, so exactly two check names can exist:
+#     `Promotion source (dev)` and `Promotion source (main)`. A re-run replays the ORIGINAL event, so with the
+#     base in the name an old green run cannot satisfy a retargeted PR; a retarget fires `edited` and creates
+#     a fresh run under the new name.
+#   * SOURCE OF THIS FILE: GitHub runs `pull_request_target` from the DEFAULT branch (`main`), never from
+#     the PR's base branch. This file takes effect only once it is on `main` (first release `dev -> main`).
+#   * CODEOWNERS owns .github/** so a PR cannot change this file without the owner (a merged change is what
+#     takes effect, never the PR's copy).
+
+on:
+  pull_request_target:
+    # `edited` = title or base-branch change. synchronize/reopened keep the result attached to the new head SHA.
+    types: [opened, edited, synchronize, reopened]
+    branches:
+      - main
+      - dev
+
+permissions: {}
+
+# Latest event wins: an `edited` retarget must not race an older run for the same PR.
+concurrency:
+  group: promotion-source-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  promotion-source:
+    name: Promotion source (${{ github.event.pull_request.base.ref }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions: {}
+    steps:
+      - name: Check PR source branch against target branch
+        env:
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+          BASE_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+
+          # check_promotion_source <base> <head> <title> <head-repo> <base-repo>; 0 = allowed.
+          check_promotion_source() {
+            local target="$1" source="$2" title="$3" src_repo="$4" dst_repo="$5"
+            case "$target" in
+              main)
+                [[ "$src_repo" == "$dst_repo" ]] || return 1
+                [[ "$source" == "dev" || "$source" =~ ^hotfix/. ]] ;;
+              dev)
+                if [[ "$source" == "main" && "$src_repo" == "$dst_repo" ]]; then
+                  [[ "$title" == sync:* ]]
+                fi ;;
+              *) return 1 ;;
+            esac
+          }
+
+          # Self-test: the rule must pass what it should AND reject what it should (a rule that always
+          # passes would be invisible otherwise).
+          expect() {
+            local want="$1"; shift
+            local got=0
+            check_promotion_source "$@" || got=1
+            if [[ "$got" != "$want" ]]; then
+              echo "::error::promotion-source self-test failed (want exit $want, got $got) for: $*"
+              exit 1
+            fi
+          }
+          R=o/r
+          expect 0 main dev "release: mobile v1.0.0+1" $R $R
+          expect 0 main hotfix/fix-x "hotfix" $R $R
+          expect 1 main feat/x "feat" $R $R
+          expect 1 main hotfix/ "empty slug" $R $R
+          expect 1 main dev "fork named dev" fork/r $R
+          expect 1 main dev "deleted fork (empty head repo)" "" $R
+          expect 1 main main "self" $R $R
+          expect 0 dev main "sync: hotfix x into dev" $R $R
+          expect 1 dev main "no prefix" $R $R
+          expect 0 dev main "fork branch named main is just a fork branch" fork/r $R
+          expect 0 dev feat/x "feat" $R $R
+          expect 1 staging dev "unknown base" $R $R
+          echo "promotion-source self-test passed"
+
+          if ! check_promotion_source "$BASE_REF" "$HEAD_REF" "$PR_TITLE" "$HEAD_REPO" "$BASE_REPO"; then
+            echo "::error::PR into '$BASE_REF' from '$HEAD_REF' is not an allowed promotion path. Into main: only dev (release) or hotfix/* (hotfix). Into dev: not from main unless the title starts with 'sync:'."
+            exit 1
+          fi
+          echo "promotion source ok: $HEAD_REF -> $BASE_REF"

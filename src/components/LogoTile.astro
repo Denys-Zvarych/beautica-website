@@ -1,0 +1,68 @@
+---
+// The app icon tile (launcher_icon_source.png: the B inside the rounded square) with the neumorphic lift.
+// Single logo component for header, hero and 404. `size` picks the token-derived dimension; default = hero.
+import { Image } from "astro:assets";
+import logo from "../assets/logo.png";
+
+interface Props {
+  /** `fill` = take the size of the parent (the parent sets width/height). */
+  size?: "hero" | "header" | "fill";
+  /** Hero logo is the LCP candidate on `/`: eager + high priority. */
+  priority?: boolean;
+  class?: string;
+}
+const { size = "hero", priority = false, class: className } = Astro.props;
+const px = size === "header" ? 40 : 117; // HTML intrinsic hints only; rendered size comes from the tokens below
+---
+
+<span class:list={["tile", size, className]}>
+  <Image
+    src={logo}
+    alt=""
+    width={px}
+    height={px}
+    widths={[px, px * 2]}
+    sizes={`${px}px`}
+    format="webp"
+    loading={priority ? "eager" : undefined}
+    fetchpriority={priority ? "high" : undefined}
+  />
+</span>
+
+<style>
+  .tile {
+    display: block;
+    flex: none;
+    box-sizing: border-box;
+  }
+  .tile img {
+    width: 100%;
+    height: 100%;
+  }
+  .hero {
+    width: calc(var(--vt-size-logo-tile) * 1.5);
+    height: calc(var(--vt-size-logo-tile) * 1.5);
+    border-radius: var(--vt-radius-logo-tile);
+    box-shadow: var(--vt-shadow-extruded-card);
+  }
+  .hero img {
+    border-radius: var(--vt-radius-logo-tile);
+  }
+  .fill {
+    width: 100%;
+    height: 100%;
+    border-radius: var(--vt-radius-logo-tile);
+  }
+  .fill img {
+    border-radius: var(--vt-radius-logo-tile);
+  }
+  .header {
+    width: calc(var(--vt-touch-min) - var(--vt-space-sm));
+    height: calc(var(--vt-touch-min) - var(--vt-space-sm));
+    border-radius: var(--vt-radius-button);
+    box-shadow: var(--vt-shadow-extruded-small);
+  }
+  .header img {
+    border-radius: var(--vt-radius-button);
+  }
+</style>
