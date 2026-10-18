@@ -22,6 +22,14 @@ Design tokens live in `src/styles/tokens.css`, derived 1:1 from `beautica-mobile
 line carries `/* @src Dart.Symbol */`. Never edit values by hand without changing the app first.
 `src/styles/fonts.css` is hand-written (variable WOFF2 from `@fontsource-variable/*`). Icons/OG image: `node scripts/generate-assets.mjs`.
 
+## Promotion guard (advisory)
+
+`.github/workflows/promotion-source.yml` (ported from beautica-mobile) runs on `pull_request_target` and shows a red X when a PR
+into `main` is not from `dev` / `hotfix/*` of this repo, or a PR into `dev` is from `main` without a `sync:` title.
+The repo is private on GitHub Free: no rulesets, so it only warns until Pro. It takes effect once it is on `main`
+(GitHub runs `pull_request_target` from the default branch). `scripts/forbid_pull_request_target_outside_promotion.sh` (a CI step)
+pins its SHA-256: any edit to the workflow must update `EXPECTED_SHA256` in the same PR. `.github/CODEOWNERS` owns `/.github/`.
+
 ## Overrides (`package.json`)
 
 - `sharp` -> `0.35.5`: one patched sharp for Astro's image pipeline and our asset script.

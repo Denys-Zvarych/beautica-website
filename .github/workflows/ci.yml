@@ -25,6 +25,13 @@ jobs:
 
       - run: npm ci
 
+      # pull_request_target is allowed only in the hardened promotion-source.yml (guard pins its SHA-256).
+      # The guard parses workflow YAML with PyYAML and fails closed without it.
+      - name: Forbid privileged PR triggers outside the promotion guard
+        run: |
+          python3 -c 'import yaml' 2>/dev/null || { sudo apt-get update -qq && sudo apt-get install -y -qq python3-yaml; }
+          ./scripts/forbid_pull_request_target_outside_promotion.sh
+
       - name: Dependency audit (production deps, high+)
         run: npm audit --omit=dev --audit-level=high
 
