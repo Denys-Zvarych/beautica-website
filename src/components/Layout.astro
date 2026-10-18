@@ -2,8 +2,8 @@
 import "../styles/fonts.css";
 import "../styles/tokens.css";
 import "../styles/base.css";
-import nunito400 from "@fontsource/nunito/files/nunito-cyrillic-400-normal.woff2?url";
-import comfortaa700 from "@fontsource/comfortaa/files/comfortaa-cyrillic-700-normal.woff2?url";
+import nunitoCyr from "@fontsource-variable/nunito/files/nunito-cyrillic-wght-normal.woff2?url";
+import comfortaaCyr from "@fontsource-variable/comfortaa/files/comfortaa-cyrillic-wght-normal.woff2?url";
 import Seo from "./Seo.astro";
 import Header from "./Header.astro";
 import Footer from "./Footer.astro";
@@ -31,8 +31,8 @@ const { hideHeader = false, ...seo } = Astro.props;
     <link rel="icon" href="/favicon.ico" sizes="48x48" />
     <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
-    <link rel="preload" as="font" type="font/woff2" href={nunito400} crossorigin />
-    <link rel="preload" as="font" type="font/woff2" href={comfortaa700} crossorigin />
+    <link rel="preload" as="font" type="font/woff2" href={nunitoCyr} crossorigin />
+    <link rel="preload" as="font" type="font/woff2" href={comfortaaCyr} crossorigin />
     <Seo {...seo} />
   </head>
   <body>

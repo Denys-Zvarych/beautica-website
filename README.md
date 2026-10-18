@@ -1,7 +1,7 @@
 # beautica-website
 
 Marketing, legal and booking-link site for Beautica — <https://beautica.app>. Ukrainian only (EN-ready).
-Astro 6 (static) + `@astrojs/cloudflare`, hosted on Cloudflare Pages (project `beautica-site`).
+Astro 7 (static) + `@astrojs/cloudflare`, hosted as a Cloudflare Worker with static assets (Workers Builds, Worker `beautica-site`).
 Plan and decisions: `docs/website-phases/` in the monorepo (README = decisions, `phase-NNN-*.md` = checklists).
 
 ## Commands (Node 22, see `.nvmrc`)
@@ -9,7 +9,8 @@ Plan and decisions: `docs/website-phases/` in the monorepo (README = decisions, 
 ```bash
 npm ci
 npm run dev                          # dev server
-npm run build                        # -> dist/client (static site)
+npm run build                        # -> dist/client (static site) + Worker config for wrangler
+npx wrangler deploy --dry-run        # after a build: proves wrangler.jsonc + assets
 npm run check                        # astro check (TypeScript)
 node scripts/check-tokens.mjs        # token parity vs ../beautica-mobile (mandatory before every PR)
 node scripts/check-responsive.mjs    # 320/360/768/1280 px: no h-scroll, taps >= 48 px (needs Chromium, set CHROMIUM_PATH)
@@ -18,38 +19,41 @@ npx html-validate 'dist/client/**/*.html'
 
 Design tokens live in `src/styles/tokens.css`, derived 1:1 from `beautica-mobile/lib/core/theme/*.dart`; every
 line carries `/* @src Dart.Symbol */`. Never edit values by hand without changing the app first.
-`src/styles/fonts.css` is generated: `node scripts/generate-fonts-css.mjs`. Icons/OG image: `node scripts/generate-assets.mjs`.
+`src/styles/fonts.css` is hand-written (variable WOFF2 from `@fontsource-variable/*`). Icons/OG image: `node scripts/generate-assets.mjs`.
 
 ## Git flow
 
 Feature branch from `dev` -> PR to `dev` -> release PR `dev` -> `main`. Never push `main` / `dev` directly.
-CI (`.github/workflows/ci.yml`) runs on PRs: build, lychee (offline), html-validate, token parity, Lighthouse budget.
+CI (`.github/workflows/ci.yml`) runs on PRs: dependency audit, build, lychee (offline), html-validate, token parity, Lighthouse budget.
 Cloudflare deploys; CI never does.
 
-## Owner checklist: Cloudflare Pages + domain (one-time, manual, phase 001)
+## Owner checklist: Cloudflare Worker + domain (one-time, manual, phase 001)
 
-Do these in order. Nothing here touches the mobile or backend repos.
+Hosting is a Cloudflare Worker with static assets (`wrangler.jsonc`), built by Workers Builds. Do these in order.
+Nothing here touches the mobile or backend repos.
 
-1. **Record mail DNS first.** `dig MX beautica.app +short` and save the output (must be identical at the end).
-2. **Create the Pages project.** Cloudflare dashboard -> Workers & Pages -> Create -> Pages -> Connect to Git ->
-   `Denys-Zvarych/beautica-website` (grant the Cloudflare GitHub app access to this private repo).
-   - Project name: `beautica-site`
+1. `dig MX beautica.app +short` and `dig TXT beautica.app +short`: save the output (it must be identical at the end).
+2. Dashboard -> Workers & Pages -> Create -> **Import a repository** -> GitHub `beautica-website`
+   (grant the Cloudflare GitHub app access to this private repo).
+   - Project / Worker name: `beautica-site` (must equal `name` in `wrangler.jsonc`)
    - Production branch: `main`
-   - Framework preset: Astro (or None), build command `npm run build`
-   - **Build output directory: `dist/client`** (the Cloudflare adapter writes the static site there, not `dist`)
-   - Environment variable: `NODE_VERSION` = `22`
-   - Preview deployments: all branches (so `dev` and PR branches get preview URLs; stable alias `dev.beautica-site.pages.dev`)
-3. **Verify** the first build on `https://beautica-site.pages.dev` (placeholder page, `/nope` shows the custom 404 with HTTP 404).
-4. **Move the custom domain.** Old `beautica` Pages project -> Custom domains -> remove `beautica.app`.
-   New `beautica-site` -> Custom domains -> add `beautica.app` (Cloudflare adjusts the apex record automatically).
-   Do **not** edit MX / TXT / email-routing records.
-5. **www redirect.** Add `www` as a custom domain of `beautica-site` or a Redirect Rule `www.beautica.app/*` -> `https://beautica.app/${1}` (301).
-   Check: `http://beautica.app` and `https://www.beautica.app/x` both 301 to `https://beautica.app/...`; `https://beautica.app/x/` 301 to `/x`
-   (Pages does this for extension-less routes; report if it does not).
-6. **Re-run `dig MX beautica.app +short`** and compare with step 1. Send a test mail to `support@`, `privacy@`, `admin@beautica.app`; all three must arrive.
-7. **Delete the old `beautica` Pages project** only after steps 3-6 pass.
-8. **GitHub:** Settings -> Branches is not enforceable on a private Free repo; follow the PR flow by convention.
-   Optionally add a repo secret if the mobile repo is made private (see CI note below).
+   - Build command: `npm run build`
+   - Deploy command: `npx wrangler deploy`
+   - **Non-production branch builds: ON**, preview command `npx wrangler versions upload`
+   - Build variable: `NODE_VERSION` = `22`
+3. Open `beautica-site.<account-subdomain>.workers.dev`: the placeholder renders, and an unknown path shows the custom 404 with HTTP 404.
+   Push `dev`: the Previews tab / PR comment shows `dev-beautica-site.<account-subdomain>.workers.dev`.
+4. Old Pages project `beautica` -> Custom domains -> remove `beautica.app` (and `www` if present). This deletes its apex CNAME.
+5. Worker `beautica-site` -> Settings -> Domains & Routes -> Add -> Custom Domain `beautica.app`, then `www.beautica.app`.
+   Wait for "Active" (certificate issued). Downtime is about 1-2 minutes. Do **not** edit MX / TXT / email-routing records.
+6. Rules -> Redirect Rules -> template "Redirect from WWW to root": 301, preserve path + query.
+   Check: `http://beautica.app` and `https://www.beautica.app/x` both 301 to `https://beautica.app/...`; `https://beautica.app/x/` 301s to `/x`.
+7. Re-run step 1: the output must be identical. Send test mails to `support@`, `privacy@`, `admin@beautica.app`; all three must arrive.
+8. Delete the old Pages project `beautica` only after steps 3-7 pass.
+9. GitHub: branch protection is not enforceable on a private Free repo; follow the PR flow by convention.
+
+Local proof of the deploy config: `npm run build && npx wrangler deploy --dry-run` (uses the config the adapter writes to `dist/client/wrangler.json`
+via `.wrangler/deploy/config.json`; `.assetsignore` keeps it out of the public assets).
 
 ## Owner checklist: search engines (manual, DNS TXT only)
 

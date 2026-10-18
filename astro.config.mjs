@@ -3,8 +3,8 @@ import { defineConfig } from "astro/config";
 import cloudflare from "@astrojs/cloudflare";
 import sitemap from "@astrojs/sitemap";
 
-// Static by default. The adapter is installed now so SSR routes (/book/{slug}, phase 008)
-// only need `export const prerender = false`, no restructuring.
+// Static by default, deployed as a Cloudflare Worker with static assets (wrangler.jsonc, Workers Builds).
+// SSR routes (/book/{slug}, phase 008) only need `export const prerender = false`.
 export default defineConfig({
   site: "https://beautica.app",
   output: "static",
@@ -17,17 +17,6 @@ export default defineConfig({
       filter: (page) => !/\/404$/.test(page),
     }),
   ],
-  vite: {
-    build: {
-      rollupOptions: {
-        // Third-party noise only: zod (an Astro dependency) ships @__PURE__ comments Rollup cannot place.
-        onwarn(warning, defaultHandler) {
-          if (warning.code === "INVALID_ANNOTATION" && warning.id?.includes("node_modules/zod/")) return;
-          defaultHandler(warning);
-        },
-      },
-    },
-  },
   i18n: {
     defaultLocale: "uk",
     locales: ["uk"],

@@ -62,8 +62,8 @@
   --vt-gradient-accent: linear-gradient(to bottom right, #8A6840, #6A4A28); /* @src VelvetGradients.accentDiscFace */
 
   /* --- Typography (VelvetText) --- */
-  --vt-font-display: "Comfortaa", ui-rounded, system-ui, sans-serif; /* @src VelvetText._headingStyle.fontFamily */
-  --vt-font-body: "Nunito", system-ui, sans-serif; /* @src VelvetText._bodyStyle.fontFamily */
+  --vt-font-display: "Comfortaa", "Comfortaa Fallback", ui-rounded, system-ui, sans-serif; /* @src VelvetText._headingStyle.fontFamily */
+  --vt-font-body: "Nunito", "Nunito Fallback", system-ui, sans-serif; /* @src VelvetText._bodyStyle.fontFamily */
 
   --vt-fs-wordmark: 19px; /* @src VelvetText._wordmarkStyle.fontSize */
   --vt-fw-wordmark: 700; /* @src VelvetText._wordmarkStyle.fontWeight */
@@ -99,10 +99,13 @@
   --vt-fw-pill: 800; /* @src VelvetText._pillStyle.fontWeight */
   --vt-ls-pill: 0.2px; /* @src VelvetText._pillStyle.letterSpacing */
 
-  /* --- Web-only allow-list (no Dart source; reasons in README § D3 / phase 001) ---
-     Long-form reading text: 12 px paragraphs fail readability. Display: landing H1.
-     Breakpoints are documentation: CSS custom properties cannot be used inside @media,
-     the checker asserts every @media (min-width) equals one of these. */
+  /* --- Web-only allow-list (no Dart source; README D3). One reason per token. ---
+     --vt-fs-prose / --vt-fw-prose / --vt-lh-prose: long-form reading text (legal, FAQ); the app's 12 px / w600 body fails readability.
+     --vt-fs-display: landing/hero H1, larger than any app text style.
+     --vt-bp-*: breakpoints; documentation only, since custom properties cannot be used inside @media
+       (the checker asserts every @media (min-width) equals one of these).
+     --vt-max-width: web content column; the app has no desktop layout.
+     --vt-touch-min: 48 px minimum touch target (WCAG / Play guidance). */
   --vt-fs-prose: 16px;
   --vt-fw-prose: 400;
   --vt-lh-prose: 1.6;

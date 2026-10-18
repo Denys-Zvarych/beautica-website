@@ -231,7 +231,14 @@ let checked = 0;
 let allowed = 0;
 const seen = new Set();
 
+let inComment = false;
 tokensCss.split("\n").forEach((line, i) => {
+  const wasInComment = inComment;
+  const opens = (line.match(/\/\*/g) ?? []).length;
+  const closes = (line.match(/\*\//g) ?? []).length;
+  if (opens > closes) inComment = true;
+  else if (closes > opens || (wasInComment && closes > 0)) inComment = false;
+  if (wasInComment) return; // prose inside a multi-line comment, not a declaration
   if (!/^\s*--vt-/.test(line)) return;
   const at = `tokens.css:${i + 1}`;
   const m = line.match(declRe);
