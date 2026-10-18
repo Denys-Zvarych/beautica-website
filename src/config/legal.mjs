@@ -1,5 +1,6 @@
 // Single source for the legal facts rendered into /privacy and /terms (and the footer).
-// Fill the operator name ONCE here; the Markdown bodies use the {{operator}} token (see plugins/remark-legal-vars.mjs).
+// Fill the operator name ONCE here; the Markdown bodies use the {{operator}} token (substituted in src/content.config.ts).
+// Release gate: scripts/check-no-todo-owner.mjs fails CI on PRs into main while any TODO(owner) remains.
 
 /** TODO(owner): replace with the exact developer name shown on the Google Play listing / Play Console. */
 export const OPERATOR_NAME = "TODO(owner): точна назва розробника з Play Console";

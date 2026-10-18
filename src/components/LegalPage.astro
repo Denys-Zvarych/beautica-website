@@ -86,11 +86,29 @@ const jsonLd = breadcrumbList([
   .toc li + li {
     margin-top: var(--vt-space-sm);
   }
+  /* Row height must not depend on how a title wraps (a font swap would otherwise shift the page): on phones every row
+     reserves two text lines; from tablet up the list is two columns where titles fit on one line. */
   .toc a {
-    display: inline-flex;
+    display: flex;
     align-items: center;
-    min-height: var(--vt-touch-min);
+    min-height: calc(2em * var(--vt-lh-prose) + 2 * var(--vt-space-xs));
     padding-block: var(--vt-space-xs);
+  }
+  @media (min-width: 600px) {
+    .toc {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      column-gap: var(--vt-space-lg);
+    }
+    .toc li + li {
+      margin-top: 0;
+    }
+    .toc li {
+      margin-bottom: var(--vt-space-sm);
+    }
+    .toc a {
+      min-height: var(--vt-touch-min);
+    }
   }
   .back a {
     display: inline-flex;
@@ -98,9 +116,9 @@ const jsonLd = breadcrumbList([
     min-height: var(--vt-touch-min);
   }
 
-  /* Reading column: <= 75 characters per line on desktop. */
+  /* Reading column: <= 75 characters per line. Cyrillic glyphs are narrower than the "0" that `ch` measures, so 56ch ~ 72 Cyrillic characters. */
   .prose {
-    max-width: 75ch;
+    max-width: 56ch;
     color: var(--vt-color-text);
   }
   .prose :global(h2) {
@@ -148,11 +166,11 @@ const jsonLd = breadcrumbList([
     :global(.site-header),
     :global(.site-footer),
     :global(.skip-link),
-    .toc-card,
-    .back {
+    :global(.toc-card),
+    :global(.back) {
       display: none;
     }
-    .body-card {
+    :global(article.neu-card.body-card) {
       box-shadow: none;
       padding: 0;
     }
