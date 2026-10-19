@@ -32,13 +32,21 @@ import { t } from "../i18n/t";
     gap: var(--vt-space-md);
     text-align: center;
   }
+  /* One chip per line on phones. Side by side they fit only in a narrow band of widths (~385-420 px) and the answer flips
+     when the webfont swaps in, which reflowed the hero (CLS ~0.06). A fixed stack cannot change row count. */
   .chips {
     display: flex;
-    flex-wrap: wrap;
+    flex-direction: column;
+    align-items: center;
     justify-content: center;
     gap: var(--vt-space-md);
     margin: var(--vt-space-sm) 0 0;
     padding: 0;
     list-style: none;
+  }
+  @media (min-width: 600px) {
+    .chips {
+      flex-direction: row;
+    }
   }
 </style>
