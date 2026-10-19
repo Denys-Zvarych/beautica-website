@@ -1,19 +1,20 @@
 ---
 // Mirrors ServiceChip: 40 px tall, fully rounded, selected = gradient fill.
 // Non-interactive label by default; becomes a link only when `href` is passed (then >= 48 px tall).
-// Optional named slot `icon` (decorative, aria-hidden; the text stays the accessible name). No slot = unchanged.
+// Optional `icon` prop (a name from Icon.astro; decorative, the text stays the accessible name). No prop = unchanged.
+import Icon, { type IconName } from "./Icon.astro";
 interface Props {
+  icon?: IconName;
   selected?: boolean;
   href?: string;
   class?: string;
 }
-const { selected = false, href, class: className } = Astro.props;
+const { icon, selected = false, href, class: className } = Astro.props;
 const Tag = href ? "a" : "span";
-const hasIcon = Astro.slots.has("icon");
 ---
 
 <Tag class:list={["chip vt-pill", { selected, link: !!href }, className]} href={href}>
-  {hasIcon && <span class="icon" aria-hidden="true"><slot name="icon" /></span>}
+  {icon && <Icon name={icon} />}
   <slot />
 </Tag>
 
@@ -28,20 +29,25 @@ const hasIcon = Astro.slots.has("icon");
     box-shadow: var(--vt-shadow-extruded-small);
     text-decoration: none;
   }
-  .icon {
-    display: inline-flex;
-    flex: none;
-    width: calc(var(--vt-space-md) + var(--vt-space-xs));
-    height: calc(var(--vt-space-md) + var(--vt-space-xs));
-    margin-inline-end: var(--vt-space-sm);
-  }
-  .icon :global(svg) {
-    width: 100%;
-    height: 100%;
-    fill: currentColor;
-  }
   .chip.link {
     min-height: var(--vt-touch-min);
+    transition:
+      transform var(--vt-dur-fast) var(--vt-ease),
+      box-shadow var(--vt-dur-fast) var(--vt-ease);
+  }
+  /* Interactive chips (links) rise softly and swap to the larger extruded shadow; plain label chips stay still. */
+  .chip.link:focus-visible {
+    transform: translateY(calc(var(--vt-lift) * -1));
+    box-shadow: var(--vt-shadow-extruded-button);
+  }
+  @media (hover: hover) {
+    .chip.link:hover {
+      transform: translateY(calc(var(--vt-lift) * -1));
+      box-shadow: var(--vt-shadow-extruded-button);
+    }
+  }
+  .chip.link:active {
+    transform: scale(0.98);
   }
   .chip.selected {
     background: var(--vt-gradient-accent);

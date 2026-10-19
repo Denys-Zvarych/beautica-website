@@ -24,7 +24,7 @@ if (links.length > 3) throw new Error("Header: at most 3 links (footer carries t
             {links.map((l) => (
               <li>
                 <a class="link vt-label" href={l.href}>
-                  {l.label}
+                  <span class="vt-u">{l.label}</span>
                 </a>
               </li>
             ))}

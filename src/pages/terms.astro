@@ -1,0 +1,12 @@
+---
+import { getEntry, render } from "astro:content";
+import LegalPage from "../components/LegalPage.astro";
+
+const entry = await getEntry("legal", "uk/terms");
+if (!entry) throw new Error("legal: uk/terms.md is missing");
+const { Content, headings } = await render(entry);
+---
+
+<LegalPage {...entry.data} path="/terms" headings={headings}>
+  <Content />
+</LegalPage>

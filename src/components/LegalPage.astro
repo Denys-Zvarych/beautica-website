@@ -1,0 +1,229 @@
+---
+// Shared layout for /privacy and /terms: H1, version + effective date, table of contents, prose body.
+// Reuses Layout (Seo/Header/Footer) and NeuCard; the Markdown body arrives through the default slot.
+import Layout from "./Layout.astro";
+import NeuCard from "./NeuCard.astro";
+import Icon from "./Icon.astro";
+import { t } from "../i18n/t";
+import { breadcrumbList } from "../lib/jsonld";
+
+interface Props {
+  title: string;
+  metaTitle: string;
+  description: string;
+  version: string;
+  updated: Date;
+  /** Public path, e.g. "/privacy" (canonical + breadcrumb). */
+  path: string;
+  /** Markdown headings from render(); only depth 2 enter the table of contents. */
+  headings: { depth: number; slug: string; text: string }[];
+}
+
+const { title, metaTitle, description, version, updated, path, headings } = Astro.props;
+const toc = headings.filter((h) => h.depth === 2);
+const site = Astro.site as URL;
+const effective = updated.toLocaleDateString("uk-UA", { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" });
+const jsonLd = breadcrumbList([
+  { name: t("site.name"), url: new URL("/", site).href },
+  { name: title, url: new URL(path, site).href },
+]);
+---
+
+<Layout title={metaTitle} description={description} canonicalPath={path} jsonLd={jsonLd}>
+  <main id="main" class="legal">
+    <div class="vt-container column">
+      <header class="intro">
+        <h1 class="vt-display">{title}</h1>
+        <p class="vt-label meta">
+          {t("legal.version", { version })} · {t("legal.effective")}: <time datetime={updated.toISOString().slice(0, 10)}>{effective}</time>
+        </p>
+      </header>
+
+      <NeuCard as="section" class="toc-card">
+        <h2 class="vt-card-title" id="toc-title">{t("legal.toc")}</h2>
+        <nav aria-labelledby="toc-title">
+          <ol class="toc">
+            {
+              toc.map((h) => (
+                <li>
+                  <a class="vt-prose" href={`#${h.slug}`}>
+                    {h.text}
+                  </a>
+                </li>
+              ))
+            }
+          </ol>
+        </nav>
+      </NeuCard>
+
+      <NeuCard as="article" class="body-card">
+        <div class="prose vt-prose"><slot /></div>
+      </NeuCard>
+
+      <p class="vt-label back"><a href="/"><Icon name="arrow-back" /><span class="vt-u">{t("legal.home")}</span></a></p>
+    </div>
+  </main>
+</Layout>
+
+<style>
+  .legal {
+    padding-block: var(--vt-space-lg) var(--vt-space-xxl);
+  }
+  .column {
+    display: flex;
+    flex-direction: column;
+    gap: var(--vt-space-lg);
+  }
+  .intro {
+    display: flex;
+    flex-direction: column;
+    gap: var(--vt-space-sm);
+  }
+  .toc {
+    margin: var(--vt-space-sm) 0 0;
+    padding: 0;
+    list-style: none;
+  }
+  .toc li + li {
+    margin-top: var(--vt-space-sm);
+  }
+  /* Row height must not depend on how a title wraps (a font swap would otherwise shift the page): on phones every row
+     reserves two text lines; from tablet up the list is two columns where titles fit on one line. */
+  .toc a {
+    position: relative;
+    isolation: isolate;
+    margin-inline: calc(var(--vt-space-sm) * -1);
+    padding-inline: var(--vt-space-sm);
+    display: flex;
+    align-items: center;
+    min-height: calc(2em * var(--vt-lh-prose) + 2 * var(--vt-space-xs));
+    padding-block: var(--vt-space-xs);
+  }
+  /* Soft row highlight: a bordered-card glow fades in behind the row (opacity only). */
+  .toc a::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    border-radius: var(--vt-radius-button);
+    box-shadow: var(--vt-shadow-bordered-card);
+    opacity: 0;
+    transition: opacity var(--vt-dur-fast) var(--vt-ease);
+  }
+  .toc a:focus-visible::before {
+    opacity: 1;
+  }
+  @media (hover: hover) {
+    .toc a:hover::before {
+      opacity: 1;
+    }
+  }
+  /* One orchestrated entrance: the two cards settle in once on first paint (opacity + a short rise, no layout shift). */
+  :global(.toc-card),
+  :global(.body-card) {
+    animation: card-in var(--vt-dur-base) var(--vt-ease) both;
+  }
+  :global(.body-card) {
+    animation-delay: var(--vt-dur-fast);
+  }
+  @keyframes card-in {
+    from {
+      opacity: 0;
+      transform: translateY(var(--vt-space-sm));
+    }
+  }
+  @media (min-width: 600px) {
+    .toc {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      column-gap: var(--vt-space-lg);
+    }
+    .toc li + li {
+      margin-top: 0;
+    }
+    .toc li {
+      margin-bottom: var(--vt-space-sm);
+    }
+    .toc a {
+      min-height: var(--vt-touch-min);
+    }
+  }
+  .back a {
+    display: inline-flex;
+    align-items: center;
+    min-height: var(--vt-touch-min);
+  }
+
+  /* Reading column: <= 75 characters per line. Cyrillic glyphs are narrower than the "0" that `ch` measures, so 56ch ~ 72 Cyrillic characters. */
+  .prose {
+    max-width: 56ch;
+    color: var(--vt-color-text);
+  }
+  .prose :global(h2) {
+    margin-top: var(--vt-space-xl);
+    margin-bottom: var(--vt-space-sm);
+    font-family: var(--vt-font-display);
+    font-size: var(--vt-fs-heading);
+    font-weight: var(--vt-fw-heading);
+    line-height: var(--vt-lh-heading);
+    scroll-margin-top: var(--vt-space-lg);
+  }
+  .prose :global(h2:first-child) {
+    margin-top: 0;
+  }
+  .prose :global(h3) {
+    margin-top: var(--vt-space-lg);
+    margin-bottom: var(--vt-space-xs);
+    font-family: var(--vt-font-display);
+    font-size: var(--vt-fs-card-title);
+    font-weight: var(--vt-fw-card-title);
+    line-height: var(--vt-lh-card-title);
+  }
+  .prose :global(p),
+  .prose :global(ul),
+  .prose :global(ol) {
+    margin: 0 0 var(--vt-space-md);
+  }
+  .prose :global(ul),
+  .prose :global(ol) {
+    padding-inline-start: var(--vt-space-lg);
+  }
+  .prose :global(li) {
+    margin-bottom: var(--vt-space-sm);
+  }
+  .prose :global(strong) {
+    font-weight: var(--vt-fw-heading);
+  }
+  .prose :global(a) {
+    color: var(--vt-color-accent-deep);
+    text-underline-offset: var(--vt-space-xs);
+  }
+
+  /* Print: drop chrome and shadows, keep the text and show link targets. */
+  @media print {
+    :global(.site-header),
+    :global(.site-footer),
+    :global(.skip-link),
+    :global(.toc-card),
+    :global(.back) {
+      display: none;
+    }
+    :global(article.neu-card.body-card) {
+      box-shadow: none;
+      padding: 0;
+    }
+    .prose {
+      max-width: none;
+    }
+    .prose :global(a[href^="http"])::after {
+      content: " (" attr(href) ")";
+    }
+    .prose :global(h2) {
+      break-after: avoid;
+    }
+    .prose :global(li),
+    .prose :global(p) {
+      break-inside: avoid;
+    }
+  }
+</style>

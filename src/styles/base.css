@@ -156,6 +156,33 @@ a {
   color: var(--vt-color-text-secondary);
 }
 
+/* Animated link label: wrap the text in <span class="vt-u">. The static underline stays (links must look like links);
+   on hover/focus a latte line grows from the left. transform only; hover gated so phones get no sticky state. */
+.vt-u {
+  position: relative;
+  display: inline-block;
+}
+.vt-u::after {
+  content: "";
+  position: absolute;
+  inset-inline: 0;
+  bottom: 0;
+  height: calc(var(--vt-space-xs) / 2);
+  background: var(--vt-color-accent-latte);
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform var(--vt-dur-base) var(--vt-ease);
+  pointer-events: none;
+}
+a:focus-visible .vt-u::after {
+  transform: scaleX(1);
+}
+@media (hover: hover) {
+  a:hover .vt-u::after {
+    transform: scaleX(1);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

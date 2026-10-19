@@ -39,6 +39,9 @@ const ALLOW = [
   /^--vt-bp-[a-z]+$/,
   /^--vt-max-width$/,
   /^--vt-touch-min$/,
+  /^--vt-dur-(fast|base)$/,
+  /^--vt-ease$/,
+  /^--vt-lift$/,
 ];
 
 const errors = [];
