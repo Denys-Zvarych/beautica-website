@@ -3,7 +3,7 @@
 // here (token size, currentColor), so no consumer ever styles another component's SVG.
 // Paths: Simple Icons (https://simpleicons.org, v16.35.0), licensed CC0 1.0. Trademarks belong to Google LLC / Apple Inc.;
 // these are glyphs inside our own chips, not official badges. Inline SVG only: no requests, no raster.
-export type IconName = "google-play" | "app-store" | "arrow-back";
+export type IconName = "google-play" | "app-store" | "arrow-back" | "mail";
 interface Props {
   name: IconName;
 }
@@ -12,6 +12,8 @@ const nudge = name === "arrow-back"; // directional glyph: slides toward its dir
 const paths: Record<IconName, string> = {
   // Material Symbols arrow_back (Apache-2.0).
   "arrow-back": "M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z",
+  // Material Symbols mail (Apache-2.0).
+  mail: "M20 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 4-8 5-8-5V6l8 5 8-5v2z",
   "google-play":
     "M22.018 13.298l-3.919 2.218-3.515-3.493 3.543-3.521 3.891 2.202a1.49 1.49 0 0 1 0 2.594zM1.337.924a1.486 1.486 0 0 0-.112.568v21.017c0 .217.045.419.124.6l11.155-11.087L1.337.924zm12.207 10.065l3.258-3.238L3.45.195a1.466 1.466 0 0 0-.946-.179l11.04 10.973zm0 2.067l-11 10.933c.298.036.612-.016.906-.183l13.324-7.54-3.23-3.21z",
   "app-store":
