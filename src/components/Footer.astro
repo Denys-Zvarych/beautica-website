@@ -21,7 +21,8 @@ import { t } from "../i18n/t";
   .bar {
     display: flex;
     flex-direction: column;
-    align-items: center;
+    align-items: stretch;
+    text-align: center;
     justify-content: center;
     gap: var(--vt-space-sm);
     padding-block: var(--vt-space-md);
@@ -29,7 +30,7 @@ import { t } from "../i18n/t";
   .links {
     display: flex;
     flex-direction: column;
-    align-items: center;
+    align-items: stretch;
     gap: var(--vt-space-sm);
     margin: 0;
     padding: 0;
@@ -39,16 +40,19 @@ import { t } from "../i18n/t";
     .bar {
       flex-direction: row;
       flex-wrap: wrap;
+      align-items: center;
       column-gap: var(--vt-space-lg);
     }
     .links {
       flex-direction: row;
+      align-items: center;
       column-gap: var(--vt-space-lg);
     }
   }
   .link {
-    display: inline-flex;
+    display: flex;
     align-items: center;
+    justify-content: center;
     min-height: var(--vt-touch-min);
     color: var(--vt-color-accent-deep);
   }
