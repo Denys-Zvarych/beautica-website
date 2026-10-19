@@ -118,20 +118,7 @@ const jsonLd = breadcrumbList([
       opacity: 1;
     }
   }
-  /* One orchestrated entrance: the two cards settle in once on first paint (opacity + a short rise, no layout shift). */
-  :global(.toc-card),
-  :global(.body-card) {
-    animation: card-in var(--vt-dur-base) var(--vt-ease) both;
-  }
-  :global(.body-card) {
-    animation-delay: var(--vt-dur-fast);
-  }
-  @keyframes card-in {
-    from {
-      opacity: 0;
-      transform: translateY(var(--vt-space-sm));
-    }
-  }
+  /* No entrance animation on the cards: the H1 and the TOC text are LCP candidates and must paint immediately. */
   @media (min-width: 600px) {
     .toc {
       display: grid;
