@@ -41,7 +41,7 @@ const msgs = {
 
       <div class="field">
         <label class="vt-label" for="dr-phone">{t("deleteRequest.phone")}</label>
-        <input id="dr-phone" name="phone" type="tel" inputmode="tel" autocomplete="tel" maxlength={PHONE_MAX} aria-describedby="dr-phone-hint dr-phone-err" />
+        <input id="dr-phone" name="phone" type="tel" inputmode="tel" autocomplete="tel" maxlength={PHONE_MAX} placeholder={t("deleteRequest.phonePlaceholder")} aria-describedby="dr-phone-hint dr-phone-err" />
         <p class="hint vt-label" id="dr-phone-hint">{t("deleteRequest.phoneHint")}</p>
         <p class="err" id="dr-phone-err" hidden></p>
       </div>
@@ -188,7 +188,8 @@ const msgs = {
     gap: var(--vt-space-md);
   }
   .done {
-    align-items: flex-start;
+    align-items: center;
+    text-align: center;
   }
   /* Success: the neumorphic disc pops, the check draws itself (Icon `draw`), then the text and button fade up.
      Fixed box + transform/opacity only, so nothing shifts. Resting state = final state (reduced motion = no animation). */
@@ -334,21 +335,21 @@ const msgs = {
     pointer-events: none;
   }
   form :global(.cta) {
-    align-self: stretch;
+    align-self: center;
+  }
+  .alt {
+    margin: 0;
+    text-align: center;
   }
   .alt a {
     display: inline-flex;
     align-items: center;
     min-height: var(--vt-touch-min);
   }
-  @media (min-width: 600px) {
-    form :global(.cta) {
-      align-self: flex-start;
-    }
-  }
 </style>
 
 <script>
+  import { formatPhone, normalizePhone } from "../lib/phone";
   const dialog = document.getElementById("delete-request-dialog") as HTMLDialogElement | null;
   const opener = document.getElementById("delete-request-open");
   if (dialog && opener) {
@@ -375,7 +376,7 @@ const msgs = {
         const el = input(f);
         const v = el.value.trim();
         if (f === "email") return !EMAIL_RE.test(v);
-        if (f === "phone") return !/^[0-9+()\-\s.]*$/.test(v);
+        if (f === "phone") return normalizePhone(v) === null;
         if (f === "role") return v === "";
         if (f === "comment") return el.value.length > 1000;
         return !el.checked;
@@ -401,6 +402,14 @@ const msgs = {
       banner.hidden = true;
     });
     for (const f of FIELDS) input(f).addEventListener("input", () => setError(f, false));
+
+    // Phone mask: +380 (XX) XXX-XX-XX, applied as the user types or pastes (any 0XXXXXXXXX / 380… / +380… form).
+    const phone = input("phone");
+    phone.addEventListener("input", (e) => {
+      const deleting = ((e as InputEvent).inputType ?? "").startsWith("delete");
+      const next = formatPhone(phone.value, deleting);
+      if (next !== phone.value) phone.value = next;
+    });
 
     form.addEventListener("submit", async (e) => {
       e.preventDefault();

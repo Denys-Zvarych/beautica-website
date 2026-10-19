@@ -5,6 +5,8 @@
   "compatibility_flags": ["nodejs_compat"],
   "workers_dev": true,
   "preview_urls": true,
+  // Workers Logs (dashboard > Workers & Pages > beautica-site > Observability): lets us read the delete-request send errors.
+  "observability": { "enabled": true },
   "main": "@astrojs/cloudflare/entrypoints/server",
   "assets": {
     "binding": "ASSETS",

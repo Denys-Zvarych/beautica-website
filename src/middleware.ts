@@ -7,6 +7,18 @@ import { withSecurityHeaders } from "./lib/securityHeaders";
 const FORM_TYPES = ["application/x-www-form-urlencoded", "multipart/form-data", "text/plain"];
 
 export const onRequest = defineMiddleware(async (ctx, next) => {
+  try {
+    return await guard(ctx, next);
+  } catch (err) {
+    const e = err as { name?: string; message?: string; stack?: string } | undefined;
+    console.error("middleware: unexpected", e?.name, e?.message, e?.stack);
+    return withSecurityHeaders(
+      new Response("Internal Server Error", { status: 500, headers: { "Cache-Control": "no-store", "X-Robots-Tag": "noindex, nofollow" } }),
+    );
+  }
+});
+
+async function guard(ctx: Parameters<Parameters<typeof defineMiddleware>[0]>[0], next: Parameters<Parameters<typeof defineMiddleware>[0]>[1]) {
   const { request } = ctx;
   if (!["GET", "HEAD", "OPTIONS"].includes(request.method)) {
     const type = (request.headers.get("content-type") ?? "").split(";")[0].trim().toLowerCase();
@@ -22,4 +34,4 @@ export const onRequest = defineMiddleware(async (ctx, next) => {
     }
   }
   return withSecurityHeaders(await next());
-});
+}
