@@ -20,10 +20,21 @@ function reply(wantsJson: boolean, status: number, body: Record<string, unknown>
   return new Response(null, { status: 303, headers: { ...baseHeaders, Location: `/delete-account?${redirect}=1` } });
 }
 
-/** Logs name/code/message/stack of an unexpected error. Never the request body: no user data. */
-function logError(what: string, err: unknown): void {
+/** Logs the error name and code, plus the message only when it holds no "@" (a send error could echo an address).
+ *  Never the stack of a send error and never the request body: no user data. */
+function logError(what: string, err: unknown, withStack = false): void {
   const e = err as { name?: string; code?: string; message?: string; stack?: string } | undefined;
-  console.error(`delete-request: ${what}`, e?.name, e?.code, e?.message, e?.stack);
+  const message = typeof e?.message === "string" && !e.message.includes("@") ? e.message : undefined;
+  console.error(`delete-request: ${what}`, e?.name, e?.code, message, withStack && typeof e?.stack === "string" && !e.stack.includes("@") ? e.stack : undefined);
+}
+
+/** Same origin as the request URL; a malformed Origin ("null", garbage) counts as foreign. */
+function isSameOrigin(origin: string, requestUrl: string): boolean {
+  try {
+    return new URL(origin).host === new URL(requestUrl).host;
+  } catch {
+    return false;
+  }
 }
 
 export const POST: APIRoute = async ({ request }) => {
@@ -31,7 +42,7 @@ export const POST: APIRoute = async ({ request }) => {
   try {
     return await handle(request, wantsJson);
   } catch (err) {
-    logError("unexpected", err);
+    logError("unexpected", err, true);
     return reply(wantsJson, 500, { ok: false, error: "internal" }, "error");
   }
 };
@@ -41,7 +52,7 @@ async function handle(request: Request, wantsJson: boolean): Promise<Response> {
 
   // Same-origin only (browsers always send Origin on form POST); non-browser clients without Origin are allowed.
   const origin = request.headers.get("origin");
-  if (origin && new URL(origin).host !== new URL(request.url).host) {
+  if (origin && !isSameOrigin(origin, request.url)) {
     return reply(wantsJson, 403, { ok: false, error: "forbidden" }, "error");
   }
   if (Number(request.headers.get("content-length") ?? 0) > MAX_BODY) {

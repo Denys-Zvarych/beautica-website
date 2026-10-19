@@ -45,20 +45,22 @@ const jsonLd = breadcrumbList([
       </header>
 
       <NeuCard as="section" class="toc-card">
-        <h2 class="vt-card-title" id="toc-title">{t("legal.toc")}</h2>
-        <nav aria-labelledby="toc-title">
-          <ol class="toc">
-            {
-              toc.map((h) => (
-                <li>
-                  <a class="vt-prose" href={`#${h.slug}`}>
-                    {h.text}
-                  </a>
-                </li>
-              ))
-            }
-          </ol>
-        </nav>
+        <details class="toc-details">
+          <summary class="vt-card-title"><span>{t("legal.toc")}</span><Icon name="expand-more" /></summary>
+          <nav aria-label={t("legal.toc")}>
+            <ol class="toc">
+              {
+                toc.map((h) => (
+                  <li>
+                    <a class="vt-prose" href={`#${h.slug}`}>
+                      {h.text}
+                    </a>
+                  </li>
+                ))
+              }
+            </ol>
+          </nav>
+        </details>
       </NeuCard>
 
       <NeuCard as="article" class="body-card">
@@ -86,18 +88,55 @@ const jsonLd = breadcrumbList([
   }
   .intro :global(.intro-cta) {
     align-self: flex-start;
-    margin-top: var(--vt-space-sm);
+  }
+  /* Phones: tighter card padding and section rhythm (the 24/32 px steps return from 400 px). */
+  .legal :global(.neu-card.toc-card),
+  .legal :global(.neu-card.body-card) {
+    padding: var(--vt-space-md);
+  }
+
+  /* Table of contents: a <details>, closed on phones, always shown from tablet up. */
+  .toc-details summary {
+    position: relative;
+    isolation: isolate;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    min-height: var(--vt-touch-min);
+    margin-inline: calc(var(--vt-space-sm) * -1);
+    padding-inline: var(--vt-space-sm);
+    list-style: none;
+    cursor: pointer;
+  }
+  .toc-details summary::-webkit-details-marker {
+    display: none;
+  }
+  .toc-details summary :global(.icon) {
+    margin: 0;
+  }
+  .toc-details summary::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    border-radius: var(--vt-radius-button);
+    box-shadow: var(--vt-shadow-bordered-card);
+    opacity: 0;
+    transition: opacity var(--vt-dur-fast) var(--vt-ease);
+  }
+  .toc-details summary:focus-visible::before {
+    opacity: 1;
+  }
+  @media (hover: hover) {
+    .toc-details summary:hover::before {
+      opacity: 1;
+    }
   }
   .toc {
     margin: var(--vt-space-sm) 0 0;
     padding: 0;
     list-style: none;
   }
-  .toc li + li {
-    margin-top: var(--vt-space-sm);
-  }
-  /* Row height must not depend on how a title wraps (a font swap would otherwise shift the page): on phones every row
-     reserves two text lines; from tablet up the list is two columns where titles fit on one line. */
   .toc a {
     position: relative;
     isolation: isolate;
@@ -105,7 +144,7 @@ const jsonLd = breadcrumbList([
     padding-inline: var(--vt-space-sm);
     display: flex;
     align-items: center;
-    min-height: calc(2em * var(--vt-lh-prose) + 2 * var(--vt-space-xs));
+    min-height: var(--vt-touch-min);
     padding-block: var(--vt-space-xs);
   }
   /* Soft row highlight: a bordered-card glow fades in behind the row (opacity only). */
@@ -128,20 +167,36 @@ const jsonLd = breadcrumbList([
     }
   }
   /* No entrance animation on the cards: the H1 and the TOC text are LCP candidates and must paint immediately. */
+  @media (min-width: 400px) {
+    .legal :global(.neu-card.toc-card),
+    .legal :global(.neu-card.body-card) {
+      padding: var(--vt-space-lg);
+    }
+  }
   @media (min-width: 600px) {
+    /* The list is always visible: CSS forces the closed <details> content open (no layout shift, no script needed), the
+       script below mirrors it into the `open` attribute. The summary becomes a plain heading. */
+    .toc-details::details-content {
+      content-visibility: visible;
+    }
+    .toc-details summary {
+      min-height: 0;
+      cursor: default;
+      pointer-events: none;
+    }
+    .toc-details summary :global(.icon) {
+      display: none;
+    }
+    .toc-details summary::before {
+      display: none;
+    }
     .toc {
       display: grid;
       grid-template-columns: 1fr 1fr;
       column-gap: var(--vt-space-lg);
     }
-    .toc li + li {
-      margin-top: 0;
-    }
     .toc li {
       margin-bottom: var(--vt-space-sm);
-    }
-    .toc a {
-      min-height: var(--vt-touch-min);
     }
   }
   .back a {
@@ -156,7 +211,7 @@ const jsonLd = breadcrumbList([
     color: var(--vt-color-text);
   }
   .prose :global(h2) {
-    margin-top: var(--vt-space-xl);
+    margin-top: var(--vt-space-lg);
     margin-bottom: var(--vt-space-sm);
     font-family: var(--vt-font-display);
     font-size: var(--vt-fs-heading);
@@ -166,6 +221,14 @@ const jsonLd = breadcrumbList([
   }
   .prose :global(h2:first-child) {
     margin-top: 0;
+  }
+  @media (min-width: 400px) {
+    .prose :global(h2) {
+      margin-top: var(--vt-space-xl);
+    }
+    .prose :global(h2:first-child) {
+      margin-top: 0;
+    }
   }
   .prose :global(h3) {
     margin-top: var(--vt-space-lg);
@@ -223,3 +286,23 @@ const jsonLd = breadcrumbList([
     }
   }
 </style>
+
+<script>
+  // From 600 px the contents list is permanent: keep `open` in sync (CSS already shows it, so nothing moves) and make the
+  // summary inert there. Below 600 px it is a normal closed-by-default disclosure.
+  const details = document.querySelector<HTMLDetailsElement>(".toc-details");
+  if (details) {
+    const wide = matchMedia("(min-width: 600px)");
+    const summary = details.querySelector("summary")!;
+    const sync = () => {
+      details.open = wide.matches;
+      if (wide.matches) summary.tabIndex = -1; // inert heading, not a control
+      else summary.removeAttribute("tabindex");
+    };
+    sync();
+    wide.addEventListener("change", sync);
+    summary.addEventListener("click", (e) => {
+      if (wide.matches) e.preventDefault();
+    });
+  }
+</script>

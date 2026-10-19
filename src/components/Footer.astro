@@ -29,14 +29,21 @@ import { t } from "../i18n/t";
     gap: var(--vt-space-sm);
     padding-block: var(--vt-space-md);
   }
+  /* Phones: two columns of 48 px rows with no gap (the rows themselves are the touch targets). */
   .links {
-    display: flex;
-    flex-direction: column;
-    align-items: stretch;
-    gap: var(--vt-space-sm);
+    display: grid;
+    grid-template-columns: 1fr 1fr;
     margin: 0;
     padding: 0;
     list-style: none;
+  }
+  @media (min-width: 600px) {
+    .links {
+      display: flex;
+      flex-direction: column;
+      align-items: stretch;
+      gap: var(--vt-space-sm);
+    }
   }
   @media (min-width: 1024px) {
     .bar {

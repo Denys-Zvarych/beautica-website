@@ -43,11 +43,12 @@ for (const route of ROUTES) {
       const targets = [...document.querySelectorAll("a[href], button, input, select, textarea, summary, [role=button]")]
         .filter((el) => {
           const host = el.closest(".prose p, .prose li");
+          if (getComputedStyle(el).pointerEvents === "none") return false; // inert (e.g. the always-open contents summary from 600 px)
           return !(host && el.matches(".prose a") && host.textContent.trim().length > el.textContent.trim().length);
         })
         .map((el) => ({ el, b: el.getBoundingClientRect() }))
         .filter((t) => t.b.width > 0 && t.b.height > 0)
-        .map((t) => ({ tag: t.el.tagName + (t.el.className ? "." + String(t.el.className).split(" ")[0] : ""), x: t.b.x, y: t.b.y, w: t.b.width, h: t.b.height }));
+        .map((t) => ({ row: !!t.el.closest(".site-footer .links, .toc"), tag: t.el.tagName + (t.el.className ? "." + String(t.el.className).split(" ")[0] : ""), x: t.b.x, y: t.b.y, w: t.b.width, h: t.b.height }));
       return { scrollWidth: document.documentElement.scrollWidth, innerWidth: window.innerWidth, targets };
     });
     const tag = `${route} @${width}`;
@@ -59,6 +60,8 @@ for (const route of ROUTES) {
       const a = r.targets[i], b = r.targets[j];
       const gapX = Math.max(b.x - (a.x + a.w), a.x - (b.x + b.w));
       const gapY = Math.max(b.y - (a.y + a.h), a.y - (b.y + b.h));
+      // Footer links and contents rows are full-size (>= 48 px) rows that tile edge to edge: WCAG 2.5.8 is met by the target size.
+      if (a.row && b.row && a.h >= 48 && b.h >= 48 && Math.max(gapX, gapY) >= 0) continue;
       if (Math.max(gapX, gapY) < 8) problems.push(`${tag}: targets ${a.tag} and ${b.tag} are < 8 px apart`);
     }
     if (SHOTS && width !== 320) await page.screenshot({ path: join(SHOTS, `${route === "/" ? "index" : route.slice(1)}-${width}.png`), fullPage: true });

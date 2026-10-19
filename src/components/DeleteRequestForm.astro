@@ -368,6 +368,12 @@ const msgs = {
       const p = dialog.querySelector<HTMLElement>(`#dr-${f}-err`)!;
       p.textContent = on ? msgs[f] : "";
       p.hidden = !on;
+      // The phone hint gives way to its error (and aria-describedby follows what is visible).
+      const hint = dialog.querySelector<HTMLElement>(`#dr-${f}-hint`);
+      if (hint) {
+        hint.hidden = on;
+        el.setAttribute("aria-describedby", on ? `dr-${f}-err` : `dr-${f}-hint dr-${f}-err`);
+      }
       if (on) el.setAttribute("aria-invalid", "true");
       else el.removeAttribute("aria-invalid");
     };

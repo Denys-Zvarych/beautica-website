@@ -2,7 +2,7 @@
   "ci": {
     "collect": {
       "staticDistDir": "./dist/client",
-      "url": ["http://localhost/index.html", "http://localhost/privacy.html", "http://localhost/terms.html"],
+      "url": ["http://localhost/index.html", "http://localhost/privacy.html", "http://localhost/terms.html", "http://localhost/delete-account.html"],
       "numberOfRuns": 3,
       "settings": {
         "chromeFlags": "--no-sandbox --headless=new"
@@ -14,7 +14,7 @@
         "categories:performance": ["error", { "minScore": 0.95 }],
         "categories:accessibility": ["error", { "minScore": 1 }],
         "categories:seo": ["error", { "minScore": 1 }],
-        "cumulative-layout-shift": ["error", { "maxNumericValue": 0.02 }],
+        "cumulative-layout-shift": ["error", { "maxNumericValue": 0.005 }],
         "largest-contentful-paint": ["error", { "maxNumericValue": 2000 }],
         "total-blocking-time": ["error", { "maxNumericValue": 50 }]
       }

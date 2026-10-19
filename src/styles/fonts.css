@@ -3,7 +3,7 @@
  * Fontsource CSS would declare every subset. Per family: cyrillic + latin (Google unicode-ranges) and a cyrillic-ext
  * face narrowed to U+20B4 (the hryvnia sign lives only there), so browsers fetch it only on pages that render it.
  * The app's static weights (Comfortaa 600/700, Nunito 400/600/700/800) are instances of the wght axis.
- * "<Family> Fallback" faces carry size-adjust/ascent/descent overrides measured against Arial so the swap does not shift layout.
+ * "<Family> Fallback" faces carry size-adjust/ascent/descent overrides measured against Arial (Liberation Sans / Arimo are metric-identical, listed for Linux, where Chrome does not alias Arial) so the swap does not shift layout.
  */
 @font-face {
   font-family: "Nunito";
@@ -31,10 +31,22 @@
 }
 @font-face {
   font-family: "Nunito Fallback";
-  src: local("Arial");
+  src: local("Arial"), local("Liberation Sans"), local("Arimo");
   size-adjust: 97.8%;
   ascent-override: 103.37%;
   descent-override: 36.09%;
+  line-gap-override: 0%;
+}
+/* Cyrillic runs are ~1.2% wider than Arial in Nunito (latin is ~5.6% narrower), so the one latin-measured face reflowed Ukrainian
+   prose on the swap (CLS 0.026 on /terms). A later face with a Cyrillic range wins for those glyphs; ascent/descent keep the same
+   absolute metrics (97.8 / 101.2 of the values above). */
+@font-face {
+  font-family: "Nunito Fallback";
+  src: local("Arial"), local("Liberation Sans"), local("Arimo");
+  unicode-range: U+0400-04FF,U+2116;
+  size-adjust: 101.2%;
+  ascent-override: 99.9%;
+  descent-override: 34.88%;
   line-gap-override: 0%;
 }
 @font-face {
@@ -63,7 +75,7 @@
 }
 @font-face {
   font-family: "Comfortaa Fallback";
-  src: local("Arial");
+  src: local("Arial"), local("Liberation Sans"), local("Arimo");
   size-adjust: 117.54%;
   ascent-override: 74.95%;
   descent-override: 19.91%;
