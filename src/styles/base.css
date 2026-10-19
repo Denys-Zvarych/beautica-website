@@ -161,6 +161,8 @@ a {
 .vt-u {
   position: relative;
   display: inline-block;
+  /* An inline-block does not receive its parent's underline: copy it so the resting underline survives. */
+  text-decoration: inherit;
 }
 .vt-u::after {
   content: "";

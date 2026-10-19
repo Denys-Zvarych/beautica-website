@@ -1,0 +1,14 @@
+---
+import { getEntry, render } from "astro:content";
+import LegalPage from "../components/LegalPage.astro";
+import { t } from "../i18n/t";
+import { SUPPORT_EMAIL } from "../config/legal.mjs";
+
+const entry = await getEntry("legal", "uk/support");
+if (!entry) throw new Error("legal: uk/support.md is missing");
+const { Content, headings } = await render(entry);
+---
+
+<LegalPage {...entry.data} path="/support" headings={headings} cta={{ href: `mailto:${SUPPORT_EMAIL}`, label: t("support.cta"), icon: "mail" }}>
+  <Content />
+</LegalPage>

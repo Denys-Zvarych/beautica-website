@@ -29,7 +29,8 @@ function withExplicitIds(html: string, headings: { slug: string }[]): string {
   let i = 0;
   const out = html.replace(/<h2 id="[^"]*">/g, () => `<h2 id="${headings[i++]?.slug ?? ""}">`);
   if (i !== headings.length) throw new Error(`legal: ${headings.length} headings with ids, ${i} rendered <h2>`);
-  return out;
+  // Every text link gets the animated underline label (.vt-u, base.css), like links in the header/footer.
+  return out.replace(/(<a [^>]*>)([^<]+)(<\/a>)/g, '$1<span class="vt-u">$2</span>$3');
 }
 
 /** Minimal frontmatter reader for our own files: `key: value` lines, values either "double-quoted" (JSON string) or bare. */

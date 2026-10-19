@@ -4,6 +4,8 @@
 import Layout from "./Layout.astro";
 import NeuCard from "./NeuCard.astro";
 import Icon from "./Icon.astro";
+import CtaButton from "./CtaButton.astro";
+import type { IconName } from "./Icon.astro";
 import { t } from "../i18n/t";
 import { breadcrumbList } from "../lib/jsonld";
 
@@ -17,9 +19,11 @@ interface Props {
   path: string;
   /** Markdown headings from render(); only depth 2 enter the table of contents. */
   headings: { depth: number; slug: string; text: string }[];
+  /** Optional primary action under the title (e.g. a prefilled mailto). */
+  cta?: { href: string; label: string; icon?: IconName };
 }
 
-const { title, metaTitle, description, version, updated, path, headings } = Astro.props;
+const { title, metaTitle, description, version, updated, path, headings, cta } = Astro.props;
 const toc = headings.filter((h) => h.depth === 2);
 const site = Astro.site as URL;
 const effective = updated.toLocaleDateString("uk-UA", { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" });
@@ -37,6 +41,7 @@ const jsonLd = breadcrumbList([
         <p class="vt-label meta">
           {t("legal.version", { version })} · {t("legal.effective")}: <time datetime={updated.toISOString().slice(0, 10)}>{effective}</time>
         </p>
+        {cta && <CtaButton class="intro-cta" href={cta.href} icon={cta.icon}>{cta.label}</CtaButton>}
       </header>
 
       <NeuCard as="section" class="toc-card">
@@ -78,6 +83,10 @@ const jsonLd = breadcrumbList([
     display: flex;
     flex-direction: column;
     gap: var(--vt-space-sm);
+  }
+  .intro :global(.intro-cta) {
+    align-self: flex-start;
+    margin-top: var(--vt-space-sm);
   }
   .toc {
     margin: var(--vt-space-sm) 0 0;
