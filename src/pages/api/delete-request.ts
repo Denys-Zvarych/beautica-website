@@ -89,7 +89,10 @@ async function handle(request: Request, wantsJson: boolean): Promise<Response> {
   } catch (err) {
     // Cloudflare puts only our own sender/inbox addresses in the message, never the submitted fields.
     logError("send failed", err);
-    return reply(wantsJson, 502, { ok: false, error: "send_failed" }, "error");
+    const e = err as { name?: unknown; code?: unknown } | undefined;
+    const code = typeof e?.code === "string" && /^[A-Z0-9_]{1,64}$/.test(e.code) ? e.code : null;
+    const name = typeof e?.name === "string" && /^[A-Za-z]{1,64}$/.test(e.name) ? e.name : null;
+    return reply(wantsJson, 502, { ok: false, error: "send_failed", code, name }, "error");
   }
   console.info("delete-request: sent");
   return reply(wantsJson, 200, { ok: true }, "sent");
