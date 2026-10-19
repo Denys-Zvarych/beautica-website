@@ -10,7 +10,10 @@
     "primaryNav": "Основна навігація"
   },
   "footer": {
-    "rights": "© {year} Beautica"
+    "rights": "© {year} Beautica",
+    "privacy": "Політика конфіденційності",
+    "terms": "Умови користування",
+    "nav": "Правова інформація"
   },
   "index": {
     "metaTitle": "Beautica — скоро в Google Play та App Store",
@@ -28,5 +31,11 @@
     "cta": "На головну",
     "code": "404",
     "support": "Написати в підтримку"
+  },
+  "legal": {
+    "version": "Версія {version}",
+    "effective": "Дата набрання чинності",
+    "toc": "Зміст",
+    "home": "На головну"
   }
 }

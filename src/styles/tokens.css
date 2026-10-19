@@ -105,7 +105,9 @@
      --vt-bp-*: breakpoints; documentation only, since custom properties cannot be used inside @media
        (the checker asserts every @media (min-width) equals one of these).
      --vt-max-width: web content column; the app has no desktop layout.
-     --vt-touch-min: 48 px minimum touch target (WCAG / Play guidance). */
+     --vt-touch-min: 48 px minimum touch target (WCAG / Play guidance).
+     --vt-dur-fast / --vt-dur-base / --vt-ease / --vt-lift: web hover + focus micro-interaction motion (transform/opacity/
+       box-shadow only). 150 ms matches the app's AnimatedContainer press timing; the app has no hover. */
   --vt-fs-prose: 16px;
   --vt-fw-prose: 400;
   --vt-lh-prose: 1.6;
@@ -114,6 +116,10 @@
   --vt-bp-desktop: 1024px;
   --vt-max-width: 1120px;
   --vt-touch-min: 48px;
+  --vt-dur-fast: 150ms;
+  --vt-dur-base: 280ms;
+  --vt-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --vt-lift: 2px;
 }
 
 @media (min-width: 1024px) {

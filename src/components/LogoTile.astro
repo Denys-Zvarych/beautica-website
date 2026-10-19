@@ -65,4 +65,16 @@ const px = size === "header" ? 40 : 117; // HTML intrinsic hints only; rendered 
   .header img {
     border-radius: var(--vt-radius-button);
   }
+  /* Header tile reacts to its enclosing link (brand): a gentle raise and tilt. */
+  .header {
+    transition: transform var(--vt-dur-base) var(--vt-ease);
+  }
+  :global(a:focus-visible) .header {
+    transform: translateY(calc(var(--vt-lift) * -1)) rotate(-4deg);
+  }
+  @media (hover: hover) {
+    :global(a:hover) .header {
+      transform: translateY(calc(var(--vt-lift) * -1)) rotate(-4deg);
+    }
+  }
 </style>

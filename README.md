@@ -15,12 +15,19 @@ npm run check                        # astro check (TypeScript)
 node scripts/check-tokens.mjs        # token parity vs ../beautica-mobile (mandatory before every PR)
 node scripts/check-responsive.mjs    # 320/360/768/1280 px: no h-scroll, taps >= 48 px (needs Chromium, set CHROMIUM_PATH)
 npx html-validate 'dist/client/**/*.html'
-lychee --offline --root-dir "$PWD/dist/client" 'dist/client/**/*.html'   # lychee 0.24.2 (GitHub release, sha256-verified)
+lychee --offline --include-fragments --fallback-extensions html --root-dir "$PWD/dist/client" 'dist/client/**/*.html'   # lychee 0.24.2 (GitHub release, sha256-verified)
 ```
 
 Design tokens live in `src/styles/tokens.css`, derived 1:1 from `beautica-mobile/lib/core/theme/*.dart`; every
 line carries `/* @src Dart.Symbol */`. Never edit values by hand without changing the app first.
 `src/styles/fonts.css` is hand-written (variable WOFF2 from `@fontsource-variable/*`). Icons/OG image: `node scripts/generate-assets.mjs`.
+
+## Release gate: no `TODO(owner)` placeholders
+
+The legal pages render the operator name and details from `src/config/legal.mjs` (`OPERATOR_NAME`, `OPERATOR_DETAILS`), which are
+`TODO(owner)` until the Play Console developer exists. `node scripts/check-no-todo-owner.mjs` (after `npm run build`) fails when
+`TODO(owner)` is left in `LEGAL_VARS` or anywhere in `dist/`. CI runs it only for PRs whose base is `main`, so `dev` PRs stay green
+and a release with the placeholder cannot merge. To release: fill the two constants, rebuild, run the script.
 
 ## Promotion guard (advisory)
 

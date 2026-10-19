@@ -37,10 +37,15 @@ jobs:
 
       - run: npm run build
 
+      # Release gate: legal pages must not carry TODO(owner) placeholders into main. Dev PRs stay green.
+      - name: Release gate - no TODO(owner) placeholders (PRs into main only)
+        if: github.base_ref == 'main'
+        run: node scripts/check-no-todo-owner.mjs
+
       - name: Link check (offline, built HTML)
         uses: lycheeverse/lychee-action@v2
         with:
-          args: --offline --no-progress --root-dir ${{ github.workspace }}/dist/client 'dist/client/**/*.html'
+          args: --offline --no-progress --fallback-extensions html --root-dir ${{ github.workspace }}/dist/client 'dist/client/**/*.html'
           fail: true
 
       - name: HTML validation
