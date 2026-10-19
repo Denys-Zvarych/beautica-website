@@ -2,7 +2,6 @@
 import "../styles/fonts.css";
 import "../styles/tokens.css";
 import "../styles/base.css";
-import nunitoCyr from "@fontsource-variable/nunito/files/nunito-cyrillic-wght-normal.woff2?url";
 import comfortaaCyr from "@fontsource-variable/comfortaa/files/comfortaa-cyrillic-wght-normal.woff2?url";
 import Seo from "./Seo.astro";
 import Header from "./Header.astro";
@@ -31,7 +30,7 @@ const { hideHeader = false, ...seo } = Astro.props;
     <link rel="icon" href="/favicon.ico" sizes="48x48" />
     <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
-    <link rel="preload" as="font" type="font/woff2" href={nunitoCyr} crossorigin />
+    <!-- Only the heading face (the LCP H1) is preloaded: a second preload competes for the same slow link. -->
     <link rel="preload" as="font" type="font/woff2" href={comfortaaCyr} crossorigin />
     <Seo {...seo} />
   </head>

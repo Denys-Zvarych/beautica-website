@@ -9,7 +9,10 @@ export default defineConfig({
   site: "https://beautica.app",
   output: "static",
   trailingSlash: "never",
-  build: { format: "file" },
+  // Static site, no Astro sessions: without this the Cloudflare adapter adds an id-less SESSION KV binding
+  // that makes `wrangler preview` / Workers Builds fail with code 10021.
+  session: false,
+  build: { format: "file", inlineStylesheets: "always" },
   adapter: cloudflare({ imageService: "compile" }),
   integrations: [
     sitemap({
