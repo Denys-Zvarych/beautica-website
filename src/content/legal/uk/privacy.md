@@ -11,7 +11,7 @@ locale: uk
 
 ## 1. Хто відповідає за ваші дані {#controller}
 
-Володілець персональних даних: **{{operator}}** (далі — «ми», «Beautica»). {{operatorDetails}}.
+Сервіс Beautica надає **{{operator}}** (далі — «ми», «Beautica»). {{operatorDetails}}. Саме ми визначаємо, які ваші дані обробляються і навіщо, тому відповідаємо за них (у Законі «Про захист персональних даних» це називається «володілець персональних даних»).
 
 Контакт з питань персональних даних: [privacy@beautica.app](mailto:privacy@beautica.app). Загальна підтримка: [support@beautica.app](mailto:support@beautica.app).
 
