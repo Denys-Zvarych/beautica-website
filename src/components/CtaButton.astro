@@ -1,17 +1,18 @@
 ---
 // Mirrors NeumorphicButton: 49 px, radius 16, latte->deep gradient, extrudedButtonAccent,
 // cream Comfortaa 13/700, pressed = scale(.97) + shadow off (shadow lives on ::before, opacity only).
-// Optional named slot `icon`: a decorative leading glyph (aria-hidden, currentColor, token-sized). No slot = unchanged.
+// Optional `icon` prop (a name from Icon.astro): decorative leading glyph. No prop = unchanged.
+import Icon, { type IconName } from "./Icon.astro";
 interface Props {
   href: string;
+  icon?: IconName;
   class?: string;
 }
-const { href, class: className } = Astro.props;
-const hasIcon = Astro.slots.has("icon");
+const { href, icon, class: className } = Astro.props;
 ---
 
 <a class:list={["cta vt-cta", className]} href={href}>
-  {hasIcon && <span class="icon" aria-hidden="true"><slot name="icon" /></span>}
+  {icon && <Icon name={icon} />}
   <slot />
 </a>
 
@@ -37,18 +38,6 @@ const hasIcon = Astro.slots.has("icon");
     border-radius: inherit;
     box-shadow: var(--vt-shadow-extruded-button-accent);
     transition: opacity 120ms ease-out;
-  }
-  .icon {
-    display: inline-flex;
-    flex: none;
-    width: calc(var(--vt-space-md) + var(--vt-space-xs));
-    height: calc(var(--vt-space-md) + var(--vt-space-xs));
-    margin-inline-end: var(--vt-space-sm);
-  }
-  .icon :global(svg) {
-    width: 100%;
-    height: 100%;
-    fill: currentColor;
   }
   .cta:active {
     transform: scale(0.97);

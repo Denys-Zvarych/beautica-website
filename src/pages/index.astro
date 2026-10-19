@@ -2,7 +2,6 @@
 import LogoTile from "../components/LogoTile.astro";
 import Layout from "../components/Layout.astro";
 import Chip from "../components/Chip.astro";
-import StoreIcon from "../components/StoreIcon.astro";
 import { t } from "../i18n/t";
 ---
 
@@ -13,8 +12,8 @@ import { t } from "../i18n/t";
       <h1 class="vt-display">{t("index.h1")}</h1>
       <p class="vt-prose">{t("index.lead")}</p>
       <ul class="chips">
-        <li><Chip><StoreIcon slot="icon" store="google-play" />{t("index.soonGooglePlay")}</Chip></li>
-        <li><Chip><StoreIcon slot="icon" store="app-store" />{t("index.soonAppStore")}</Chip></li>
+        <li><Chip icon="google-play">{t("index.soonGooglePlay")}</Chip></li>
+        <li><Chip icon="app-store">{t("index.soonAppStore")}</Chip></li>
       </ul>
     </div>
   </main>

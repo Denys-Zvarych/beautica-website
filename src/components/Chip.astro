@@ -1,19 +1,20 @@
 ---
 // Mirrors ServiceChip: 40 px tall, fully rounded, selected = gradient fill.
 // Non-interactive label by default; becomes a link only when `href` is passed (then >= 48 px tall).
-// Optional named slot `icon` (decorative, aria-hidden; the text stays the accessible name). No slot = unchanged.
+// Optional `icon` prop (a name from Icon.astro; decorative, the text stays the accessible name). No prop = unchanged.
+import Icon, { type IconName } from "./Icon.astro";
 interface Props {
+  icon?: IconName;
   selected?: boolean;
   href?: string;
   class?: string;
 }
-const { selected = false, href, class: className } = Astro.props;
+const { icon, selected = false, href, class: className } = Astro.props;
 const Tag = href ? "a" : "span";
-const hasIcon = Astro.slots.has("icon");
 ---
 
 <Tag class:list={["chip vt-pill", { selected, link: !!href }, className]} href={href}>
-  {hasIcon && <span class="icon" aria-hidden="true"><slot name="icon" /></span>}
+  {icon && <Icon name={icon} />}
   <slot />
 </Tag>
 
@@ -27,18 +28,6 @@ const hasIcon = Astro.slots.has("icon");
     background: var(--vt-color-base);
     box-shadow: var(--vt-shadow-extruded-small);
     text-decoration: none;
-  }
-  .icon {
-    display: inline-flex;
-    flex: none;
-    width: calc(var(--vt-space-md) + var(--vt-space-xs));
-    height: calc(var(--vt-space-md) + var(--vt-space-xs));
-    margin-inline-end: var(--vt-space-sm);
-  }
-  .icon :global(svg) {
-    width: 100%;
-    height: 100%;
-    fill: currentColor;
   }
   .chip.link {
     min-height: var(--vt-touch-min);
