@@ -2,19 +2,31 @@
 // Mirrors NeumorphicButton: 49 px, radius 16, latte->deep gradient, extrudedButtonAccent,
 // cream Comfortaa 13/700, pressed = scale(.97) + shadow off (shadow lives on ::before, opacity only).
 // Optional `icon` prop (a name from Icon.astro): decorative leading glyph. No prop = unchanged.
+// Optional `type` ("submit" | "button") renders a <button> with the same classes instead of a link; `id` for scripts.
 import Icon, { type IconName } from "./Icon.astro";
 interface Props {
-  href: string;
+  href?: string;
+  type?: "submit" | "button";
+  id?: string;
   icon?: IconName;
   class?: string;
 }
-const { href, icon, class: className } = Astro.props;
+const { href, type, id, icon, class: className } = Astro.props;
 ---
 
-<a class:list={["cta vt-cta", className]} href={href}>
-  {icon && <Icon name={icon} />}
-  <slot />
-</a>
+{
+  type ? (
+    <button class:list={["cta vt-cta", className]} type={type} id={id}>
+      {icon && <Icon name={icon} />}
+      <slot />
+    </button>
+  ) : (
+    <a class:list={["cta vt-cta", className]} href={href} id={id}>
+      {icon && <Icon name={icon} />}
+      <slot />
+    </a>
+  )
+}
 
 <style>
   .cta {
@@ -28,6 +40,8 @@ const { href, icon, class: className } = Astro.props;
     border-radius: var(--vt-radius-button);
     background: var(--vt-gradient-accent);
     text-decoration: none;
+    border: 0;
+    cursor: pointer;
     transition: transform var(--vt-dur-fast) var(--vt-ease);
   }
   .cta::before {
@@ -66,6 +80,10 @@ const { href, icon, class: className } = Astro.props;
     .cta:hover::before {
       transform: translateY(var(--vt-lift));
     }
+  }
+  .cta:disabled {
+    cursor: progress;
+    opacity: 0.7;
   }
   .cta:active {
     transform: scale(0.98);

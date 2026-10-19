@@ -20,7 +20,7 @@ interface Props {
   /** Markdown headings from render(); only depth 2 enter the table of contents. */
   headings: { depth: number; slug: string; text: string }[];
   /** Optional primary action under the title (e.g. a prefilled mailto). */
-  cta?: { href: string; label: string; icon?: IconName };
+  cta?: { href: string; label: string; icon?: IconName; id?: string };
 }
 
 const { title, metaTitle, description, version, updated, path, headings, cta } = Astro.props;
@@ -41,7 +41,7 @@ const jsonLd = breadcrumbList([
         <p class="vt-label meta">
           {t("legal.version", { version })} · {t("legal.effective")}: <time datetime={updated.toISOString().slice(0, 10)}>{effective}</time>
         </p>
-        {cta && <CtaButton class="intro-cta" href={cta.href} icon={cta.icon}>{cta.label}</CtaButton>}
+        {cta && <CtaButton class="intro-cta" href={cta.href} icon={cta.icon} id={cta.id}>{cta.label}</CtaButton>}
       </header>
 
       <NeuCard as="section" class="toc-card">

@@ -9,5 +9,9 @@
   "assets": {
     "binding": "ASSETS",
     "not_found_handling": "404-page"
-  }
+  },
+  // Account-deletion requests (phase 011): Email Routing send binding, locked to the verified team inbox.
+  "send_email": [{ "name": "DELETION_MAIL", "destination_address": "beautica.ua@gmail.com" }],
+  // 3 requests / 60 s per IP on /api/delete-request.
+  "ratelimits": [{ "name": "DELETION_LIMITER", "namespace_id": "1011", "simple": { "limit": 3, "period": 60 } }]
 }
