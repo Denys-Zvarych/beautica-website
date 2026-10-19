@@ -1,0 +1,15 @@
+---
+import { getEntry, render } from "astro:content";
+import LegalPage from "../components/LegalPage.astro";
+import { t } from "../i18n/t";
+import { PRIVACY_EMAIL } from "../config/legal.mjs";
+
+const entry = await getEntry("legal", "uk/delete-account");
+if (!entry) throw new Error("legal: uk/delete-account.md is missing");
+const { Content, headings } = await render(entry);
+const mailto = `mailto:${PRIVACY_EMAIL}?subject=${encodeURIComponent(t("deleteAccount.mailSubject"))}&body=${encodeURIComponent(t("deleteAccount.mailBody"))}`;
+---
+
+<LegalPage {...entry.data} path="/delete-account" headings={headings} cta={{ href: mailto, label: t("deleteAccount.cta"), icon: "mail" }}>
+  <Content />
+</LegalPage>
