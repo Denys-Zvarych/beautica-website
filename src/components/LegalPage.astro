@@ -60,7 +60,7 @@ const jsonLd = breadcrumbList([
         <div class="prose vt-prose"><slot /></div>
       </NeuCard>
 
-      <p class="vt-label back"><a href="/"><Icon name="arrow-back" />{t("legal.home")}</a></p>
+      <p class="vt-label back"><a href="/"><Icon name="arrow-back" /><span class="vt-u">{t("legal.home")}</span></a></p>
     </div>
   </main>
 </Layout>
@@ -90,10 +90,47 @@ const jsonLd = breadcrumbList([
   /* Row height must not depend on how a title wraps (a font swap would otherwise shift the page): on phones every row
      reserves two text lines; from tablet up the list is two columns where titles fit on one line. */
   .toc a {
+    position: relative;
+    isolation: isolate;
+    margin-inline: calc(var(--vt-space-sm) * -1);
+    padding-inline: var(--vt-space-sm);
     display: flex;
     align-items: center;
     min-height: calc(2em * var(--vt-lh-prose) + 2 * var(--vt-space-xs));
     padding-block: var(--vt-space-xs);
+  }
+  /* Soft row highlight: a bordered-card glow fades in behind the row (opacity only). */
+  .toc a::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    border-radius: var(--vt-radius-button);
+    box-shadow: var(--vt-shadow-bordered-card);
+    opacity: 0;
+    transition: opacity var(--vt-dur-fast) var(--vt-ease);
+  }
+  .toc a:focus-visible::before {
+    opacity: 1;
+  }
+  @media (hover: hover) {
+    .toc a:hover::before {
+      opacity: 1;
+    }
+  }
+  /* One orchestrated entrance: the two cards settle in once on first paint (opacity + a short rise, no layout shift). */
+  :global(.toc-card),
+  :global(.body-card) {
+    animation: card-in var(--vt-dur-base) var(--vt-ease) both;
+  }
+  :global(.body-card) {
+    animation-delay: var(--vt-dur-fast);
+  }
+  @keyframes card-in {
+    from {
+      opacity: 0;
+      transform: translateY(var(--vt-space-sm));
+    }
   }
   @media (min-width: 600px) {
     .toc {

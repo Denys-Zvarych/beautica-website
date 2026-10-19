@@ -31,6 +31,23 @@ const Tag = href ? "a" : "span";
   }
   .chip.link {
     min-height: var(--vt-touch-min);
+    transition:
+      transform var(--vt-dur-fast) var(--vt-ease),
+      box-shadow var(--vt-dur-fast) var(--vt-ease);
+  }
+  /* Interactive chips (links) rise softly and swap to the larger extruded shadow; plain label chips stay still. */
+  .chip.link:focus-visible {
+    transform: translateY(calc(var(--vt-lift) * -1));
+    box-shadow: var(--vt-shadow-extruded-button);
+  }
+  @media (hover: hover) {
+    .chip.link:hover {
+      transform: translateY(calc(var(--vt-lift) * -1));
+      box-shadow: var(--vt-shadow-extruded-button);
+    }
+  }
+  .chip.link:active {
+    transform: scale(0.98);
   }
   .chip.selected {
     background: var(--vt-gradient-accent);

@@ -28,7 +28,7 @@ const { href, icon, class: className } = Astro.props;
     border-radius: var(--vt-radius-button);
     background: var(--vt-gradient-accent);
     text-decoration: none;
-    transition: transform 120ms ease-out;
+    transition: transform var(--vt-dur-fast) var(--vt-ease);
   }
   .cta::before {
     content: "";
@@ -37,12 +37,43 @@ const { href, icon, class: className } = Astro.props;
     z-index: -1;
     border-radius: inherit;
     box-shadow: var(--vt-shadow-extruded-button-accent);
-    transition: opacity 120ms ease-out;
+    transition:
+      opacity var(--vt-dur-fast) var(--vt-ease),
+      transform var(--vt-dur-fast) var(--vt-ease);
+  }
+  /* Pressed layer: an inset shadow built from tokens, faded in on :active. */
+  .cta::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    box-shadow: inset var(--vt-space-xs) var(--vt-space-xs) var(--vt-space-sm) var(--vt-color-accent-deep);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity var(--vt-dur-fast) var(--vt-ease);
+  }
+  /* Lift: the button rises while its shadow stays put, so the shadow reads deeper. Same look for keyboard focus. */
+  .cta:focus-visible {
+    transform: translateY(calc(var(--vt-lift) * -1));
+  }
+  .cta:focus-visible::before {
+    transform: translateY(var(--vt-lift));
+  }
+  @media (hover: hover) {
+    .cta:hover {
+      transform: translateY(calc(var(--vt-lift) * -1));
+    }
+    .cta:hover::before {
+      transform: translateY(var(--vt-lift));
+    }
   }
   .cta:active {
-    transform: scale(0.97);
+    transform: scale(0.98);
   }
   .cta:active::before {
     opacity: 0;
+  }
+  .cta:active::after {
+    opacity: 1;
   }
 </style>

@@ -6,12 +6,12 @@ import { t } from "../i18n/t";
   <div class="vt-container bar">
     <nav aria-label={t("footer.nav")}>
       <ul class="links">
-        <li><a class="vt-body link" href="/privacy">{t("footer.privacy")}</a></li>
-        <li><a class="vt-body link" href="/terms">{t("footer.terms")}</a></li>
+        <li><a class="vt-body link" href="/privacy"><span class="vt-u">{t("footer.privacy")}</span></a></li>
+        <li><a class="vt-body link" href="/terms"><span class="vt-u">{t("footer.terms")}</span></a></li>
       </ul>
     </nav>
     <p class="vt-body">{t("footer.rights", { year: new Date().getFullYear() })}</p>
-    <a class="vt-body link" href={`mailto:${t("site.supportEmail")}`}>{t("site.supportEmail")}</a>
+    <a class="vt-body link" href={`mailto:${t("site.supportEmail")}`}><span class="vt-u">{t("site.supportEmail")}</span></a>
   </div>
 </footer>
 

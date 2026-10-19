@@ -8,6 +8,7 @@ interface Props {
   name: IconName;
 }
 const { name } = Astro.props;
+const nudge = name === "arrow-back"; // directional glyph: slides toward its direction when the parent link is hovered/focused
 const paths: Record<IconName, string> = {
   // Material Symbols arrow_back (Apache-2.0).
   "arrow-back": "M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z",
@@ -18,7 +19,7 @@ const paths: Record<IconName, string> = {
 };
 ---
 
-<span class="icon" aria-hidden="true">
+<span class:list={["icon", { nudge }]} aria-hidden="true">
   <svg viewBox="0 0 24 24" width="1.25em" height="1.25em" fill="currentColor" xmlns="http://www.w3.org/2000/svg" focusable="false"><path d={paths[name]}></path></svg>
 </span>
 
@@ -30,9 +31,22 @@ const paths: Record<IconName, string> = {
     height: calc(var(--vt-space-md) + var(--vt-space-xs));
     margin-inline-end: var(--vt-space-sm);
   }
+  .icon {
+    transition: transform var(--vt-dur-fast) var(--vt-ease);
+  }
   .icon svg {
     width: 100%;
     height: 100%;
     fill: currentColor;
+  }
+  :global(a:focus-visible) .nudge,
+  :global(button:focus-visible) .nudge {
+    transform: translateX(calc(var(--vt-space-xs) * -1));
+  }
+  @media (hover: hover) {
+    :global(a:hover) .nudge,
+    :global(button:hover) .nudge {
+      transform: translateX(calc(var(--vt-space-xs) * -1));
+    }
   }
 </style>
