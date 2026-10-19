@@ -3,6 +3,7 @@
 // Reuses Layout (Seo/Header/Footer) and NeuCard; the Markdown body arrives through the default slot.
 import Layout from "./Layout.astro";
 import NeuCard from "./NeuCard.astro";
+import Icon from "./Icon.astro";
 import { t } from "../i18n/t";
 import { breadcrumbList } from "../lib/jsonld";
 
@@ -59,7 +60,7 @@ const jsonLd = breadcrumbList([
         <div class="prose vt-prose"><slot /></div>
       </NeuCard>
 
-      <p class="vt-label back"><a href="/">{t("legal.home")}</a></p>
+      <p class="vt-label back"><a href="/"><Icon name="arrow-back" />{t("legal.home")}</a></p>
     </div>
   </main>
 </Layout>
