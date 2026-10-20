@@ -1,0 +1,466 @@
+---
+// Account-deletion request popup (phase 011). A native <dialog> opened by the page's «Надіслати запит» link
+// (#delete-request-open): without JS the link keeps its mailto href and the dialog is never shown.
+// Submits to /api/delete-request (fetch). Strings come from uk.json via data-* attributes.
+import CtaButton from "./CtaButton.astro";
+import Icon from "./Icon.astro";
+import { t } from "../i18n/t";
+import { ROLES, COMMENT_MAX, EMAIL_MAX, PHONE_MAX } from "../lib/deleteRequest";
+
+const msgs = {
+  email: t("deleteRequest.errEmail"),
+  phone: t("deleteRequest.errPhone"),
+  role: t("deleteRequest.errRole"),
+  comment: t("deleteRequest.errComment"),
+  consent: t("deleteRequest.errConsent"),
+};
+---
+
+<dialog id="delete-request-dialog" class="dr" aria-labelledby="dr-title" data-msgs={JSON.stringify(msgs)} data-submit={t("deleteRequest.submit")} data-sending={t("deleteRequest.sending")}>
+  <div class="panel">
+    <div class="head">
+      <h2 id="dr-title" class="vt-heading" tabindex="-1" autofocus>{t("deleteRequest.title")}</h2>
+      <button type="button" class="close" id="dr-close" aria-label={t("deleteRequest.close")}><Icon name="close" /></button>
+    </div>
+
+    <div class="done" id="dr-done" role="status" tabindex="-1" hidden>
+      <div class="badge"><Icon name="check" size="lg" draw /></div>
+      <p class="vt-prose msg">{t("deleteRequest.sent")}</p>
+      <CtaButton type="button" id="dr-done-close" class="done-cta">{t("deleteRequest.close")}</CtaButton>
+    </div>
+
+    <form id="dr-form" method="post" action="/api/delete-request" novalidate>
+      <p class="vt-prose">{t("deleteRequest.lead")}</p>
+      <p class="banner vt-prose" id="dr-banner" role="alert" hidden>{t("deleteRequest.error")}</p>
+
+      <div class="field">
+        <label class="vt-label" for="dr-email">{t("deleteRequest.email")}</label>
+        <input id="dr-email" name="email" type="email" inputmode="email" autocomplete="email" required maxlength={EMAIL_MAX} aria-describedby="dr-email-err" />
+        <p class="err" id="dr-email-err" hidden></p>
+      </div>
+
+      <div class="field">
+        <label class="vt-label" for="dr-phone">{t("deleteRequest.phone")}</label>
+        <input id="dr-phone" name="phone" type="tel" inputmode="tel" autocomplete="tel" maxlength={PHONE_MAX} placeholder={t("deleteRequest.phonePlaceholder")} aria-describedby="dr-phone-hint dr-phone-err" />
+        <p class="hint vt-label" id="dr-phone-hint">{t("deleteRequest.phoneHint")}</p>
+        <p class="err" id="dr-phone-err" hidden></p>
+      </div>
+
+      <div class="field">
+        <label class="vt-label" for="dr-role">{t("deleteRequest.role")}</label>
+        <select id="dr-role" name="role" required aria-describedby="dr-role-err">
+          <option value="">{t("deleteRequest.rolePlaceholder")}</option>
+          {ROLES.map((r) => <option value={r}>{t(`deleteRequest.roles.${r}`)}</option>)}
+        </select>
+        <p class="err" id="dr-role-err" hidden></p>
+      </div>
+
+      <div class="field">
+        <label class="vt-label" for="dr-comment">{t("deleteRequest.comment")}</label>
+        <textarea id="dr-comment" name="comment" rows="3" maxlength={COMMENT_MAX} aria-describedby="dr-comment-err"></textarea>
+        <p class="err" id="dr-comment-err" hidden></p>
+      </div>
+
+      <div class="field consent">
+        <div class="check">
+          <input id="dr-consent" name="consent" type="checkbox" value="on" required aria-describedby="dr-consent-err" />
+          <label class="vt-prose" for="dr-consent">{t("deleteRequest.consent")}</label>
+        </div>
+        <p class="err" id="dr-consent-err" hidden></p>
+      </div>
+
+      <!-- Honeypot: invisible to people, tempting to bots. -->
+      <div class="trap" aria-hidden="true">
+        <input name="website" type="text" tabindex="-1" autocomplete="off" />
+      </div>
+
+      <CtaButton type="submit" id="dr-submit">{t("deleteRequest.submit")}</CtaButton>
+      <p class="vt-label alt"><a href="mailto:privacy@beautica.app"><span class="vt-u">{t("deleteRequest.fallback")}</span></a></p>
+    </form>
+  </div>
+</dialog>
+
+<style>
+  .dr {
+    box-sizing: border-box;
+    width: 100%;
+    max-width: 100%;
+    max-height: 92dvh;
+    margin: auto 0 0;
+    padding: 0;
+    border: 0;
+    border-radius: var(--vt-radius-card) var(--vt-radius-card) 0 0;
+    background: var(--vt-color-base);
+    color: var(--vt-color-text);
+    overflow: auto;
+    overscroll-behavior: contain;
+  }
+  .dr[open] {
+    animation: dr-in var(--vt-dur-base) var(--vt-ease);
+  }
+  .dr::backdrop {
+    background: color-mix(in srgb, var(--vt-color-text) 45%, transparent);
+  }
+  .dr[open]::backdrop {
+    animation: dr-fade var(--vt-dur-base) var(--vt-ease);
+  }
+  @keyframes dr-in {
+    from {
+      opacity: 0;
+      transform: translateY(var(--vt-space-xl));
+    }
+  }
+  @keyframes dr-fade {
+    from {
+      opacity: 0;
+    }
+  }
+  @media (min-width: 600px) {
+    .dr {
+      width: calc(var(--vt-max-width) / 2);
+      max-width: calc(100% - 2 * var(--vt-space-lg));
+      margin: auto;
+      border-radius: var(--vt-radius-card);
+    }
+  }
+  :global(body:has(dialog[open])) {
+    overflow: hidden;
+  }
+
+  .panel {
+    display: flex;
+    flex-direction: column;
+    gap: var(--vt-space-md);
+    padding: var(--vt-space-lg);
+  }
+  .head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: var(--vt-space-md);
+  }
+  #dr-title:focus {
+    outline: none;
+  }
+  .close {
+    flex: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: var(--vt-touch-min);
+    height: var(--vt-touch-min);
+    margin: calc(var(--vt-space-sm) * -1) calc(var(--vt-space-sm) * -1) 0 0;
+    padding: 0;
+    border: 0;
+    border-radius: var(--vt-radius-pill);
+    background: transparent;
+    color: var(--vt-color-accent-deep);
+    cursor: pointer;
+    position: relative;
+    isolation: isolate;
+  }
+  .close :global(.icon) {
+    margin: 0;
+  }
+  .close::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    border-radius: inherit;
+    box-shadow: var(--vt-shadow-bordered-card);
+    opacity: 0;
+    transition: opacity var(--vt-dur-fast) var(--vt-ease);
+  }
+  .close:focus-visible::before {
+    opacity: 1;
+  }
+  @media (hover: hover) {
+    .close:hover::before {
+      opacity: 1;
+    }
+  }
+
+  form,
+  .done {
+    display: flex;
+    flex-direction: column;
+    gap: var(--vt-space-md);
+  }
+  .done {
+    align-items: center;
+    text-align: center;
+  }
+  /* Success: the neumorphic disc pops, the check draws itself (Icon `draw`), then the text and button fade up.
+     Fixed box + transform/opacity only, so nothing shifts. Resting state = final state (reduced motion = no animation). */
+  .badge {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: calc(var(--vt-space-xxl) + var(--vt-space-lg));
+    height: calc(var(--vt-space-xxl) + var(--vt-space-lg));
+    border-radius: var(--vt-radius-pill);
+    background: var(--vt-gradient-accent);
+    box-shadow: var(--vt-shadow-extruded-button-accent);
+    color: var(--vt-color-cream);
+    animation: dr-pop var(--vt-dur-base) var(--vt-ease) backwards;
+  }
+  .badge :global(.icon) {
+    margin: 0;
+  }
+  .msg,
+  .done :global(.done-cta) {
+    animation: dr-rise var(--vt-dur-base) var(--vt-ease) calc(var(--vt-dur-base) * 1.6) backwards;
+  }
+  @keyframes dr-pop {
+    from {
+      opacity: 0;
+      transform: scale(0.6);
+    }
+  }
+  @keyframes dr-rise {
+    from {
+      opacity: 0;
+      transform: translateY(var(--vt-space-sm));
+    }
+  }
+  .done:focus {
+    outline: none;
+  }
+  [hidden] {
+    display: none !important;
+  }
+  /* Message text: the error token darkened toward body text (5.1:1 on base; the raw token is 4.2:1, under WCAG AA). */
+  .banner,
+  .err {
+    color: color-mix(in srgb, var(--vt-color-error) 75%, var(--vt-color-text));
+  }
+  .err {
+    margin: 0;
+    font-size: var(--vt-fs-label);
+    font-weight: var(--vt-fw-label);
+  }
+  .field {
+    display: flex;
+    flex-direction: column;
+    gap: var(--vt-space-xs);
+  }
+  .hint {
+    margin: 0;
+  }
+  input:not([type="checkbox"]),
+  select,
+  textarea {
+    box-sizing: border-box;
+    width: 100%;
+    min-height: var(--vt-size-field);
+    padding: var(--vt-space-sm) var(--vt-space-md);
+    border: 0;
+    border-radius: var(--vt-radius-field);
+    background: var(--vt-color-base-emphasis);
+    box-shadow: var(--vt-shadow-bordered-card);
+    color: var(--vt-color-text);
+    font-family: var(--vt-font-body);
+    font-size: var(--vt-fs-prose);
+    font-weight: var(--vt-fw-prose);
+    line-height: var(--vt-lh-prose);
+  }
+  textarea {
+    resize: vertical;
+  }
+  [aria-invalid="true"]:not([type="checkbox"]) {
+    outline: medium solid var(--vt-color-error);
+    outline-offset: 0;
+  }
+  input::placeholder {
+    color: var(--vt-color-placeholder);
+  }
+  .check {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--vt-space-md);
+  }
+  /* Custom checkbox: the input stays a 48 px tap target, the visible box is drawn on its pseudo-elements. */
+  input[type="checkbox"] {
+    appearance: none;
+    position: relative;
+    flex: none;
+    width: var(--vt-touch-min);
+    height: var(--vt-touch-min);
+    margin: calc(var(--vt-space-sm) * -1) 0 calc(var(--vt-space-sm) * -1) calc(var(--vt-space-sm) * -1);
+    border: 0;
+    background: transparent;
+    cursor: pointer;
+  }
+  input[type="checkbox"]::before {
+    content: "";
+    position: absolute;
+    inset: var(--vt-space-sm);
+    border-radius: var(--vt-space-sm);
+    background: var(--vt-color-base-emphasis);
+    box-shadow: var(--vt-shadow-bordered-card);
+  }
+  input[type="checkbox"][aria-invalid="true"]::before {
+    outline: medium solid var(--vt-color-error);
+    outline-offset: 0;
+  }
+  input[type="checkbox"]:checked::before {
+    background: var(--vt-gradient-accent);
+  }
+  input[type="checkbox"]::after {
+    content: "";
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: var(--vt-space-sm);
+    height: var(--vt-space-md);
+    border: solid var(--vt-color-cream);
+    border-width: 0 calc(var(--vt-space-xs) / 2) calc(var(--vt-space-xs) / 2) 0;
+    transform: translate(-50%, -60%) rotate(45deg);
+    opacity: 0;
+  }
+  input[type="checkbox"]:checked::after {
+    opacity: 1;
+  }
+  .check label {
+    padding-top: var(--vt-space-sm);
+  }
+  .trap {
+    position: absolute;
+    width: var(--vt-space-xs);
+    height: var(--vt-space-xs);
+    overflow: hidden;
+    clip-path: inset(50%);
+    opacity: 0;
+    pointer-events: none;
+  }
+  form :global(.cta) {
+    align-self: center;
+  }
+  .alt {
+    margin: 0;
+    text-align: center;
+  }
+  .alt a {
+    display: inline-flex;
+    align-items: center;
+    min-height: var(--vt-touch-min);
+  }
+</style>
+
+<script>
+  import { formatPhone, normalizePhone } from "../lib/phone";
+  const dialog = document.getElementById("delete-request-dialog") as HTMLDialogElement | null;
+  const opener = document.getElementById("delete-request-open");
+  if (dialog && opener) {
+    const form = dialog.querySelector<HTMLFormElement>("#dr-form")!;
+    const done = dialog.querySelector<HTMLElement>("#dr-done")!;
+    const banner = dialog.querySelector<HTMLElement>("#dr-banner")!;
+    const submit = dialog.querySelector<HTMLButtonElement>("#dr-submit")!;
+    const msgs = JSON.parse(dialog.dataset.msgs ?? "{}") as Record<string, string>;
+    const FIELDS = ["email", "phone", "role", "comment", "consent"] as const;
+    const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+    form.noValidate = true;
+    const input = (f: string) => form.elements.namedItem(f) as HTMLInputElement;
+    const setError = (f: string, on: boolean) => {
+      const el = input(f);
+      const p = dialog.querySelector<HTMLElement>(`#dr-${f}-err`)!;
+      p.textContent = on ? msgs[f] : "";
+      p.hidden = !on;
+      // The phone hint gives way to its error (and aria-describedby follows what is visible).
+      const hint = dialog.querySelector<HTMLElement>(`#dr-${f}-hint`);
+      if (hint) {
+        hint.hidden = on;
+        el.setAttribute("aria-describedby", on ? `dr-${f}-err` : `dr-${f}-hint dr-${f}-err`);
+      }
+      if (on) el.setAttribute("aria-invalid", "true");
+      else el.removeAttribute("aria-invalid");
+    };
+    const invalid = (): string[] =>
+      FIELDS.filter((f) => {
+        const el = input(f);
+        const v = el.value.trim();
+        if (f === "email") return !EMAIL_RE.test(v);
+        if (f === "phone") return normalizePhone(v) === null;
+        if (f === "role") return v === "";
+        if (f === "comment") return el.value.length > 1000;
+        return !el.checked;
+      });
+
+    const open = () => {
+      if (!dialog.open) dialog.showModal();
+    };
+    opener.addEventListener("click", (e) => {
+      e.preventDefault();
+      open();
+    });
+    for (const id of ["#dr-close", "#dr-done-close"]) dialog.querySelector(id)!.addEventListener("click", () => dialog.close());
+    dialog.addEventListener("click", (e) => {
+      if (e.target === dialog) dialog.close(); // the panel fills the dialog, so only the backdrop hits the dialog itself
+    });
+    dialog.addEventListener("close", () => {
+      if (!done.hidden) {
+        form.reset();
+        done.hidden = true;
+        form.hidden = false;
+      }
+      banner.hidden = true;
+    });
+    for (const f of FIELDS) input(f).addEventListener("input", () => setError(f, false));
+
+    // Phone mask: +380 (XX) XXX-XX-XX, applied as the user types or pastes (any 0XXXXXXXXX / 380… / +380… form).
+    const phone = input("phone");
+    phone.addEventListener("input", (e) => {
+      const deleting = ((e as InputEvent).inputType ?? "").startsWith("delete");
+      const next = formatPhone(phone.value, deleting);
+      if (next !== phone.value) phone.value = next;
+    });
+
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      banner.hidden = true;
+      const bad = invalid();
+      for (const f of FIELDS) setError(f, bad.includes(f));
+      if (bad.length) {
+        input(bad[0]).focus();
+        return;
+      }
+      submit.disabled = true;
+      submit.textContent = dialog.dataset.sending ?? "";
+      try {
+        const res = await fetch(form.action, { method: "POST", body: new FormData(form), headers: { Accept: "application/json" } });
+        if (res.ok) {
+          form.hidden = true;
+          done.hidden = false;
+          done.focus();
+        } else {
+          const data = (await res.json().catch(() => ({}))) as { fields?: string[] };
+          if (res.status === 422 && data.fields?.length) {
+            for (const f of FIELDS) setError(f, data.fields.includes(f));
+            input(data.fields[0]).focus();
+          } else {
+            banner.hidden = false;
+          }
+        }
+      } catch {
+        banner.hidden = false;
+      } finally {
+        submit.disabled = false;
+        submit.textContent = dialog.dataset.submit ?? "";
+      }
+    });
+
+    // A plain form post (no JS at submit time) comes back as /delete-account?sent=1 or ?error=1.
+    const q = new URLSearchParams(location.search);
+    if (q.has("sent") || q.has("error")) {
+      open();
+      if (q.has("sent")) {
+        form.hidden = true;
+        done.hidden = false;
+      } else {
+        banner.hidden = false;
+      }
+    }
+  }
+</script>

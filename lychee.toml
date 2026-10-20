@@ -1,0 +1,2 @@
+# Form actions served by the Worker (not in dist/client).
+exclude = ["^file://.*/api/"]

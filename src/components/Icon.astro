@@ -3,15 +3,25 @@
 // here (token size, currentColor), so no consumer ever styles another component's SVG.
 // Paths: Simple Icons (https://simpleicons.org, v16.35.0), licensed CC0 1.0. Trademarks belong to Google LLC / Apple Inc.;
 // these are glyphs inside our own chips, not official badges. Inline SVG only: no requests, no raster.
-export type IconName = "google-play" | "app-store" | "arrow-back" | "mail";
+export type IconName = "google-play" | "app-store" | "arrow-back" | "mail" | "close" | "check" | "expand-more";
 interface Props {
   name: IconName;
+  /** "lg" = 32 px glyph (success badge). Default unchanged. */
+  size?: "lg";
+  /** Stroke icons only ("check"): the line draws itself in when the icon is first displayed. */
+  draw?: boolean;
 }
-const { name } = Astro.props;
+const { name, size, draw = false } = Astro.props;
+const stroked = name === "check"; // drawn as a stroke (so it can animate), not a filled path
+const chev = name === "expand-more"; // disclosure chevron: turns over while its <details> is open
 const nudge = name === "arrow-back"; // directional glyph: slides toward its direction when the parent link is hovered/focused
-const paths: Record<IconName, string> = {
+const paths: Record<Exclude<IconName, "check">, string> = {
   // Material Symbols arrow_back (Apache-2.0).
   "arrow-back": "M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z",
+  // Material Symbols expand_more (Apache-2.0).
+  "expand-more": "M16.59 8.59 12 13.17 7.41 8.59 6 10l6 6 6-6z",
+  // Material Symbols close (Apache-2.0).
+  close: "M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z",
   // Material Symbols mail (Apache-2.0).
   mail: "M20 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 4-8 5-8-5V6l8 5 8-5v2z",
   "google-play":
@@ -21,8 +31,16 @@ const paths: Record<IconName, string> = {
 };
 ---
 
-<span class:list={["icon", { nudge }]} aria-hidden="true">
-  <svg viewBox="0 0 24 24" width="1.25em" height="1.25em" fill="currentColor" xmlns="http://www.w3.org/2000/svg" focusable="false"><path d={paths[name]}></path></svg>
+<span class:list={["icon", { nudge, chev, lg: size === "lg", draw }]} aria-hidden="true">
+  {
+    stroked ? (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg" focusable="false">
+        <path d="M5 12.5l4.5 4.5L19 7.5" pathLength="1"></path>
+      </svg>
+    ) : (
+      <svg viewBox="0 0 24 24" width="1.25em" height="1.25em" fill="currentColor" xmlns="http://www.w3.org/2000/svg" focusable="false"><path d={paths[name]}></path></svg>
+    )
+  }
 </span>
 
 <style>
@@ -39,7 +57,29 @@ const paths: Record<IconName, string> = {
   .icon svg {
     width: 100%;
     height: 100%;
+  }
+  .icon svg:not([fill="none"]) {
     fill: currentColor;
+  }
+  .lg {
+    width: var(--vt-space-xl);
+    height: var(--vt-space-xl);
+  }
+  /* Draw-in: the resting state is the finished check, so reduced motion (animation off) shows it instantly. */
+  .draw path {
+    stroke-dasharray: 1;
+    stroke-dashoffset: 0;
+    animation: icon-draw var(--vt-dur-base) var(--vt-ease) var(--vt-dur-base) backwards;
+  }
+  @keyframes icon-draw {
+    from {
+      stroke-dashoffset: 1;
+    }
+  }
+  /* Disclosure chevron: rotation is a transform on the icon only; reduced motion drops the transition (base.css), the open
+     state still shows the turned glyph. */
+  :global(details[open]) > :global(summary) .chev {
+    transform: rotate(180deg);
   }
   :global(a:focus-visible) .nudge,
   :global(button:focus-visible) .nudge {

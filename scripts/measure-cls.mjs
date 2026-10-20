@@ -34,7 +34,7 @@ const executablePath = process.env.CHROMIUM_PATH ?? ["/usr/bin/chromium-browser"
 const browser = await chromium.launch({ executablePath, args: ["--no-sandbox"] });
 let worst = 0;
 let failed = false;
-for (const prof of PROFILES) for (const route of arg("--routes", "/,/404,/privacy,/terms").split(",")) for (const [width, height] of prof.widths) for (const motion of ["no-preference", "reduce"]) {
+for (const prof of PROFILES) for (const route of arg("--routes", "/,/404,/privacy,/terms,/support,/delete-account").split(",")) for (const [width, height] of prof.widths) for (const motion of ["no-preference", "reduce"]) {
   currentDelay = prof.delay;
   const vals = [];
   for (let i = 0; i < RUNS; i++) {
