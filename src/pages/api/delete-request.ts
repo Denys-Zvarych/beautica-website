@@ -7,6 +7,8 @@ import { buildMessage, validate } from "../../lib/deleteRequest";
 export const prerender = false;
 
 const MAX_BODY = 8 * 1024;
+/** Extra bytes read and thrown away after the cap is crossed, so a client mid-upload still receives the 413 (see readCapped). */
+const DRAIN_LIMIT = 256 * 1024;
 
 interface Bindings {
   DELETION_MAIL: { send(message: unknown): Promise<unknown> };
@@ -58,6 +60,13 @@ async function readCapped(request: Request): Promise<Uint8Array | null> {
     if (done) break;
     total += value.byteLength;
     if (total > MAX_BODY) {
+      // Answering while the client is still uploading makes workerd reset the connection, so the 413 body never arrives.
+      // Discard (never buffer) up to DRAIN_LIMIT more bytes so a normal client finishes and reads it, then give up on the rest.
+      while (total <= DRAIN_LIMIT) {
+        const next = await reader.read().catch(() => ({ done: true, value: undefined }));
+        if (next.done) break;
+        total += next.value.byteLength;
+      }
       await reader.cancel().catch(() => {});
       return null;
     }
