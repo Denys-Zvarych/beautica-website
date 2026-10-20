@@ -14,7 +14,7 @@ if (links.length > 3) throw new Error("Header: at most 3 links (footer carries t
 <header class="site-header">
   <div class="vt-container bar">
     <a class="brand" href="/" aria-label={t("a11y.home")}>
-      <LogoTile size="header" />
+      <LogoTile size="header" eager />
       <span class="vt-wordmark">{t("site.name")}</span>
     </a>
     {

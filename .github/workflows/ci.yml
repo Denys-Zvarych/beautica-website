@@ -16,9 +16,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version-file: .nvmrc
           cache: npm
@@ -43,7 +43,7 @@ jobs:
         run: node scripts/check-no-todo-owner.mjs
 
       - name: Link check (offline, built HTML)
-        uses: lycheeverse/lychee-action@v2
+        uses: lycheeverse/lychee-action@e7477775783ea5526144ba13e8db5eec57747ce8 # v2.9.0
         with:
           args: --config lychee.toml --offline --no-progress --fallback-extensions html --root-dir ${{ github.workspace }}/dist/client 'dist/client/**/*.html'
           fail: true
@@ -56,7 +56,7 @@ jobs:
       - name: Checkout mobile theme (token source)
         id: mobile
         continue-on-error: true
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           repository: Denys-Zvarych/beautica-mobile
           ref: dev
@@ -93,9 +93,9 @@ jobs:
     env:
       CHROMIUM_PATH: /usr/bin/google-chrome
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version-file: .nvmrc
           cache: npm
@@ -108,12 +108,11 @@ jobs:
         run: npm test
 
       # Cold-cache layout shift. Lighthouse profile (412 px, lost font preload => reflow) on four representative routes; the late-font
-      # stress profile only on the routes that hold today. TODO: add /privacy,/terms,/support,/delete-account to the stress routes
-      # once the 360 px font-swap shift on legal pages is fixed (QA finding: /privacy 0.0445, /delete-account up to 0.3154, budget 0.02).
+      # stress profile (360/320 px, fonts delayed) on the home page, the four legal pages and the token shell.
       - name: CLS probe - Lighthouse-like profile
         run: node scripts/measure-cls.mjs --profiles lighthouse --runs 1 --routes /,/privacy,/delete-account,/l/cancel
       - name: CLS probe - late-font stress profile
-        run: node scripts/measure-cls.mjs --profiles stress --runs 1 --routes /,/l/cancel
+        run: node scripts/measure-cls.mjs --profiles stress --runs 1 --routes /,/privacy,/terms,/support,/delete-account,/l/cancel
 
   # Lighthouse over every page (3 runs, median): perf >= 95, a11y 100, SEO 100 (0.66 on the noindex pages, where only
   # is-crawlable fails by design), CLS/LCP/TBT, and resource budgets. Own job: ~4 min of Chrome runs stay off the critical path.
@@ -121,9 +120,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version-file: .nvmrc
           cache: npm
@@ -133,4 +132,4 @@ jobs:
       - run: npm run build
 
       - name: Lighthouse budget (mobile; every page)
-        run: npx --yes @lhci/cli@0.15 autorun
+        run: npx --no-install lhci autorun

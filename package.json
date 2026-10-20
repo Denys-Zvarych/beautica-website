@@ -19,7 +19,7 @@
     "test": "node scripts/run-tests.mjs",
     "test:static": "node --test --test-reporter=spec tests/static-build.test.mjs",
     "check:cls:ci": "node scripts/measure-cls.mjs --runs 1 --routes /,/privacy,/delete-account,/l/cancel",
-    "check:lighthouse": "npx --yes @lhci/cli@0.15 autorun"
+    "check:lighthouse": "lhci autorun"
   },
   "dependencies": {
     "@astrojs/cloudflare": "14.3.4",
@@ -30,6 +30,7 @@
   },
   "devDependencies": {
     "@astrojs/check": "0.9.10",
+    "@lhci/cli": "0.15.1",
     "html-validate": "11.16.4",
     "playwright-core": "1.64.1",
     "sharp": "0.35.5",

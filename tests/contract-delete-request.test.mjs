@@ -4,6 +4,9 @@ import { test, describe } from "node:test";
 import assert from "node:assert/strict";
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
+import { spawn } from "node:child_process";
+import { createServer } from "node:net";
+import { rmSync, readFileSync as readText, writeFileSync } from "node:fs";
 import { BASE, ROOT, WRANGLER_LOG, freshIp, requireBase } from "./helpers/env.mjs";
 
 requireBase();
@@ -235,5 +238,95 @@ describe("size cap", () => {
     const { res, json } = await post(validFields({ comment: "x".repeat(2000) }));
     assert.equal(res.status, 422);
     assert.deepEqual(json.fields, ["comment"]);
+  });
+});
+
+describe("size cap, chunked", () => {
+  /** A POST whose body is streamed (Transfer-Encoding: chunked, no Content-Length), `kb` KB in 1 KB pieces. */
+  async function chunked(kb, ip = freshIp()) {
+    const piece = new TextEncoder().encode("comment=" + "x".repeat(1016));
+    let sent = 0;
+    const body = new ReadableStream({
+      pull(controller) {
+        if (sent++ >= kb) return controller.close();
+        controller.enqueue(piece);
+      },
+    });
+    const res = await fetch(URL_, {
+      method: "POST",
+      body,
+      duplex: "half",
+      headers: { "content-type": "application/x-www-form-urlencoded", accept: "application/json", "cf-connecting-ip": ip },
+    });
+    return { res, json: await res.json().catch(() => null) };
+  }
+
+  test("a chunked body over 8 KB (no Content-Length) answers 413 {error:too_large}", async () => {
+    const { res, json } = await chunked(64);
+    assert.equal(res.status, 413);
+    assert.deepEqual(json, { ok: false, error: "too_large" });
+    assertHardened(res);
+  });
+
+  test("a chunked body under the cap is still parsed (422 for the missing fields, not 413)", async () => {
+    const { res, json } = await chunked(2);
+    assert.equal(res.status, 422);
+    assert.equal(json.error, "invalid");
+  });
+});
+
+describe("limiter unavailable (own wrangler dev without the DELETION_LIMITER binding)", () => {
+  test("fails open (request reaches validation) and logs a distinct PII-free warning", { timeout: 120_000 }, async () => {
+    const dist = join(ROOT, "dist", "server");
+    const config = join(dist, "wrangler.nolimiter.json");
+    const cfg = JSON.parse(readText(join(dist, "wrangler.json"), "utf8"));
+    cfg.ratelimits = [];
+    if (cfg.previews) cfg.previews.ratelimits = [];
+    writeFileSync(config, JSON.stringify(cfg));
+    const port = await new Promise((resolve, reject) => {
+      const s = createServer();
+      s.once("error", reject);
+      s.listen(0, "127.0.0.1", () => {
+        const { port } = s.address();
+        s.close(() => resolve(port));
+      });
+    });
+    let out = "";
+    const child = spawn("npx", ["wrangler", "dev", "--config", config, "--port", String(port), "--ip", "127.0.0.1", "--show-interactive-dev-session=false"], {
+      cwd: ROOT,
+      detached: true,
+      stdio: ["ignore", "pipe", "pipe"],
+      env: { ...process.env, WRANGLER_SEND_METRICS: "false", CI: "1", FORCE_COLOR: "0", NO_COLOR: "1" },
+    });
+    child.stdout.on("data", (d) => (out += d));
+    child.stderr.on("data", (d) => (out += d));
+    const stop = () => {
+      try {
+        process.kill(-child.pid, "SIGKILL");
+      } catch {
+        /* gone */
+      }
+    };
+    try {
+      const base = `http://127.0.0.1:${port}`;
+      let up = false;
+      for (const end = Date.now() + 90_000; Date.now() < end && !up; ) {
+        up = await fetch(base + "/", { signal: AbortSignal.timeout(2000) }).then((r) => r.status === 200, () => false);
+        if (!up) await new Promise((r) => setTimeout(r, 250));
+      }
+      assert.ok(up, "second wrangler dev did not start:\n" + out.slice(-1500));
+      const marker = `lim${Date.now()}`;
+      const res = await fetch(`${base}/api/delete-request`, {
+        method: "POST",
+        headers: { "content-type": "application/x-www-form-urlencoded", accept: "application/json", "cf-connecting-ip": freshIp() },
+        body: new URLSearchParams({ email: `${marker}@example.com`, role: "client" }).toString(),
+      });
+      assert.equal(res.status, 422, "without a limiter the request must still reach validation (fail-open)");
+      assert.ok(await until(() => out.includes("delete-request: rate limiter unavailable")), "the distinct warning was not logged:\n" + out.slice(-1500));
+      assert.equal(out.includes(marker), false, "submitted data leaked into the log");
+    } finally {
+      stop();
+      rmSync(config, { force: true });
+    }
   });
 });

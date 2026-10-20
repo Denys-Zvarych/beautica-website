@@ -39,7 +39,8 @@ const jsonLd = breadcrumbList([
       <header class="intro">
         <h1 class="vt-display">{title}</h1>
         <p class="vt-label meta">
-          {t("legal.version", { version })} · {t("legal.effective")}: <time datetime={updated.toISOString().slice(0, 10)}>{effective}</time>
+          <span>{t("legal.version", { version })}</span>
+          <span>{t("legal.effective")}: <time datetime={updated.toISOString().slice(0, 10)}>{effective}</time></span>
         </p>
         {cta && <CtaButton class="intro-cta" href={cta.href} icon={cta.icon} id={cta.id}>{cta.label}</CtaButton>}
       </header>
@@ -85,6 +86,11 @@ const jsonLd = breadcrumbList([
     display: flex;
     flex-direction: column;
     gap: var(--vt-space-sm);
+  }
+  /* Version and date on their own lines: one line in the fallback face must not become two in Nunito (CLS). */
+  .meta {
+    display: flex;
+    flex-direction: column;
   }
   .intro :global(.intro-cta) {
     align-self: flex-start;

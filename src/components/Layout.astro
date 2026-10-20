@@ -40,13 +40,9 @@ const { hideHeader = false, noReferrer = false, ...seo } = Astro.props;
     <!-- Latin too: « » digits and brand names inside Ukrainian prose use it, and a late arrival reflowed lines (CLS). -->
     <link rel="preload" as="font" type="font/woff2" href={nunitoLat} crossorigin />
     <link rel="preload" as="font" type="font/woff2" href={comfortaaCyr} crossorigin />
-    {
-      noReferrer && (
-        // Token pages: a font fetched lazily from CSS still sent the page URL as Referer (Chromium ignores the policy there);
-        // a preloaded one does not, so preload the remaining face too.
-        <link rel="preload" as="font" type="font/woff2" href={comfortaaLat} crossorigin />
-      )
-    }
+    <!-- Comfortaa Latin: the "Beautica" wordmark/headings render with it on every route, so it arrives with the first paint
+         (a lazy fetch swapped the face after layout; token pages also need it preloaded so no fetch carries the page URL as Referer). -->
+    <link rel="preload" as="font" type="font/woff2" href={comfortaaLat} crossorigin />
     <Seo {...seo} />
   </head>
   <body>

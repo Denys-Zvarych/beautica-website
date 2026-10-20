@@ -4,3 +4,10 @@
 /bookings/:id/review /l/review 200
 /bookings/:id /l/booking 200
 /book/cancel/:token /l/cancel 200
+
+# Trailing-slash variants of the same four shapes: a browser navigation to "/x/" would otherwise miss the rules above and get the
+# 404 page (HTTP clients got the platform 301, browsers did not). Redirect to the slash-less URL (query string is kept).
+/invite/accept/ /invite/accept 301
+/bookings/:id/review/ /bookings/:id/review 301
+/bookings/:id/ /bookings/:id 301
+/book/cancel/:token/ /book/cancel/:token 301

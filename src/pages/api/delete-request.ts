@@ -47,15 +47,39 @@ export const POST: APIRoute = async ({ request }) => {
   }
 };
 
-/** true = over the limit. A missing or failing limiter counts as "not limited". */
+/** Reads the body through a counting stream: null = more than MAX_BODY bytes (Content-Length can be absent or a lie, e.g. chunked). */
+async function readCapped(request: Request): Promise<Uint8Array | null> {
+  if (!request.body) return new Uint8Array();
+  const reader = request.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    total += value.byteLength;
+    if (total > MAX_BODY) {
+      await reader.cancel().catch(() => {});
+      return null;
+    }
+    chunks.push(value);
+  }
+  const out = new Uint8Array(total);
+  let at = 0;
+  for (const c of chunks) (out.set(c, at), (at += c.byteLength));
+  return out;
+}
+
+/** true = over the limit. A missing or failing limiter counts as "not limited" (fail-open on purpose: the form must not go down
+ *  with the limiter; the honeypot and the size cap remain). Both paths log the same distinct, PII-free warning. */
 async function checkLimit(b: Partial<Bindings>, ip: string): Promise<boolean> {
   if (!b.DELETION_LIMITER) {
-    console.warn("delete-request: DELETION_LIMITER binding missing, continuing without rate limit");
+    console.warn("delete-request: rate limiter unavailable");
     return false;
   }
   try {
     return !(await b.DELETION_LIMITER.limit({ key: ip })).success;
   } catch (err) {
+    console.warn("delete-request: rate limiter unavailable");
     logError("rate limiter failed, continuing", err);
     return false;
   }
@@ -77,15 +101,22 @@ async function handle(request: Request, wantsJson: boolean): Promise<Response> {
   const ip = request.headers.get("cf-connecting-ip") ?? "unknown";
   // A missing or failing limiter must not take the form down (Turnstile-less, but the honeypot and size cap remain).
   const limited = checkLimit(b, ip);
-  const parsed = request.formData().then(
-    (f) => f,
-    () => null,
+  const bodyRead = readCapped(request).then(
+    (b) => b,
+    () => undefined,
   );
   if (await limited) {
     console.info("delete-request: rate-limited");
     return reply(wantsJson, 429, { ok: false, error: "rate_limited" }, "error");
   }
-  const form = await parsed;
+  const bytes = await bodyRead;
+  if (bytes === null) return reply(wantsJson, 413, { ok: false, error: "too_large" }, "error");
+  const form = bytes
+    ? await new Response(bytes, { headers: { "content-type": request.headers.get("content-type") ?? "" } }).formData().then(
+        (f) => f,
+        () => null,
+      )
+    : null;
   if (!form) return reply(wantsJson, 400, { ok: false, error: "invalid" }, "error");
 
   // Honeypot: bots fill the hidden field. Pretend success, send nothing.
