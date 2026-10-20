@@ -115,6 +115,42 @@ describe("404", () => {
     assert.equal(strip(res.body.match(/<h1[\s>][\s\S]*?<\/h1>/)[0]), "Сторінку не знайдено");
     assert.deepEqual(res.all("referrer-policy"), ["strict-origin-when-cross-origin"]);
     assert.deepEqual(res.all("content-security-policy"), [CSP]);
+    assert.deepEqual(res.all("x-robots-tag"), ["noindex, nofollow"]);
+    assert.deepEqual(res.all("strict-transport-security"), ["max-age=31536000; includeSubDomains"]);
+    assert.deepEqual(res.all("x-content-type-options"), ["nosniff"]);
+  });
+
+  test("/404 itself answers HTTP 404 with the same noindex header", async () => {
+    const res = await rawRequest("/404");
+    assert.equal(res.status, 404);
+    assert.deepEqual(res.all("x-robots-tag"), ["noindex, nofollow"]);
+    assert.equal(meta(res.body, /<meta name="robots" content="([^"]*)"/), "noindex, nofollow");
+    assert.deepEqual(res.all("content-security-policy"), [CSP]);
+  });
+});
+
+describe("legal date label", () => {
+  for (const [path, label] of [["/privacy", "Дата набрання чинності"], ["/terms", "Дата набрання чинності"], ["/support", "Оновлено"], ["/delete-account", "Оновлено"]]) {
+    test(`${path} shows «${label}»`, async () => {
+      const res = await rawRequest(path);
+      assert.match(res.body, new RegExp(`<span[^>]*>${label}: <time`));
+    });
+  }
+});
+
+describe("home JSON-LD", () => {
+  test("/ carries valid Organization + WebSite JSON-LD (no MobileApplication until the app is live)", async () => {
+    const res = await rawRequest("/");
+    const blocks = [...res.body.matchAll(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/g)].map((m) => JSON.parse(m[1]));
+    const types = blocks.map((b) => b["@type"]);
+    assert.deepEqual(types, ["Organization", "WebSite"]);
+    const [org, site] = blocks;
+    assert.equal(org.name, "Beautica");
+    assert.equal(org.url, "https://beautica.app/");
+    assert.equal(org.logo, "https://beautica.app/icon-192.png");
+    assert.equal("sameAs" in org, false);
+    assert.equal(site.url, "https://beautica.app/");
+    assert.equal(JSON.stringify(site).includes("SearchAction"), false);
   });
 });
 

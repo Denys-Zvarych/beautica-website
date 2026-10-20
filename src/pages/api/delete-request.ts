@@ -102,7 +102,7 @@ async function handle(request: Request, wantsJson: boolean): Promise<Response> {
   // A missing or failing limiter must not take the form down (Turnstile-less, but the honeypot and size cap remain).
   const limited = checkLimit(b, ip);
   const bodyRead = readCapped(request).then(
-    (b) => b,
+    (read) => read,
     () => undefined,
   );
   if (await limited) {

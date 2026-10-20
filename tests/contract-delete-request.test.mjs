@@ -292,7 +292,7 @@ describe("limiter unavailable (own wrangler dev without the DELETION_LIMITER bin
       });
     });
     let out = "";
-    const child = spawn("npx", ["wrangler", "dev", "--config", config, "--port", String(port), "--ip", "127.0.0.1", "--show-interactive-dev-session=false"], {
+    const child = spawn("npx", ["--no-install", "wrangler", "dev", "--config", config, "--port", String(port), "--ip", "127.0.0.1", "--show-interactive-dev-session=false"], {
       cwd: ROOT,
       detached: true,
       stdio: ["ignore", "pipe", "pipe"],

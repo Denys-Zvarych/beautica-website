@@ -1,4 +1,4 @@
-// A trailing slash on a token route must behave the same for an HTTP client and for a browser navigation: redirect (301) to the
+// A trailing slash on a token route must behave the same for an HTTP client and for a browser navigation: redirect (307, no-store) to the
 // slash-less URL, which serves the shell. Before the explicit rules in public/_redirects a browser got the 404 page.
 import { test, describe, before, after } from "node:test";
 import assert from "node:assert/strict";
@@ -24,7 +24,10 @@ describe("trailing slash on token routes", () => {
   for (const { path, h1 } of SHAPES) {
     test(`${withSlash(path)} redirects to ${path} for an HTTP client and a browser`, async () => {
       const raw = await rawRequest(withSlash(path), { headers: { accept: "text/html" } });
-      assert.equal(raw.status, 301);
+      assert.equal(raw.status, 307);
+      assert.deepEqual(raw.all("cache-control"), ["no-store"]);
+      assert.deepEqual(raw.all("referrer-policy"), ["no-referrer"]);
+      assert.deepEqual(raw.all("x-robots-tag"), ["noindex, nofollow"]);
       assert.equal(new URL(raw.headers.location, BASE).pathname + new URL(raw.headers.location, BASE).search, path);
 
       const { page, context } = await open(browser);

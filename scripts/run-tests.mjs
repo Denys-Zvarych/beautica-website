@@ -33,7 +33,7 @@ const base = `http://127.0.0.1:${port}`;
 const logPath = join(mkdtempSync(join(tmpdir(), "beautica-wrangler-")), "wrangler.log");
 const log = createWriteStream(logPath);
 
-const wrangler = spawn("npx", ["wrangler", "dev", "--port", String(port), "--ip", "127.0.0.1", "--show-interactive-dev-session=false"], {
+const wrangler = spawn("npx", ["--no-install", "wrangler", "dev", "--port", String(port), "--ip", "127.0.0.1", "--show-interactive-dev-session=false"], {
   stdio: ["ignore", "pipe", "pipe"],
   detached: true, // own process group: workerd children die with it
   env: { ...process.env, WRANGLER_SEND_METRICS: "false", CI: "1", FORCE_COLOR: "0", NO_COLOR: "1" },

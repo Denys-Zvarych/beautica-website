@@ -7,10 +7,13 @@
   "preview_urls": true,
   // Workers Logs (dashboard > Workers & Pages > beautica-site > Observability): lets us read the delete-request send errors.
   "observability": { "enabled": true },
-  "main": "@astrojs/cloudflare/entrypoints/server",
+  "main": "./src/worker.ts",
   "assets": {
     "binding": "ASSETS",
-    "not_found_handling": "404-page"
+    "not_found_handling": "none",
+    // Unmatched paths and the 404 page itself go through the Worker: only a Worker response can carry X-Robots-Tag and a real 404 status
+    // (_headers never matches unknown paths; a static /404 asset answers 200).
+    "run_worker_first": ["/404", "/404.html"]
   },
   // Account-deletion requests (phase 011): Email Routing send binding, locked to the verified team inbox.
   "send_email": [{ "name": "DELETION_MAIL", "destination_address": "beautica.ua@gmail.com" }],
