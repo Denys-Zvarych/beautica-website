@@ -15,7 +15,11 @@
     "check:responsive": "node scripts/check-responsive.mjs",
     "check:claims": "node scripts/check-claims.mjs",
     "list:not-live": "node scripts/list-not-live.mjs",
-    "check:cls": "node scripts/measure-cls.mjs"
+    "check:cls": "node scripts/measure-cls.mjs",
+    "test": "node scripts/run-tests.mjs",
+    "test:static": "node --test --test-reporter=spec tests/static-build.test.mjs",
+    "check:cls:ci": "node scripts/measure-cls.mjs --runs 1 --routes /,/privacy,/delete-account,/l/cancel",
+    "check:lighthouse": "npx --yes @lhci/cli@0.15 autorun"
   },
   "dependencies": {
     "@astrojs/cloudflare": "14.3.4",
