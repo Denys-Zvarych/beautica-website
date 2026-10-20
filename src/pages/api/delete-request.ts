@@ -47,6 +47,20 @@ export const POST: APIRoute = async ({ request }) => {
   }
 };
 
+/** true = over the limit. A missing or failing limiter counts as "not limited". */
+async function checkLimit(b: Partial<Bindings>, ip: string): Promise<boolean> {
+  if (!b.DELETION_LIMITER) {
+    console.warn("delete-request: DELETION_LIMITER binding missing, continuing without rate limit");
+    return false;
+  }
+  try {
+    return !(await b.DELETION_LIMITER.limit({ key: ip })).success;
+  } catch (err) {
+    logError("rate limiter failed, continuing", err);
+    return false;
+  }
+}
+
 async function handle(request: Request, wantsJson: boolean): Promise<Response> {
   const b = env as unknown as Partial<Bindings>;
 
@@ -59,28 +73,20 @@ async function handle(request: Request, wantsJson: boolean): Promise<Response> {
     return reply(wantsJson, 413, { ok: false, error: "too_large" }, "error");
   }
 
+  // The limiter check and the body parse are independent: run them together, then decide (the send below stays awaited).
   const ip = request.headers.get("cf-connecting-ip") ?? "unknown";
   // A missing or failing limiter must not take the form down (Turnstile-less, but the honeypot and size cap remain).
-  if (b.DELETION_LIMITER) {
-    try {
-      const { success } = await b.DELETION_LIMITER.limit({ key: ip });
-      if (!success) {
-        console.info("delete-request: rate-limited");
-        return reply(wantsJson, 429, { ok: false, error: "rate_limited" }, "error");
-      }
-    } catch (err) {
-      logError("rate limiter failed, continuing", err);
-    }
-  } else {
-    console.warn("delete-request: DELETION_LIMITER binding missing, continuing without rate limit");
+  const limited = checkLimit(b, ip);
+  const parsed = request.formData().then(
+    (f) => f,
+    () => null,
+  );
+  if (await limited) {
+    console.info("delete-request: rate-limited");
+    return reply(wantsJson, 429, { ok: false, error: "rate_limited" }, "error");
   }
-
-  let form: FormData;
-  try {
-    form = await request.formData();
-  } catch {
-    return reply(wantsJson, 400, { ok: false, error: "invalid" }, "error");
-  }
+  const form = await parsed;
+  if (!form) return reply(wantsJson, 400, { ok: false, error: "invalid" }, "error");
 
   // Honeypot: bots fill the hidden field. Pretend success, send nothing.
   if (typeof form.get("website") === "string" && (form.get("website") as string).trim() !== "") {

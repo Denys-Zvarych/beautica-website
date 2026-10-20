@@ -3,6 +3,7 @@
 // cream Comfortaa 13/700, pressed = scale(.97) + shadow off (shadow lives on ::before, opacity only).
 // Optional `icon` prop (a name from Icon.astro): decorative leading glyph. No prop = unchanged.
 // Optional `type` ("submit" | "button") renders a <button> with the same classes instead of a link; `id` for scripts.
+// Optional `spinner` (button only): reserves a pure-CSS ring + a `.lbl` label span; the ring shows while a script sets aria-busy="true".
 import Icon, { type IconName } from "./Icon.astro";
 interface Props {
   href?: string;
@@ -10,15 +11,17 @@ interface Props {
   id?: string;
   icon?: IconName;
   class?: string;
+  spinner?: boolean;
 }
-const { href, type, id, icon, class: className } = Astro.props;
+const { href, type, id, icon, class: className, spinner = false } = Astro.props;
 ---
 
 {
   type ? (
     <button class:list={["cta vt-cta", className]} type={type} id={id}>
       {icon && <Icon name={icon} />}
-      <slot />
+      {spinner && <span class="spin" aria-hidden="true" />}
+      {spinner ? <span class="lbl"><slot /></span> : <slot />}
     </button>
   ) : (
     <a class:list={["cta vt-cta", className]} href={href} id={id}>
@@ -84,6 +87,32 @@ const { href, type, id, icon, class: className } = Astro.props;
   .cta:disabled {
     cursor: progress;
     opacity: 0.7;
+  }
+  /* Sending state (spinner prop): a cream ring with one solid arc; rotation is transform-only. */
+  .spin {
+    display: none;
+    flex: none;
+    box-sizing: border-box;
+    width: calc(var(--vt-space-md) + var(--vt-space-xs));
+    height: calc(var(--vt-space-md) + var(--vt-space-xs));
+    margin-inline-end: var(--vt-space-sm);
+    border: calc(var(--vt-space-xs) / 2) solid color-mix(in srgb, var(--vt-color-cream) 35%, transparent);
+    border-top-color: var(--vt-color-cream);
+    border-radius: var(--vt-radius-pill);
+    animation: cta-spin 0.9s linear infinite;
+  }
+  .cta[aria-busy="true"] .spin {
+    display: inline-block;
+  }
+  @keyframes cta-spin {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .spin {
+      animation: none;
+    }
   }
   .cta:active {
     transform: scale(0.98);
