@@ -8,7 +8,7 @@ export const CSP = [
   "style-src 'self' 'unsafe-inline'", // inlineStylesheets: "always"
   "img-src 'self' data:",
   "font-src 'self'",
-  "connect-src 'self'",
+  "connect-src 'self' https://api.beautica.app", // guest cancel page (phase 004); keep in sync with public/_headers
   "form-action 'self'",
   "frame-ancestors 'none'",
   "base-uri 'self'",

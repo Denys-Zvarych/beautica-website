@@ -1,0 +1,7 @@
+---
+// Static shell for the backend link /bookings/{id} (served by a 200 rewrite in public/_redirects).
+import AppLinkPage from "../../components/AppLinkPage.astro";
+import { t } from "../../i18n/t";
+---
+
+<AppLinkPage title={t("appLink.booking.metaTitle")} description={t("appLink.booking.metaDescription")} h1={t("appLink.booking.h1")} text={t("appLink.booking.text")} />

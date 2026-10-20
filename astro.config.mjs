@@ -21,8 +21,8 @@ export default defineConfig({
   adapter: cloudflare({ imageService: "compile" }),
   integrations: [
     sitemap({
-      // 404 and (later) token routes must never reach the sitemap.
-      filter: (page) => !/\/404$/.test(page),
+      // 404 and the token-route shells (/l/*) must never reach the sitemap.
+      filter: (page) => !/\/404$/.test(page) && !/\/l\//.test(page),
     }),
   ],
   i18n: {

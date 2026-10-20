@@ -5,6 +5,7 @@ import "../styles/base.css";
 import nunitoCyr from "@fontsource-variable/nunito/files/nunito-cyrillic-wght-normal.woff2?url";
 import nunitoLat from "@fontsource-variable/nunito/files/nunito-latin-wght-normal.woff2?url";
 import comfortaaCyr from "@fontsource-variable/comfortaa/files/comfortaa-cyrillic-wght-normal.woff2?url";
+import comfortaaLat from "@fontsource-variable/comfortaa/files/comfortaa-latin-wght-normal.woff2?url";
 import Seo from "./Seo.astro";
 import Header from "./Header.astro";
 import Footer from "./Footer.astro";
@@ -19,9 +20,11 @@ interface Props {
   jsonLd?: Record<string, unknown> | Record<string, unknown>[];
   /** Hide the header (a hero page that already shows the logo). Default false. */
   hideHeader?: boolean;
+  /** `<meta name="referrer" content="no-referrer">` so sub-resource requests never carry a token URL (token routes). Default false. */
+  noReferrer?: boolean;
 }
 
-const { hideHeader = false, ...seo } = Astro.props;
+const { hideHeader = false, noReferrer = false, ...seo } = Astro.props;
 ---
 
 <!doctype html>
@@ -29,6 +32,7 @@ const { hideHeader = false, ...seo } = Astro.props;
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    {noReferrer && <meta name="referrer" content="no-referrer" />}
     <link rel="icon" href="/favicon.ico" sizes="48x48" />
     <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
@@ -36,6 +40,13 @@ const { hideHeader = false, ...seo } = Astro.props;
     <!-- Latin too: « » digits and brand names inside Ukrainian prose use it, and a late arrival reflowed lines (CLS). -->
     <link rel="preload" as="font" type="font/woff2" href={nunitoLat} crossorigin />
     <link rel="preload" as="font" type="font/woff2" href={comfortaaCyr} crossorigin />
+    {
+      noReferrer && (
+        // Token pages: a font fetched lazily from CSS still sent the page URL as Referer (Chromium ignores the policy there);
+        // a preloaded one does not, so preload the remaining face too.
+        <link rel="preload" as="font" type="font/woff2" href={comfortaaLat} crossorigin />
+      )
+    }
     <Seo {...seo} />
   </head>
   <body>
