@@ -2,7 +2,7 @@
   "ci": {
     "collect": {
       "staticDistDir": "./dist/client",
-      "url": ["http://localhost/index.html", "http://localhost/privacy.html", "http://localhost/terms.html", "http://localhost/delete-account.html"],
+      "url": ["http://localhost/index.html", "http://localhost/privacy.html", "http://localhost/terms.html", "http://localhost/delete-account.html", "http://localhost/support.html"],
       "numberOfRuns": 3,
       "settings": {
         "chromeFlags": "--no-sandbox --headless=new"
