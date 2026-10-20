@@ -12,7 +12,12 @@ export default defineConfig({
   // Static site, no Astro sessions: without this the Cloudflare adapter adds an id-less SESSION KV binding
   // that makes `wrangler preview` / Workers Builds fail with code 10021.
   session: false,
+  // Astro's built-in origin check answers 403 before user middleware (no security/no-store headers); src/middleware.ts
+  // does the same check and adds the headers.
+  security: { checkOrigin: false },
   build: { format: "file", inlineStylesheets: "always" },
+  // Never inline module scripts into the HTML (CSP: no inline scripts, README D8); they ship as /_astro/*.js.
+  vite: { build: { assetsInlineLimit: 0 } },
   adapter: cloudflare({ imageService: "compile" }),
   integrations: [
     sitemap({

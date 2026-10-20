@@ -4,5 +4,6 @@ Disallow: /l/
 Disallow: /invite/
 Disallow: /bookings/
 Disallow: /book/cancel/
+Disallow: /api/
 
 Sitemap: https://beautica.app/sitemap-index.xml

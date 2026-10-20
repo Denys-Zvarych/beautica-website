@@ -13,6 +13,8 @@
     "check": "astro check",
     "check:tokens": "node scripts/check-tokens.mjs",
     "check:responsive": "node scripts/check-responsive.mjs",
+    "check:claims": "node scripts/check-claims.mjs",
+    "list:not-live": "node scripts/list-not-live.mjs",
     "check:cls": "node scripts/measure-cls.mjs"
   },
   "dependencies": {

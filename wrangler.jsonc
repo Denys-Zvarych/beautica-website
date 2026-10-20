@@ -5,9 +5,20 @@
   "compatibility_flags": ["nodejs_compat"],
   "workers_dev": true,
   "preview_urls": true,
+  // Workers Logs (dashboard > Workers & Pages > beautica-site > Observability): lets us read the delete-request send errors.
+  "observability": { "enabled": true },
   "main": "@astrojs/cloudflare/entrypoints/server",
   "assets": {
     "binding": "ASSETS",
     "not_found_handling": "404-page"
+  },
+  // Account-deletion requests (phase 011): Email Routing send binding, locked to the verified team inbox.
+  "send_email": [{ "name": "DELETION_MAIL", "destination_address": "beautica.ua@gmail.com" }],
+  // 3 requests / 60 s per IP on /api/delete-request.
+  "ratelimits": [{ "name": "DELETION_LIMITER", "namespace_id": "1011", "simple": { "limit": 3, "period": 60 } }],
+  // Previews do not inherit production bindings: same names, Preview-safe values (separate rate-limit namespace).
+  "previews": {
+    "send_email": [{ "name": "DELETION_MAIL", "destination_address": "beautica.ua@gmail.com" }],
+    "ratelimits": [{ "name": "DELETION_LIMITER", "namespace_id": "1012", "simple": { "limit": 3, "period": 60 } }]
   }
 }

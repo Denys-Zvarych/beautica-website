@@ -3,7 +3,7 @@
  * Fontsource CSS would declare every subset. Per family: cyrillic + latin (Google unicode-ranges) and a cyrillic-ext
  * face narrowed to U+20B4 (the hryvnia sign lives only there), so browsers fetch it only on pages that render it.
  * The app's static weights (Comfortaa 600/700, Nunito 400/600/700/800) are instances of the wght axis.
- * "<Family> Fallback" faces carry size-adjust/ascent/descent overrides measured against Arial so the swap does not shift layout.
+ * "<Family> Fallback" faces carry size-adjust/ascent/descent overrides measured against Arial (Liberation Sans / Arimo are metric-identical, listed for Linux, where Chrome does not alias Arial) so the swap does not shift layout.
  */
 @font-face {
   font-family: "Nunito";
@@ -31,10 +31,43 @@
 }
 @font-face {
   font-family: "Nunito Fallback";
-  src: local("Arial");
+  src: local("Arial"), local("Liberation Sans"), local("Arimo");
   size-adjust: 97.8%;
   ascent-override: 103.37%;
   descent-override: 36.09%;
+  line-gap-override: 0%;
+}
+/* Cyrillic runs are ~1.2% wider than Arial in Nunito (latin is ~5.6% narrower), so the one latin-measured face reflowed Ukrainian
+   prose on the swap (CLS 0.026 on /terms). A later face with a Cyrillic range wins for those glyphs; ascent/descent keep the same
+   absolute metrics (97.8 / 101.2 of the values above). */
+@font-face {
+  font-family: "Nunito Fallback";
+  src: local("Arial"), local("Liberation Sans"), local("Arimo");
+  unicode-range: U+0400-04FF,U+2116;
+  size-adjust: 101.2%;
+  ascent-override: 99.9%;
+  descent-override: 34.88%;
+  line-gap-override: 0%;
+}
+/* Bold (<strong>, 600-800 snap to this face): without it Chrome synthesises bold from the regular Arial face, which is narrower than
+   Nunito 700 on Arial Bold, so bold lead-ins wrapped differently after the swap (CLS 0.056 on /support). Measured against Arial Bold. */
+@font-face {
+  font-family: "Nunito Fallback";
+  font-weight: 700;
+  src: local("Arial Bold"), local("Liberation Sans Bold"), local("Arimo Bold");
+  size-adjust: 97.1%;
+  ascent-override: 104.1%;
+  descent-override: 36.35%;
+  line-gap-override: 0%;
+}
+@font-face {
+  font-family: "Nunito Fallback";
+  font-weight: 700;
+  src: local("Arial Bold"), local("Liberation Sans Bold"), local("Arimo Bold");
+  unicode-range: U+0400-04FF,U+2116;
+  size-adjust: 98.7%;
+  ascent-override: 102.4%;
+  descent-override: 35.75%;
   line-gap-override: 0%;
 }
 @font-face {
@@ -63,7 +96,7 @@
 }
 @font-face {
   font-family: "Comfortaa Fallback";
-  src: local("Arial");
+  src: local("Arial"), local("Liberation Sans"), local("Arimo");
   size-adjust: 117.54%;
   ascent-override: 74.95%;
   descent-override: 19.91%;

@@ -45,7 +45,7 @@ jobs:
       - name: Link check (offline, built HTML)
         uses: lycheeverse/lychee-action@v2
         with:
-          args: --offline --no-progress --fallback-extensions html --root-dir ${{ github.workspace }}/dist/client 'dist/client/**/*.html'
+          args: --config lychee.toml --offline --no-progress --fallback-extensions html --root-dir ${{ github.workspace }}/dist/client 'dist/client/**/*.html'
           fail: true
 
       - name: HTML validation
@@ -71,5 +71,5 @@ jobs:
         if: steps.mobile.outcome != 'success'
         run: echo "::warning::beautica-mobile not checkable (private?). Token parity NOT verified in CI; run node scripts/check-tokens.mjs locally."
 
-      - name: Lighthouse budget (mobile; perf>=95, a11y 100, SEO 100, CLS<0.02)
+      - name: Lighthouse budget (mobile; perf>=95, a11y 100, SEO 100, CLS<0.005)
         run: npx --yes @lhci/cli@0.15 autorun
