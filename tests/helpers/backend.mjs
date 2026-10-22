@@ -143,3 +143,16 @@ export function javaInt(typeName, field) {
   if (!m) throw new Error(`${typeName}.${field} = <int> not found`);
   return Number(m[1]);
 }
+
+export const MOBILE_DIR = resolve(ROOT, process.env.MOBILE_DIR ?? "../beautica-mobile");
+/** Resolves a ledger path like `../beautica-backend/...` / `../beautica-mobile/...` to where that repo is checked out here (CI: ./beautica-*). */
+export function siblingPath(ledgerPath) {
+  const m = /^\.\.\/beautica-(backend|mobile)\/(.+)$/.exec(ledgerPath);
+  return m ? join(m[1] === "backend" ? BACKEND_DIR : MOBILE_DIR, m[2]) : null;
+}
+/** Skip option for a spec that reads the mobile repo; REQUIRE_MOBILE=1 (CI after a successful checkout) makes absence a failure. */
+export function mobileGate(file) {
+  const present = existsSync(file);
+  if (process.env.REQUIRE_MOBILE === "1" && !present) throw new Error(`REQUIRE_MOBILE=1 but ${file} is missing`);
+  return present;
+}

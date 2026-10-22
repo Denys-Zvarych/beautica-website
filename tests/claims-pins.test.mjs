@@ -3,18 +3,18 @@
 // proves the line still says what the page says, and that every page copy of the number agrees with the backend value.
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { ROOT, uk } from "./helpers/env.mjs";
-import { backendGate, javaInt } from "./helpers/backend.mjs";
+import { backendGate, javaInt, mobileGate, siblingPath } from "./helpers/backend.mjs";
 
 const gate = backendGate();
 const read = (rel) => readFileSync(join(ROOT, rel), "utf8");
 const ledgerRows = read("docs/claims.md").split("\n").filter((l) => l.startsWith("|") && !/^\|\s*(claim|-)/.test(l)).map((l) => l.split("|").slice(1, -1).map((c) => c.trim()));
 const sourceLine = (cells) => {
   const m = /^`(.+):(\d+)`$/.exec(cells[2]);
-  const file = resolve(ROOT, m[1]);
-  return { file: m[1], line: readFileSync(file, "utf8").split("\n")[Number(m[2]) - 1] };
+  const file = siblingPath(m[1]) ?? resolve(ROOT, m[1]);
+  return { file: m[1], absent: !mobileGate(file), line: existsSync(file) ? readFileSync(file, "utf8").split("\n")[Number(m[2]) - 1] : "" };
 };
 const hours = (s) => Number(/(\d+)\s*(?:год|hour)/.exec(s)?.[1]);
 const flatten = (o) => Object.values(o).flatMap((v) => (typeof v === "object" && v ? flatten(v) : [String(v)]));
@@ -53,22 +53,20 @@ describe("the ledger rows added for the booking pages still point at the line th
     ["BookingFlow.astro", /_maxComment\s*=\s*500\b/],
   ];
   for (const [needle, re] of cases)
-    test(`row «${needle}»: the cited source line matches ${re}`, () => {
+    test(`row «${needle}»: the cited source line matches ${re}`, (t) => {
       const row = pin(needle);
       assert.ok(row, `no ledger row anchored at ${needle}`);
-      const { file, line } = sourceLine(row);
+      const { file, line, absent } = sourceLine(row);
+      if (absent) return t.skip("that sibling repo (mobile) is not checked out");
       assert.match(line, re, `${file}: the cited line no longer says that (line moved or value changed): "${line.trim()}"`);
     });
   test("every sibling-repo source line in the ledger is code, not a blank or a comment", () => {
     for (const r of ledgerRows) {
       const m = /^`(\.\.\/.+):(\d+)`$/.exec(r[2]);
       if (!m || r[3] !== "live") continue; // a not-live row may cite the comment that documents the gap
-      let text;
-      try {
-        text = readFileSync(resolve(ROOT, m[1]), "utf8").split("\n")[Number(m[2]) - 1];
-      } catch {
-        continue; // that sibling repo (mobile) is not here
-      }
+      const file = siblingPath(m[1]);
+      if (!file || !existsSync(file)) continue; // not in this (sparse) checkout: the pinned rows above are the ones that must be present
+      const text = readFileSync(file, "utf8").split("\n")[Number(m[2]) - 1];
       assert.ok(text && !/^\s*(\/\/|\*|\/\*|\}|$)/.test(text), `${r[0].slice(0, 50)}: ${m[1]}:${m[2]} is blank or a comment`);
     }
   });
