@@ -12,10 +12,12 @@
     "binding": "ASSETS",
     "not_found_handling": "404-page",
     // The link pages /book/{slug} and /book/s/{slug} are rendered by the Worker (SSR). Without this the asset layer answers a browser
-    // navigation to an unknown path with the static 404 page and never invokes the Worker. /book/cancel/{token} stays an asset
-    // (static shell via _redirects). /api/* is listed too: once this array exists the asset layer no longer lets a GET to a path
-    // without an asset reach the Worker, and /api/delete-request must keep answering 405 to a GET (tests/headers-seo.test.mjs).
-    "run_worker_first": ["/book/*", "!/book/cancel/*", "/api/*"]
+    // navigation to an unknown path with the static 404 page and never invokes the Worker.
+    // /book/cancel/{token} is served by the Worker too (src/pages/book/cancel/[token].ts): it returns the static shell /l/cancel with the
+    // runtime API origin in data-api and in the CSP. Its trailing-slash variant stays an asset (the 307 rule in _redirects).
+    // /api/* is listed too: once this array exists the asset layer no longer lets a GET to a path without an asset reach the Worker, and
+    // /api/delete-request must keep answering 405 to a GET (tests/headers-seo.test.mjs).
+    "run_worker_first": ["/book/*", "!/book/cancel/*/", "/api/*"]
   },
   // Booking-link pages (phases 008/009), read at run time by src/lib/booking/config.ts. Public values only; the Worker key is a secret.
   //   API_ORIGIN               prod API. Previews (dev branch, staging) override it below; local dev: .dev.vars (see .dev.vars.example).

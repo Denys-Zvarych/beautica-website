@@ -3,7 +3,7 @@
 // Behaviour is chosen by the slug or the phone number, never by shared mutable state, so test files can run in parallel:
 //   master slugs   oksana-ab12 (full)   sparse-0001 (no title/bio/photos/reviews)   closed-aaaa (bookable:false)   retired-bbbb (410)
 //                  down-cccc (503)   limited-dddd (429)   conflict-9999 (booking -> 409)   bookdown-7777 (booking -> 503)
-//                  expired-6666 (booking -> 401)   cache-4444 / headers-3333 (a slug of their own for the cache / forwarded-header tests)   salonmaster-5555 (belongs to salon lavanda-1111)   anything else = 404
+//                  expired-6666 (booking -> 401)   cache-4444 / headers-3333 / rail-8888 (a slug of their own for the cache / forwarded-header / 12-photo rail tests)   salonmaster-5555 (belongs to salon lavanda-1111)   anything else = 404
 //   salon slugs    lavanda-1111 (8 masters)   salonhdr-4444 (same, for the forwarded-header test)   shut-2222 (bookable:false)   anything else = 404
 //   phone          ...0503 -> 503, ...0429 -> 429, ...0400 -> 400 "Verification failed"; anything else sends.   code 000000 = wrong, else ok
 //   GET /__mock/log -> every request seen (method, path, headers, body), newest last.   POST /__mock/reset clears it.
@@ -66,6 +66,7 @@ const MASTERS = {
   "bookdown-7777": () => masterInfo(),
   "expired-6666": () => masterInfo(),
   "cache-4444": () => masterInfo(),
+  "rail-8888": () => masterInfo({ portfolio: Array.from({ length: 12 }, (_, i) => ({ id: `p${i}`, entityType: "MASTER", entityId: MASTER_ID, mediaType: "PORTFOLIO", url: `${MEDIA}/p${i}.jpg`, createdAt: "2026-10-01T10:00:00Z" })) }),
   "headers-3333": () => masterInfo(),
   "salonmaster-5555": () => masterInfo({ masterName: "Дарина Мельник", salon: { name: "Салон «Лаванда»", bookingSlug: "lavanda-1111" } }),
 };

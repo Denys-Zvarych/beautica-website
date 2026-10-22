@@ -27,10 +27,10 @@ type Notice = { title: string; text: string; metaTitle: string; status: number; 
 const pick = (k: "notFound" | "salonUnbookable" | "unavailable") => ({ title: t(`book.notice.${k}.title`), text: t(`book.notice.${k}.text`), metaTitle: t(`book.notice.${k}.metaTitle`) });
 let notice: Notice | null = null;
 if (result.kind === "not-found") notice = { ...pick("notFound"), status: 404, cta: home };
-else if (result.kind === "gone") notice = { ...pick("salonUnbookable"), status: 410, cta: home };
+else if (result.kind === "gone") notice = { ...pick("salonUnbookable"), status: 410 };
 else if (result.kind === "rate-limited") notice = { ...pick("unavailable"), status: 429, retryAfter: result.retryAfter, cta: retry };
 else if (result.kind === "unavailable") notice = { ...pick("unavailable"), status: 503, retryAfter: result.retryAfter, cta: retry };
-else if (!result.data.bookable || result.data.masters.length === 0) notice = { ...pick("salonUnbookable"), status: 200, cta: home };
+else if (!result.data.bookable || result.data.masters.length === 0) notice = { ...pick("salonUnbookable"), status: 200 };
 
 if (notice) noticeResponse(Astro.response, notice.status, notice.retryAfter);
 const info = result.kind === "ok" && !notice ? result.data : null;
@@ -50,7 +50,7 @@ const jsonLd = info
   : undefined;
 ---
 
-<Layout title={title} description={description} noindex={!info} image={info?.avatarUrl ?? info?.coverImageUrl ?? undefined} imageAlt={name || undefined} twitterCard="summary" ogType="profile" jsonLd={jsonLd} hideHeader hideFooter>
+<Layout title={title} description={description} noindex={!info} image={info?.avatarUrl ?? info?.coverImageUrl ?? undefined} imageAlt={name || undefined} twitterCard="summary" ogType="website" jsonLd={jsonLd} hideHeader hideFooter>
   {
     info ? (
       <main class="phone" id="main">

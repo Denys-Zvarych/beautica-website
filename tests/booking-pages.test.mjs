@@ -13,6 +13,9 @@ const meta = (html, re) => (html.match(re)?.[1] ? decode(html.match(re)[1]) : nu
 const strip = (s) => decode(s.replace(/<[^>]*>/g, "")).replace(/\s+/g, " ").trim();
 const ldBlocks = (html) => [...html.matchAll(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/g)].map((m) => JSON.parse(m[1]));
 const WORKER_KEY = "test-worker-key-0123456789012345678901";
+let browser;
+before(async () => (browser = await launch()));
+after(async () => browser?.close());
 const SECURITY = ["strict-transport-security", "x-content-type-options", "referrer-policy", "permissions-policy", "content-security-policy"];
 
 const get = (path, headers) => rawRequest(path, { headers });
@@ -151,6 +154,18 @@ describe("states that are not a profile", () => {
     const seen = await mockLog((e) => e.path.includes("/info"));
     assert.deepEqual(seen.filter((e) => /BAD_slug|UPPER|xxxxxxxx|%20/.test(e.path)), []);
   });
+  test("unbookable / retired: one full-width card, no extra button (as the design's 410 state)", async () => {
+    const env = await bookPage(browser, "closed-aaaa");
+    try {
+      const card = await env.page.locator(".notice").boundingBox();
+      assert.ok(card.width >= 360 - 2 * 24 - 1, `card is ${card.width}px wide: it spans the column`);
+      assert.equal(await env.page.locator(".notice a, .notice button").count(), 0);
+    } finally {
+      await env.context.close();
+    }
+    const nf = await get("/book/nobody-0000");
+    assert.ok(nf.body.includes("На головну"), "a 404 keeps the way back");
+  });
   test("a slug that looks like a sub-path is not a link page", async () => assert.equal((await get("/book/oksana-ab12/extra")).status, 404));
 });
 
@@ -202,6 +217,11 @@ describe("salon page", async () => {
     assert.equal(res.headers["cache-control"], "public, max-age=0, s-maxage=30");
     assert.ok(res.headers["content-security-policy"].includes("img-src 'self' data: https://media.beautica.test;"));
   });
+  test("og:type is website and the description does not repeat «Салон»", () => {
+    assert.equal(meta(h, /<meta property="og:type" content="([^"]*)"/), "website");
+    assert.equal(/Салон Салон/.test(meta(h, /<meta name="description" content="([^"]*)"/)), false);
+    assert.ok(meta(h, /<meta name="description" content="([^"]*)"/).startsWith("Салон «Лаванда»:"));
+  });
   test("SEO: title, description, canonical, one H1, JSON-LD (no rating: no reviews are rendered)", () => {
     assert.equal(meta(h, /<link rel="canonical" href="([^"]*)"/), "https://beautica.app/book/s/lavanda-1111");
     assert.equal(meta(h, /<meta name="robots" content="([^"]*)"/), "index, follow");
@@ -236,6 +256,43 @@ describe("salon page", async () => {
   });
 });
 
+describe("legal pages say what the booking does (guest booking is live)", () => {
+  test("privacy §3: no «not possible yet», phone AND name shared with the master, Turnstile + consent + policy date", async () => {
+    const t = strip((await get("/privacy")).body);
+    assert.equal(t.includes("поки що не можна"), false);
+    assert.ok(t.includes("за посиланням, яким поділився майстер або салон"));
+    assert.ok(/бачить ваше ім.я, прізвище, номер телефону/.test(t), "the master sees the phone (user decision 2026-10-22)");
+    assert.equal(t.includes("Номер телефону їм не показується"), false);
+    assert.ok(t.includes("Cloudflare Turnstile") && t.includes("позначку згоди"));
+    assert.ok(t.includes("перевірка Turnstile під час гостьового запису"), "Turnstile is listed under the Cloudflare processor");
+    assert.ok((await get("/privacy")).body.includes("2026-10-22") || t.includes("22 жовтня 2026") || t.includes("2026"), "page shows its date");
+  });
+  test("terms and support: guest booking is described as available; no guest-booking «add when live» markers remain", async () => {
+    const terms = strip((await get("/terms")).body);
+    const support = strip((await get("/support")).body);
+    assert.equal(terms.includes("поки недоступний"), false);
+    assert.ok(terms.includes("Записатися без акаунта (гість) можна на сайті"));
+    assert.equal(support.includes("поки недоступний"), false);
+    assert.ok(support.includes("Так, на сайті за посиланням майстра чи салону"));
+  });
+});
+
+describe("guest cancel link uses the same API origin config", () => {
+  test("/book/cancel/{token}: data-api and CSP connect-src are the Worker's API_ORIGIN, headers stay hardened, trailing slash 307", async () => {
+    const res = await get("/book/cancel/123e4567-e89b-42d3-a456-426614174000");
+    assert.equal(res.status, 200);
+    assert.ok(res.body.includes(`data-api="${MOCK_API}"`), "the shell carries the runtime API origin");
+    assert.ok(res.headers["content-security-policy"].includes(`connect-src 'self' ${MOCK_API};`));
+    assert.equal(res.headers["content-security-policy"].includes("api.beautica.app"), false);
+    assert.deepEqual(res.all("referrer-policy"), ["no-referrer"]);
+    assert.deepEqual(res.all("cache-control"), ["no-store"]);
+    assert.deepEqual(res.all("x-robots-tag"), ["noindex, nofollow"]);
+    const slash = await get("/book/cancel/123e4567-e89b-42d3-a456-426614174000/?x=1");
+    assert.equal(slash.status, 307);
+    assert.equal(slash.headers.location, "/book/cancel/123e4567-e89b-42d3-a456-426614174000?x=1");
+  });
+});
+
 describe("site wiring", () => {
   test("link pages are in no sitemap", async () => {
     for (const p of ["/sitemap-index.xml", "/sitemap-0.xml"]) {
@@ -257,9 +314,6 @@ describe("site wiring", () => {
 });
 
 describe("rendering at 360 / 768 / 1280", () => {
-  let browser;
-  before(async () => (browser = await launch()));
-  after(async () => browser?.close());
   const ROUTES = [
     { path: "/book/oksana-ab12", name: "master", boxes: [".avatar-well", ".stat", ".rolechip", ".shelf .cta", ".tab", ".bio", ".ptile"], h1: "Оксана Коваленко" },
     { path: "/book/sparse-0001", name: "master-sparse", boxes: [".avatar-well", ".stat", ".shelf .cta"], h1: "Нова Майстриня" },
@@ -355,6 +409,33 @@ describe("rendering at 360 / 768 / 1280", () => {
       assert.equal(await page.locator("#showall").isVisible(), false);
     } finally {
       await env.context.close();
+    }
+  });
+  test("design fidelity: portfolio is a horizontal rail, panels start under the tabs with no extra label, CTA has the app's light-to-dark face, no-photo avatar is the person icon", async () => {
+    const env = await bookPage(browser, "rail-8888");
+    try {
+      const { page } = env;
+      const rail = await page.locator(".rail").evaluate((r) => ({ sw: r.scrollWidth, cw: r.clientWidth, ox: getComputedStyle(r).overflowX, tops: [...r.children].map((c) => Math.round(c.getBoundingClientRect().top)) }));
+      assert.ok(rail.sw > rail.cw && rail.ox === "auto", `rail scrolls sideways (${rail.sw} > ${rail.cw})`);
+      assert.equal(new Set(rail.tops).size, 1, "tiles stay on one row");
+      await page.waitForSelector("[data-tabs][role=tablist]");
+      await page.getByRole("tab", { name: "Послуги" }).click();
+      const first = await page.locator("[data-panel='1']").evaluate((p) => {
+        const visible = [...p.children].find((c) => c.getBoundingClientRect().height > 1);
+        return visible.className;
+      });
+      assert.match(first, /cat-list/, "the services panel opens with the category cards, not a heading");
+      const bg = await page.locator("#book-cta").evaluate((b) => getComputedStyle(b).backgroundImage);
+      assert.equal((bg.match(/linear-gradient/g) ?? []).length, 2, "overlay + accent gradient");
+    } finally {
+      await env.context.close();
+    }
+    const sp = await bookPage(browser, "sparse-0001");
+    try {
+      assert.ok(await visibleBox(sp.page.locator(".avatar-well svg")), "person icon placeholder");
+      assert.equal(await sp.page.locator(".avatar-well img").count(), 0);
+    } finally {
+      await sp.context.close();
     }
   });
   test("a master card of the salon opens that master's page (and the master page links back to the salon)", async () => {

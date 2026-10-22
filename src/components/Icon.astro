@@ -4,6 +4,7 @@
 // Paths: Simple Icons (https://simpleicons.org, v16.35.0), licensed CC0 1.0. Trademarks belong to Google LLC / Apple Inc.;
 // these are glyphs inside our own chips, not official badges. Inline SVG only: no requests, no raster.
 import * as M from "../lib/icons/materialPaths";
+import { calendarAdd } from "../lib/icons/strokePaths";
 // Material set (booking-link pages): the app's own glyphs, subset of MaterialIcons-Regular.otf (src/lib/icons/materialPaths.ts).
 export type MaterialIconName =
   | "star" | "spa" | "person" | "person-outline" | "done" | "schedule" | "arrow-back-ios" | "keyboard-arrow-down" | "expand-more-rounded"
@@ -44,7 +45,7 @@ const paths: Record<string, string> = {
   {
     outlined ? (
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg" focusable="false">
-        <path d="M8 3v3M16 3v3M5 9.5h14M12.5 20H7a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v5.5M18 15.5v5M15.5 18h5"></path>
+        <path d={calendarAdd}></path>
       </svg>
     ) : stroked ? (
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg" focusable="false">

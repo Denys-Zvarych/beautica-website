@@ -122,7 +122,7 @@ const canBook = info.bookable && info.services.length > 0;
         </div>
 
         <div class="tabpanel" id="panel-1" data-panel="1">
-          <h2 class="t-section sect-label">{t("book.master.servicesLabel")}</h2>
+          <h2 class="sr-only">{t("book.master.servicesLabel")}</h2>
           {
             info.categories.length > 0 && (
               <div class="cat-list svc-block">
@@ -141,7 +141,7 @@ const canBook = info.bookable && info.services.length > 0;
         </div>
 
         <div class="tabpanel" id="panel-2" data-panel="2">
-          <h2 class="t-section sect-label">{t("book.master.reviewsLabel")}</h2>
+          <h2 class="sr-only">{t("book.master.reviewsLabel")}</h2>
           <NeuCard class="rsum">
             <div class="left">
               <span class="t-avg">{formatRating(info.avgRating)}</span>

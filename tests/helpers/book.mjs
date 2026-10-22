@@ -6,7 +6,7 @@ import { BASE, MOCK_API } from "./env.mjs";
 
 export const PNG = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mO0Dwv7DwAEGAHYhxX0pQAAAABJRU5ErkJggg==", "base64");
 // Like the real widget: render() and every reset() deliver a fresh single-use token through the callback.
-export const FAKE_TURNSTILE = `(function(){var cb,n=0;function give(){var t="TOKEN-"+(++n);setTimeout(function(){cb(t)},5)}window.turnstile={render:function(el,o){cb=o.callback;give();return "w1"},reset:function(){give()}};})();`;
+export const FAKE_TURNSTILE = `(function(){var cb,n=0;function give(){var t="TOKEN-"+(++n);setTimeout(function(){cb(t)},5)}window.turnstile={render:function(el,o){cb=o.callback;give();var f=document.createElement("iframe");f.title="fake turnstile";f.style.cssText="width:300px;height:65px;border:0";el.appendChild(f);return "w1"},reset:function(){give()}};})();`;
 
 /** Every request the mock backend has seen, optionally filtered. */
 export async function mockLog(filter = () => true) {

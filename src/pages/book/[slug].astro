@@ -26,10 +26,10 @@ const home = { href: "/", label: t("book.notice.home") };
 type Notice = { title: string; text: string; metaTitle: string; status: number; cta?: { href: string; label: string }; retryAfter?: number };
 let notice: Notice | null = null;
 if (result.kind === "not-found") notice = { ...pick("notFound"), status: 404, cta: home };
-else if (result.kind === "gone") notice = { ...pick("unbookable"), status: 410, cta: home };
+else if (result.kind === "gone") notice = { ...pick("unbookable"), status: 410 };
 else if (result.kind === "rate-limited") notice = { ...pick("unavailable"), status: 429, retryAfter: result.retryAfter, cta: { href: Astro.url.pathname, label: t("book.notice.unavailable.cta") } };
 else if (result.kind === "unavailable") notice = { ...pick("unavailable"), status: 503, retryAfter: result.retryAfter, cta: { href: Astro.url.pathname, label: t("book.notice.unavailable.cta") } };
-else if (!result.data.bookable) notice = { ...pick("unbookable"), status: 200, cta: home };
+else if (!result.data.bookable) notice = { ...pick("unbookable"), status: 200 };
 
 function pick(k: "notFound" | "unbookable" | "unavailable") {
   return { title: t(`book.notice.${k}.title`), text: t(`book.notice.${k}.text`), metaTitle: t(`book.notice.${k}.metaTitle`) };

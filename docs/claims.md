@@ -29,3 +29,7 @@ Columns:
 | Booking email links to /bookings/{id} (details in the app) | l/booking#main | `../beautica-backend/src/main/java/com/beautica/notification/service/NotificationService.java:425` | live |
 | Review email links to /bookings/{id}/review (review left in the app) | l/review#main | `../beautica-backend/src/main/java/com/beautica/notification/service/NotificationService.java:412` | live |
 | Guest cancel SMS/email links to /book/cancel/{token} | l/cancel#main | `../beautica-backend/src/main/java/com/beautica/booking/service/GuestBookingService.java:515` | live |
+| Guest booking: consent + policy version are stored with the booking | privacy#guest | `../beautica-backend/src/main/java/com/beautica/booking/domain/GuestConsent.java:13` | live |
+| Guest booking: Turnstile bot check before the SMS code is sent | privacy#guest | `../beautica-backend/src/main/java/com/beautica/auth/turnstile/TurnstileVerifier.java:66` | live |
+| Guest booking: up to 10 services in one visit | privacy#guest | `../beautica-backend/src/main/java/com/beautica/booking/service/SlotCalculationService.java:86` | live |
+| Guest booking: the booked master / salon sees the guest's name, surname AND phone (USER DECISION 2026-10-22; the backend DTO still omits the phone, see BookingDetailResponse:89 — backend change owed) | privacy#guest | `../beautica-backend/src/main/java/com/beautica/booking/dto/BookingDetailResponse.java:89` | not-live |

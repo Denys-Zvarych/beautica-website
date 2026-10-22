@@ -7,6 +7,7 @@ import { dayLong, dayShort, daysBetween, inWindow, kyivDay, kyivTime, kyivToday,
 import { cancelPath, createBooking, getAvailability, sendOtp, verifyOtp, type Fail, type Slot } from "./api";
 import { buildIcs, downloadIcs } from "./ics";
 import { mountTurnstile, type Widget } from "./turnstile";
+import { calendarAdd } from "../../lib/icons/strokePaths";
 import { closeRounded, errorOutline, eventAvailable, expandMoreRounded, schedule } from "../../lib/icons/materialPaths";
 import { track } from "../track";
 
@@ -23,8 +24,9 @@ const $ = <T extends HTMLElement = HTMLElement>(sel: string, root: ParentNode = 
 const $$ = <T extends HTMLElement = HTMLElement>(sel: string, root: ParentNode = document): T[] => [...root.querySelectorAll<T>(sel)];
 const fmt = (s: string, vars: Record<string, string | number>) => s.replace(/\{(\w+)\}/g, (_, k: string) => String(vars[k] ?? ""));
 
-function icon(path: string): string {
-  return `<svg class="mi" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="${path}"></path></svg>`;
+function icon(path: string, stroke = false): string {
+  const paint = stroke ? ' fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"' : "";
+  return `<svg class="mi" viewBox="0 0 24 24"${paint} aria-hidden="true" focusable="false"><path d="${path}"></path></svg>`;
 }
 function el<K extends keyof HTMLElementTagNameMap>(tag: K, cls = "", text = ""): HTMLElementTagNameMap[K] {
   const e = document.createElement(tag);
@@ -577,7 +579,7 @@ export function initBooking(root: HTMLElement): void {
     const wrap = el("div", "calwrap");
     const btn = el("button", "calbtn");
     btn.type = "button";
-    btn.innerHTML = `<svg class="mi" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M8 3v3M16 3v3M5 9.5h14M12.5 20H7a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v5.5M18 15.5v5M15.5 18h5"></path></svg><span class="t-strong115"></span>`;
+    btn.innerHTML = `${icon(calendarAdd, true)}<span class="t-strong115"></span>`;
     $("span", btn).textContent = S.calendar;
     const minutes = totals().minutes || b.durationMinutes;
     btn.addEventListener("click", () =>

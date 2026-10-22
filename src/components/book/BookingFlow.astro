@@ -4,7 +4,6 @@
 // Steps: services -> date -> time -> contact -> otp -> confirm -> done. The URL never changes (history.state keeps the step).
 import CtaButton from "../CtaButton.astro";
 import NeuCard from "../NeuCard.astro";
-import Chip from "../Chip.astro";
 import Icon from "../Icon.astro";
 import SlotChip from "../SlotChip.astro";
 import BookTopBar from "./BookTopBar.astro";
@@ -202,13 +201,6 @@ const strip = { name: info.masterName, subtitle: info.professionalTitle, avatarU
         <a class="cta2" id="done-cancel" href="/" hidden><span class="vt-cta">{t("book.done.cancel")}</span></a>
         <a class="cta2" href="/"><Icon name="home" /><span class="vt-cta">{t("book.done.home")}</span></a>
       </div>
-      <div class="g-lg"></div>
-      <p class="t-sub13 centered">{t("book.done.installTitle")}</p>
-      <div class="g-sm"></div>
-      <ul class="install">
-        <li><Chip icon="google-play">{t("index.soonGooglePlay")}</Chip></li>
-        <li><Chip icon="app-store">{t("index.soonAppStore")}</Chip></li>
-      </ul>
       <div class="g-xl"></div>
     </div>
   </div>

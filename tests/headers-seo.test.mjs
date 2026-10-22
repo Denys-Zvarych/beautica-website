@@ -2,7 +2,7 @@
 // assetlinks. Served by `wrangler dev` so public/_headers and public/_redirects are applied exactly as on Cloudflare.
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
-import { rawRequest, TOKEN, requireBase } from "./helpers/env.mjs";
+import { rawRequest, TOKEN, requireBase, MOCK_API } from "./helpers/env.mjs";
 
 requireBase();
 
@@ -76,7 +76,9 @@ describe("token routes (real e-mail URL -> 200 rewrite -> noindex shell)", () =>
       test("is a 200 rewrite (no redirect, address bar keeps the token URL)", () => {
         assert.equal(res.status, 200);
         assert.equal(res.headers.location, undefined);
-        assert.equal(res.body, direct.body, "the rewrite must serve the shell page byte for byte");
+        // The guest cancel link is served by the Worker with the runtime API origin in data-api (src/pages/book/cancel/[token].ts).
+        const norm = (b) => b.replace(/(id="cancel-root"[^>]*?\sdata-api=")[^"]*"/, '$1"');
+        assert.equal(norm(res.body), norm(direct.body), "the rewrite must serve the shell page byte for byte");
       });
       test("serves the right shell", () => {
         assert.equal(meta(res.body, /<title>([^<]*)<\/title>/), r.title);
@@ -87,7 +89,10 @@ describe("token routes (real e-mail URL -> 200 rewrite -> noindex shell)", () =>
           assert.deepEqual(target.all("referrer-policy"), ["no-referrer"]);
           assert.deepEqual(target.all("cache-control"), ["no-store"]);
           assert.deepEqual(target.all("x-robots-tag"), ["noindex, nofollow"]);
-          for (const [k, v] of Object.entries(STATIC_SECURITY)) assert.deepEqual(target.all(k), [v], k);
+          for (const [k, v] of Object.entries(STATIC_SECURITY)) {
+            const expected = k === "content-security-policy" && r.shell === "/l/cancel" && target === res ? v.replace("https://api.beautica.app", MOCK_API) : v;
+            assert.deepEqual(target.all(k), [expected], k);
+          }
         });
       }
       test("page is noindex, has no canonical and sets <meta name=referrer>", () => {

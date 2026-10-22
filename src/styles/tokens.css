@@ -254,4 +254,5 @@
   --vt-app-grad-logo: linear-gradient(to bottom right, #D8BE9C, #6A4A28);
   --vt-app-grad-cover: linear-gradient(to bottom right, #8A6840, #6A4A28, #4A3322);
   --vt-app-color-cover-btn: rgba(245, 237, 224, 0.86);
+  --vt-app-cta-overlay: linear-gradient(135deg, rgba(255, 255, 255, 0.28), transparent 45%, rgba(0, 0, 0, 0.14));
 }

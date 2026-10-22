@@ -96,7 +96,7 @@ describe("happy path: one service", () => {
     });
   });
 
-  test("done: the cancel link goes to this site's page, the .ics is built in the browser, the install prompt is the «soon» chips", async () => {
+  test("done: the cancel link goes to this site's page, the .ics is built in the browser, the done step is the design's (no install block)", async () => {
     await withPage("oksana-ab12", {}, async ({ page }) => {
       await page.addInitScript(() => {
         window.__icsBlobs = [];
@@ -123,7 +123,10 @@ describe("happy path: one service", () => {
       assert.match(ics, /DTSTART:\d{8}T\d{6}Z\r\n/);
       assert.match(ics, /LOCATION:Київ/);
       assert.equal(ics.includes("Календар"), false, "the guest's name is not in the file");
-      assert.ok((await text(page.locator("[data-screen=done]"))).includes("Керуйте записами в застосунку"));
+      const done = await text(page.locator("[data-screen=done]"));
+      assert.equal(done.includes("Керуйте записами"), false, "no install block: the done step is the design's");
+      assert.equal(await page.locator("[data-screen=done] .chip").count(), 0);
+      assert.ok(await visibleBox(page.locator("[data-screen=done] .calbtn svg")), "calendar glyph is drawn");
       await page.getByRole("link", { name: "На головну" }).waitFor();
     });
   });
@@ -364,6 +367,21 @@ describe("contact step", () => {
       assert.ok((await text(page.locator("#turn-err"))).includes("Не вдалося") || (await text(page.locator("#turn-err"))).includes("Підтвердіть"));
       assert.deepEqual(await mockLog((e) => e.body?.phone === "+380500000011"), []);
       assert.equal(await visibleScreen(page), "contact");
+    });
+  });
+
+  test("the Turnstile row renders in the contact step (widget-sized box, inside the column, no overflow)", async () => {
+    await withPage("oksana-ab12", {}, async ({ page, turnstileRequests }) => {
+      await driveTo(page, "time");
+      await page.click("#cta-time");
+      await page.waitForSelector("#ts-widget iframe", { state: "attached" });
+      const row = page.locator("#ts-widget");
+      assert.ok(await visibleBox(row), "the row has a box");
+      const b = await row.boundingBox();
+      assert.ok(b.height >= 65 && b.width >= 300, `${b.width}x${b.height}`);
+      assert.ok(b.x >= 0 && b.x + b.width <= 360, "inside the 360 px viewport");
+      assert.ok((await page.evaluate(() => document.documentElement.scrollWidth - innerWidth)) <= 0);
+      assert.ok(turnstileRequests.length >= 1);
     });
   });
 
