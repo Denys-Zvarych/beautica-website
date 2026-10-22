@@ -1,5 +1,5 @@
 // Entry for the booking-link pages. Everything is lazy: a page without the matching markup loads nothing extra, and the booking island
-// (calendar, slots, OTP ... about 25 KB) is fetched when the visitor shows intent (touch / hover / focus on the button) or taps it.
+// (calendar, slots, OTP ... about 13 KB gz, 25 KB raw) is fetched when the visitor shows intent (touch / hover / focus on the button) or taps it.
 import { track } from "../track";
 import { hydrateIcons } from "./icons";
 

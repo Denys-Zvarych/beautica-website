@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Lighthouse (mobile, simulated throttling) on the SSR link pages: wrangler dev on the built site + the mock backend, 3 runs per URL,
-// Photos (media.beautica.test) are blocked: the mock origin does not resolve, and a failing DNS lookup would be measured as page weight. Recheck
+// Image LCP is OUT OF SCOPE here: photos (media.beautica.test) are blocked: the mock origin does not resolve, and a failing DNS lookup would be measured as page weight. Recheck
 // the real LCP with prod photos (R2 offers no resize: dimensions are explicit, decoding async, below-fold images lazy).
 // median LCP / TBT / CLS and total JS transfer. Fails when a budget is broken:  LCP < 2400 ms (target 2000), TBT < 50 ms, CLS < 0.02, JS <= 20480 B.
 //

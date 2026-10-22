@@ -63,7 +63,7 @@ describe("first load", () => {
     try {
       const { page } = env;
       const html = await (await page.request.get(`${BASE}/book/oksana-ab12`)).text();
-      assert.equal(/--src: url\(|star\.svg/.test(html), false, "no icon image is referenced by the server HTML (the URLs wait in data-src)");
+      assert.equal(/--src: url\(|star\.svg/.test(html.replace(/<noscript>[\s\S]*?<\/noscript>/g, "")), false, "no icon image is referenced by the server HTML (the URLs wait in data-src)");
       await page.waitForLoadState("networkidle");
       await page.getByRole("tab", { name: "Послуги" }).click();
       await page.waitForFunction(() => document.querySelector(".ai[data-src][data-ready]"));
@@ -143,5 +143,20 @@ describe("server", () => {
     const ghost = await rawRequest("/book/ghost-0405?sort=LOWEST");
     assert.equal(ghost.status, 404);
     assert.equal(ghost.headers["x-robots-tag"], "noindex, nofollow");
+  });
+});
+
+describe("no JavaScript", () => {
+  test("category icons are in the page for visitors without script (<noscript>); with script they come from data-src after load", async () => {
+    const env = await bookPage(browser, "oksana-ab12", { js: false });
+    try {
+      const icon = await env.page.locator("[data-panel='1'] .cat .ico .ai:not([data-src])").first().evaluate((e) => ({ mask: getComputedStyle(e).maskImage, vis: getComputedStyle(e).visibility, w: e.getBoundingClientRect().width }));
+      assert.match(icon.mask, /category_nail_service\.svg/);
+      assert.equal(icon.vis, "visible");
+      assert.ok(icon.w > 0);
+      assert.equal(await env.page.locator("[data-panel='1'] .ai[data-src]").first().evaluate((e) => getComputedStyle(e).visibility), "hidden", "the deferred copy stays hidden without script");
+    } finally {
+      await env.context.close();
+    }
   });
 });
