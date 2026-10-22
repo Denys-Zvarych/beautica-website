@@ -5,8 +5,8 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { ROOT } from "./helpers/env.mjs";
 import { isValidSlug } from "../src/lib/booking/slug.ts";
-import { parseMasterInfo, parseSalonInfo, safeImageUrl } from "../src/lib/booking/types.ts";
-import { formatPriceFrom, formatDuration, pluralServices, pluralReviews, formatRating, fitTitle, fitDescription, relativeUk } from "../src/lib/booking/format.ts";
+import { parseMasterInfo, parseSalonInfo, parseReviewsPage, safeImageUrl } from "../src/lib/booking/types.ts";
+import { groupByCategory, parseSort, streetLine, formatPriceFrom, formatDuration, pluralServices, pluralReviews, formatRating, fitTitle, fitDescription, relativeUk } from "../src/lib/booking/format.ts";
 import { upstreamTtl } from "../src/lib/booking/cache.ts";
 import { categoryIconUrl } from "../src/lib/categoryIcon.ts";
 import { PRIVACY_POLICY_VERSION } from "../src/config/legal.mjs";
@@ -114,4 +114,36 @@ describe("policy version", () => {
 
 describe("mock backend sanity", () => {
   test("fixture services have unique ids", () => assert.equal(new Set(SVC.map((s) => s.id)).size, SVC.length));
+});
+
+describe("parity data (backend 383-385)", () => {
+  test("rating distribution is always five rows 5 -> 1, zero-filled, whatever the API sent", () => {
+    const m = parseMasterInfo("x-1", { masterName: "A", masterId: "i", ratingDistribution: [{ rating: 3, count: 4 }, { rating: 9, count: 1 }, { rating: 5, count: "2" }] });
+    assert.deepEqual(m.ratingDistribution, [{ rating: 5, count: 2 }, { rating: 4, count: 0 }, { rating: 3, count: 4 }, { rating: 2, count: 0 }, { rating: 1, count: 0 }]);
+    assert.equal(parseMasterInfo("x-1", { masterName: "A", masterId: "i" }).ratingDistribution.length, 5);
+  });
+  test("services group by category key in the API's category order; unknown go last; empty groups vanish", () => {
+    const cats = [{ name: "Нігті", key: "NAIL" }, { name: "Брови", key: "BROWS" }, { name: "Порожня", key: "X" }];
+    const g = groupByCategory([{ n: 1, category: "BROWS" }, { n: 2, category: "NAIL" }, { n: 3, category: "NAIL" }, { n: 4, category: null }, { n: 5, category: "ZZZ" }], cats, "Інше");
+    assert.deepEqual(g.map((x) => [x.name, x.items.map((i) => i.n)]), [["Нігті", [2, 3]], ["Брови", [1]], ["Інше", [4, 5]]]);
+  });
+  test("address fields and the master's service category are parsed; salon extras too", () => {
+    const m = parseMasterInfo("x-1", { masterName: "A", masterId: "i", street: "вул. А", buildingNo: "5", locationNote: "поверх 2", services: [{ id: "s", name: "N", durationMinutes: 30, priceFrom: 1, category: "NAIL" }], categories: [{ id: "c", name: "Нігті", key: "NAIL" }] });
+    assert.deepEqual([m.street, m.buildingNo, m.locationNote, m.services[0].category, m.categories[0].key], ["вул. А", "5", "поверх 2", "NAIL", "NAIL"]);
+    const s = parseSalonInfo("s-1", { salonId: "i", name: "S", description: "d", locationNote: "n", portfolio: [{ url: "https://m/1.jpg" }, { url: "http://x" }], serviceCategories: [{ category: "BROWS", displayName: "Брови", count: 2, services: [{ id: "a", name: "A", baseDurationMinutes: 30, priceDisplay: "250 ₴" }] }, { category: "EMPTY", services: [] }], ratingDistribution: [], latestReviews: [{ id: "r", rating: 4, clientDisplayName: "К.", masterFirstName: "О", masterLastName: "К" }] });
+    assert.deepEqual([s.description, s.locationNote, s.portfolio.length, s.serviceCategories.length, s.serviceCategories[0].services[0].priceLabel, s.latestReviews[0].masterName], ["d", "n", 1, 1, "250 ₴", "О К"]);
+    assert.equal(s.ratingDistribution.length, 5);
+  });
+  test("a /reviews page is parsed; anything else is rejected", () => {
+    const p = parseReviewsPage({ success: true, data: [{ id: "r", rating: 5, clientDisplayName: "К." }], page: 1, size: 5, totalElements: 12, totalPages: 3 });
+    assert.deepEqual([p.items.length, p.page, p.totalPages, p.totalElements], [1, 1, 3, 12]);
+    assert.equal(parseReviewsPage({ success: false }), null);
+  });
+  test("sort parameter: only the four known values, default NEWEST; street line", () => {
+    assert.deepEqual(["OLDEST", "HIGHEST", "LOWEST", "NEWEST", "x", null, "oldest"].map(parseSort), ["OLDEST", "HIGHEST", "LOWEST", "NEWEST", "NEWEST", "NEWEST", "NEWEST"]);
+    assert.equal(streetLine("вул. Хрещатик", "22"), "вул. Хрещатик, 22");
+    assert.equal(streetLine("вул. Хрещатик", null), "вул. Хрещатик");
+    assert.equal(streetLine(null, "22"), "22");
+    assert.equal(streetLine(null, null), null);
+  });
 });

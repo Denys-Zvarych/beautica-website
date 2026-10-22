@@ -9,8 +9,9 @@ import SlotChip from "../SlotChip.astro";
 import BookTopBar from "./BookTopBar.astro";
 import MasterStrip from "./MasterStrip.astro";
 import ServiceTile from "./ServiceTile.astro";
+import CategoryGroup from "./CategoryGroup.astro";
 import { t } from "../../i18n/t";
-import { formatDuration, formatPriceFrom } from "../../lib/booking/format";
+import { formatDuration, formatPriceFrom, groupByCategory } from "../../lib/booking/format";
 import type { MasterInfo } from "../../lib/booking/types";
 
 interface Props {
@@ -25,9 +26,10 @@ const js = {
   wait: t("book.otp.wait", { sec: "{sec}" }),
   salonLabel: t("book.confirm.salon"), cityLabel: t("book.confirm.city"), dateLabel: t("book.confirm.date"), timeLabel: t("book.confirm.time"), servicesLabel: t("book.confirm.services"), totalLabel: t("book.confirm.total"),
   invalid: t("book.confirm.invalid"), limit: t("book.confirm.limit"), unavailable: t("book.confirm.unavailable", { email: "{email}" }), error: t("book.confirm.error"), supportEmail: t("site.supportEmail"),
-  calendar: t("book.done.calendar"), icsSummary: t("book.ics.summary", { master: "{master}" }), icsDescription: t("book.ics.description", { services: "{services}" }),
+  calendar: t("book.done.calendar"), counter: t("book.confirm.counter", { n: "{n}", max: 1000 }), addressLabel: t("book.confirm.address"), commentRow: t("book.confirm.commentRow"), icsSummary: t("book.ics.summary", { master: "{master}" }), icsDescription: t("book.ics.description", { services: "{services}" }),
 };
 const jsJson = JSON.stringify(js).replace(/</g, "\\u003c");
+const groups = groupByCategory(info.services, info.categories, t("book.master.otherServices"));
 const strip = { name: info.masterName, subtitle: info.professionalTitle, avatarUrl: info.avatarUrl, rating: info.avgRating, reviewCount: info.reviewCount };
 ---
 
@@ -39,8 +41,14 @@ const strip = { name: info.masterName, subtitle: info.professionalTitle, avatarU
       <div class="g-lg"></div>
       <MasterStrip {...strip} />
       <div class="g-xl"></div>
-      <div class="list-sm" id="svc-list">
-        {info.services.map((s) => <ServiceTile selectable id={s.id} name={s.name} minutes={s.durationMinutes} priceFrom={s.priceFrom} price={formatPriceFrom(s.priceFrom)} duration={formatDuration(s.durationMinutes)} />)}
+      <div id="svc-list">
+        {
+          groups.map((g) => (
+            <CategoryGroup name={g.name} categoryKey={g.key || null} count={g.items.length} selectable>
+              {g.items.map((s) => <ServiceTile selectable id={s.id} name={s.name} minutes={s.durationMinutes} priceFrom={s.priceFrom} price={formatPriceFrom(s.priceFrom)} duration={formatDuration(s.durationMinutes)} />)}
+            </CategoryGroup>
+          ))
+        }
       </div>
       <div class="g-xxl"></div>
     </div>
@@ -178,6 +186,12 @@ const strip = { name: info.masterName, subtitle: info.professionalTitle, avatarU
       <MasterStrip {...strip} />
       <div class="g-md"></div>
       <NeuCard pad="md"><div id="confirm-card"></div></NeuCard>
+      <div class="g-md"></div>
+      <div>
+        <label class="t-label block-label" for="comment">{t("book.confirm.commentLabel")}</label>
+        <div class="field"><div class="box ta"><textarea id="comment" name="comment" rows="3" maxlength="1000" placeholder={t("book.confirm.commentPh")}></textarea></div></div>
+        <div class="counter t-fb muted" id="counter" aria-hidden="true">{t("book.confirm.counter", { n: 0, max: 1000 })}</div>
+      </div>
       <div class="errcard mt-md" role="alert" id="submit-error" hidden><Icon name="error-outline" /><span class="t-fb err" id="submit-error-text"></span></div>
     </div>
   </div>

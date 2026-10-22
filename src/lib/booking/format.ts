@@ -72,3 +72,33 @@ export function fitDescription(text: string, max: number): string {
   const cut = text.slice(0, max - 1).replace(/[\s,;:]+\S*$/, "");
   return `${cut}…`;
 }
+
+export interface ServiceGroup<T> {
+  key: string;
+  name: string;
+  items: T[];
+}
+
+/** Groups services by `category` in the order of `categories` (the API's order); a service whose category is unknown goes last, unnamed key "". */
+export function groupByCategory<T extends { category: string | null }>(items: T[], categories: { name: string; key: string | null }[], fallbackName: string): ServiceGroup<T>[] {
+  const groups: ServiceGroup<T>[] = categories.map((c) => ({ key: c.key ?? c.name, name: c.name, items: [] }));
+  const rest: T[] = [];
+  for (const it of items) {
+    const g = groups.find((x, i) => categories[i]!.key !== null && categories[i]!.key === it.category);
+    if (g) g.items.push(it);
+    else rest.push(it);
+  }
+  const out = groups.filter((g) => g.items.length > 0);
+  if (rest.length) out.push({ key: "", name: fallbackName, items: rest });
+  return out;
+}
+
+export type ReviewSort = "NEWEST" | "OLDEST" | "HIGHEST" | "LOWEST";
+export const REVIEW_SORTS: ReviewSort[] = ["NEWEST", "OLDEST", "HIGHEST", "LOWEST"];
+export const parseSort = (v: string | null): ReviewSort => (REVIEW_SORTS as string[]).includes(v ?? "") ? (v as ReviewSort) : "NEWEST";
+
+/** Street line as the app builds it: "вул. Хрещатик, 22" (building omitted when absent). */
+export function streetLine(street: string | null, building: string | null): string | null {
+  const s = [street, building].filter(Boolean).join(", ");
+  return s || null;
+}

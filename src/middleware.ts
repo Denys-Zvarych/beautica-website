@@ -49,7 +49,10 @@ async function guard(ctx: Parameters<Parameters<typeof defineMiddleware>[0]>[0],
 async function cachedLinkPage(ctx: Parameters<Parameters<typeof defineMiddleware>[0]>[0], next: Parameters<Parameters<typeof defineMiddleware>[0]>[1]) {
   const cache = (globalThis as unknown as { caches?: { default?: Cache } }).caches?.default;
   const url = new URL(ctx.request.url);
-  const key = new Request(`${url.origin}${url.pathname}`, { method: "GET" });
+  // Key = path + the review sort (the only query that changes the page); UTM and the rest share one entry.
+  const sort = url.searchParams.get("sort");
+  const sortKey = sort && ["NEWEST", "OLDEST", "HIGHEST", "LOWEST"].includes(sort) && sort !== "NEWEST" ? `?sort=${sort}` : "";
+  const key = new Request(`${url.origin}${url.pathname}${sortKey}`, { method: "GET" });
   if (cache) {
     const hit = await cache.match(key);
     if (hit) {

@@ -3,16 +3,22 @@
 // master's own link page (the booking flow starts there). The public salon info carries no description, portfolio, services or
 // reviews, so those tabs of the app screen are not rendered (backend gap, reported).
 import NeuCard from "../NeuCard.astro";
+import CategoryGroup from "./CategoryGroup.astro";
+import ReviewsSection from "./ReviewsSection.astro";
+import ServiceTile from "./ServiceTile.astro";
 import CtaButton from "../CtaButton.astro";
 import Icon from "../Icon.astro";
 import { t } from "../../i18n/t";
-import { formatRating, pluralReviews } from "../../lib/booking/format";
-import type { SalonInfo } from "../../lib/booking/types";
+import { formatDuration, formatRating, pluralReviews, type ReviewSort } from "../../lib/booking/format";
+import type { ReviewItem, SalonInfo } from "../../lib/booking/types";
 
 interface Props {
   info: SalonInfo;
+  apiOrigin: string;
+  sort: ReviewSort;
+  reviews: ReviewItem[];
 }
-const { info } = Astro.props;
+const { info, apiOrigin, sort, reviews } = Astro.props;
 const FIRST = 6;
 const first = info.masters.slice(0, FIRST);
 const rest = info.masters.slice(FIRST);
@@ -58,39 +64,89 @@ const monogram = Array.from(info.name.replace(/^[^\p{L}\p{N}]+/u, ""))[0]?.toUpp
     </NeuCard>
   </div>
   <div class="g-lg"></div>
-  <div class="pad-h" id="masters">
-    <h2 class="t-section sect-label">{t("book.salon.mastersLabel")}</h2>
-    <div class="mgrid">
+  <div class="pad-h">
+    <nav class="tabs" data-tabs aria-label={t("book.salon.tabsLabel")}>
       {
-        first.map((m) => (
-          <a class="mcard" href={`/book/${m.masterSlug}`}>
-            <span class={`mav ${avatarClass(m.name)}`}>{m.avatarUrl ? <img src={m.avatarUrl} alt="" width="73" height="73" loading="lazy" decoding="async" referrerpolicy="no-referrer" /> : <Icon name="person" />}</span>
-            <span class="t-sub11 ellipsis">{m.name}</span>
-            {m.professionalTitle && <span class="role t-fb muted">{m.professionalTitle}</span>}
+        ["about", "masters", "services", "reviews"].map((k, i) => (
+          <a class="tab" href={`#panel-${i}`} data-tab={i} aria-current={i === 0 ? "true" : undefined}>
+            <span class="t-sub11 ellipsis">{t(`book.salon.tabs.${k}`)}</span>
+            <span class="bar"></span>
           </a>
         ))
       }
-    </div>
-    {
-      rest.length > 0 && (
-        <>
-          <div class="g-sm"></div>
-          <button type="button" class="showall js-only" id="showall" hidden><span class="t-link">{t("book.salon.showAll")}</span><Icon name="keyboard-arrow-down" /></button>
-          <div class="mgrid more" id="mrest" data-collapsible>
-            {rest.map((m) => (
-              <a class="mcard" href={`/book/${m.masterSlug}`}>
-                <span class={`mav ${avatarClass(m.name)}`}>{m.avatarUrl ? <img src={m.avatarUrl} alt="" width="73" height="73" loading="lazy" decoding="async" referrerpolicy="no-referrer" /> : <Icon name="person" />}</span>
-                <span class="t-sub11 ellipsis">{m.name}</span>
-                {m.professionalTitle && <span class="role t-fb muted">{m.professionalTitle}</span>}
-              </a>
-            ))}
+    </nav>
+  </div>
+  <div class="g-lg"></div>
+  <div class="pad-h" data-panels>
+    <div class="tabpanel" id="panel-0" data-panel="0">
+      <h2 class="sr-only">{t("book.salon.aboutLabel")}</h2>
+      {info.description ? <p class="t-strong bio-text">{info.description}</p> : <p class="t-fb muted muted-note">{t("book.salon.noAbout")}</p>}
+      {info.locationNote && <p class="t-fb muted addr-note-row">{info.locationNote}</p>}
+      {
+        info.portfolio.length > 0 && (
+          <div class="sect">
+            <h3 class="t-section sect-label">{t("book.salon.portfolio")}</h3>
+            <div class="rail">
+              {info.portfolio.map((src, i) => (
+                <span class="ptile"><img src={src} alt={t("book.salon.photoAlt", { n: i + 1 })} width="72" height="72" loading="lazy" decoding="async" referrerpolicy="no-referrer" /></span>
+              ))}
+            </div>
           </div>
-        </>
-      )
-    }
+        )
+      }
+    </div>
+
+    <div class="tabpanel" id="panel-1" data-panel="1">
+      <h2 class="sr-only">{t("book.salon.mastersLabel")}</h2>
+      <div class="mgrid">
+        {
+          first.map((m) => (
+            <a class="mcard" href={`/book/${m.masterSlug}`}>
+              <span class={`mav ${avatarClass(m.name)}`}>{m.avatarUrl ? <img src={m.avatarUrl} alt="" width="73" height="73" loading="lazy" decoding="async" referrerpolicy="no-referrer" /> : <Icon name="person" />}</span>
+              <span class="t-sub11 ellipsis">{m.name}</span>
+              {m.professionalTitle && <span class="role t-fb muted">{m.professionalTitle}</span>}
+            </a>
+          ))
+        }
+      </div>
+      {
+        rest.length > 0 && (
+          <>
+            <div class="g-sm"></div>
+            <button type="button" class="showall js-only" id="showall" hidden><span class="t-link">{t("book.salon.showAll")}</span><Icon name="keyboard-arrow-down" /></button>
+            <div class="mgrid more" id="mrest" data-collapsible>
+              {rest.map((m) => (
+                <a class="mcard" href={`/book/${m.masterSlug}`}>
+                  <span class={`mav ${avatarClass(m.name)}`}>{m.avatarUrl ? <img src={m.avatarUrl} alt="" width="73" height="73" loading="lazy" decoding="async" referrerpolicy="no-referrer" /> : <Icon name="person" />}</span>
+                  <span class="t-sub11 ellipsis">{m.name}</span>
+                  {m.professionalTitle && <span class="role t-fb muted">{m.professionalTitle}</span>}
+                </a>
+              ))}
+            </div>
+          </>
+        )
+      }
+    </div>
+
+    <div class="tabpanel" id="panel-2" data-panel="2">
+      <h2 class="sr-only">{t("book.salon.servicesLabel")}</h2>
+      {info.serviceCategories.length === 0 && <p class="t-fb muted muted-note">{t("book.salon.noServices")}</p>}
+      {
+        info.serviceCategories.map((g, i) => (
+          <CategoryGroup name={g.displayName} categoryKey={g.category} count={g.count} open={i === 0}>
+            {g.services.map((sv) => <ServiceTile name={sv.name} price={sv.priceLabel} duration={formatDuration(sv.durationMinutes)} />)}
+          </CategoryGroup>
+        ))
+      }
+    </div>
+
+    <div class="tabpanel" id="panel-3" data-panel="3">
+      <h2 class="sr-only">{t("book.salon.reviewsLabel")}</h2>
+      <ReviewsSection kind="salon" slug={info.slug} apiOrigin={apiOrigin} avg={info.avgRating} count={info.reviewCount} buckets={info.ratingDistribution} reviews={reviews} sort={sort} anchor="panel-3" />
+    </div>
   </div>
   <div class="g-xxl"></div>
 </div>
 <div class="shelf salon">
-  <CtaButton href="#masters" icon="event-available">{t("book.salon.cta")}</CtaButton>
+  <CtaButton href="#panel-1" icon="event-available">{t("book.salon.cta")}</CtaButton>
 </div>

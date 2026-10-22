@@ -45,6 +45,14 @@ const rules: [RegExp[], string][] = [
   [[/депіляц|епіляц/], "hair_removal"],
 ];
 
+const KNOWN_KEYS = new Set(Object.values(exact));
+
+/** Prefer the category key (the app's slug stage), then the display name. */
+export function categoryIconFor(name: string, key?: string | null): string {
+  const k = key?.toLowerCase();
+  return k && KNOWN_KEYS.has(k) ? `/icons/category_${k}.svg` : categoryIconUrl(name);
+}
+
 export function categoryIconUrl(name: string): string {
   const lower = name.trim().toLowerCase();
   if (exact[lower]) return `/icons/category_${exact[lower]}.svg`;

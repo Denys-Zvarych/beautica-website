@@ -56,8 +56,8 @@ export function breadcrumbList(crumbs: Crumb[]): Record<string, unknown> {
 // ---- Booking-link pages (phases 008/009). Ratings and reviews only when they are visibly rendered on the page. ----
 export interface ProfileOffer {
   name: string;
-  /** "From" price in UAH. */
-  priceFrom: number;
+  /** "From" price in UAH; absent when the page only knows a display string. */
+  priceFrom?: number;
 }
 export interface ProfileReview {
   author: string;
@@ -108,7 +108,7 @@ export function profileBusiness(p: ProfileInput): Record<string, unknown> {
           makesOffer: p.offers.map((o) => ({
             "@type": "Offer",
             itemOffered: { "@type": "Service", name: o.name },
-            priceSpecification: { "@type": "PriceSpecification", minPrice: o.priceFrom, priceCurrency: "UAH" },
+            ...(o.priceFrom !== undefined ? { priceSpecification: { "@type": "PriceSpecification", minPrice: o.priceFrom, priceCurrency: "UAH" } } : {}),
           })),
         }
       : {}),

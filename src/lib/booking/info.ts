@@ -1,6 +1,6 @@
 // Server-side loaders for GET /api/v1/book/{slug}/info and /book/s/{slug}/info (backend phases 377/380).
 // Sends the optional Worker key + the visitor IP so the backend's per-IP limit keys on the real visitor, never the Worker.
-import { parseMasterInfo, parseSalonInfo, type MasterInfo, type SalonInfo } from "./types";
+import { parseMasterInfo, parseReviewsPage, parseSalonInfo, type MasterInfo, type ReviewItem, type SalonInfo } from "./types";
 import type { BookingConfig } from "./config";
 import { upstreamTtl } from "./cache";
 
@@ -43,3 +43,9 @@ export const fetchMasterInfo = (cfg: BookingConfig, slug: string, ip?: string): 
 
 export const fetchSalonInfo = (cfg: BookingConfig, slug: string, ip?: string): Promise<InfoResult<SalonInfo>> =>
   get(cfg, `/api/v1/book/s/${slug}/info`, ip, (raw) => parseSalonInfo(slug, raw));
+
+/** Page 0 (5 reviews) of GET /book/{slug}/reviews or /book/s/{slug}/reviews: the first view of a non-default sort (the ?sort= link without script). */
+export async function fetchReviewsFirstPage(cfg: BookingConfig, kind: "master" | "salon", slug: string, sort: string, ip?: string): Promise<ReviewItem[] | null> {
+  const r = await get(cfg, `/api/v1/book/${kind === "salon" ? "s/" : ""}${slug}/reviews?sort=${encodeURIComponent(sort)}&page=0&size=5`, ip, parseReviewsPage);
+  return r.kind === "ok" ? r.data.items : null;
+}

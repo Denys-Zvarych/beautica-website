@@ -25,6 +25,14 @@ export function initTabs(): void {
     });
   });
   panels.forEach((p) => p.setAttribute("role", "tabpanel"));
+  // Other in-page links to a panel (the salon's «Записатись на послугу» opens the masters tab).
+  document.querySelectorAll<HTMLAnchorElement>('a[href^="#panel-"]:not([data-tab])').forEach((a) =>
+    a.addEventListener("click", (e) => {
+      e.preventDefault();
+      select(Number(a.getAttribute("href")!.slice(7)), true);
+      window.scrollTo({ top: 0 });
+    }),
+  );
   select(0, false);
 }
 

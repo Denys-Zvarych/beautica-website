@@ -4,6 +4,8 @@
 //   master slugs   oksana-ab12 (full)   sparse-0001 (no title/bio/photos/reviews)   closed-aaaa (bookable:false)   retired-bbbb (410)
 //                  down-cccc (503)   limited-dddd (429)   conflict-9999 (booking -> 409)   bookdown-7777 (booking -> 503)
 //                  expired-6666 (booking -> 401)   cache-4444 / headers-3333 / rail-8888 (a slug of their own for the cache / forwarded-header / 12-photo rail tests)   salonmaster-5555 (belongs to salon lavanda-1111)   anything else = 404
+//   reviews        GET /book/{slug}/reviews and /book/s/{slug}/reviews: 12 fixed reviews, ?sort= (bad sort 400), page, size <= 20
+//   booking        clientComment > 1000 chars or with control characters -> 400
 //   salon slugs    lavanda-1111 (8 masters)   salonhdr-4444 (same, for the forwarded-header test)   shut-2222 (bookable:false)   anything else = 404
 //   phone          ...0503 -> 503, ...0429 -> 429, ...0400 -> 400 "Verification failed"; anything else sends.   code 000000 = wrong, else ok
 //   GET /__mock/log -> every request seen (method, path, headers, body), newest last.   POST /__mock/reset clears it.
@@ -11,11 +13,34 @@ import { createServer } from "node:http";
 
 export const MASTER_ID = "5b6a7c8d-1111-4222-8333-944455556666";
 export const SVC = [
-  { id: "11111111-1111-4111-8111-111111111111", name: "Манікюр класичний", durationMinutes: 60, priceFrom: 450 },
-  { id: "22222222-2222-4222-8222-222222222222", name: "Манікюр+гель лак", durationMinutes: 90, priceFrom: 650 },
-  { id: "33333333-3333-4333-8333-333333333333", name: "Педикюр апаратний", durationMinutes: 90, priceFrom: 800 },
-  { id: "44444444-4444-4444-8444-444444444444", name: "Корекція брів", durationMinutes: 30, priceFrom: 250 },
+  { id: "11111111-1111-4111-8111-111111111111", name: "Манікюр класичний", durationMinutes: 60, priceFrom: 450, category: "NAIL_SERVICE" },
+  { id: "22222222-2222-4222-8222-222222222222", name: "Манікюр+гель лак", durationMinutes: 90, priceFrom: 650, category: "NAIL_SERVICE" },
+  { id: "33333333-3333-4333-8333-333333333333", name: "Педикюр апаратний", durationMinutes: 90, priceFrom: 800, category: "PODOLOGY" },
+  { id: "44444444-4444-4444-8444-444444444444", name: "Корекція брів", durationMinutes: 30, priceFrom: 250, category: "BROWS" },
 ];
+const CATS = [
+  { id: "c1", name: "Нігтьовий сервіс", key: "NAIL_SERVICE" },
+  { id: "c2", name: "Подологія", key: "PODOLOGY" },
+  { id: "c3", name: "Оформлення брів", key: "BROWS" },
+];
+/** 110 + 14 + 3 + 1 + 0 = 128 reviews, as the design's example. */
+export const DIST = [5, 4, 3, 2, 1].map((rating, i) => ({ rating, count: [110, 14, 3, 1, 0][i] }));
+const ALL_REVIEWS = Array.from({ length: 12 }, (_, i) => ({
+  id: `00000000-0000-4000-8000-0000000001${String(i).padStart(2, "0")}`,
+  masterId: MASTER_ID,
+  clientDisplayName: `Клієнт${i} К.`,
+  serviceName: SVC[i % 4].name,
+  rating: [5, 4, 5, 3, 5, 1, 2, 5, 4, 5, 3, 4][i],
+  comment: `Відгук номер ${i}`,
+  createdAt: new Date(Date.now() - (i + 1) * 2 * 86400000).toISOString(),
+}));
+/** The page of reviews for a sort (the backend's SalonReviewSort): NEWEST/OLDEST by time, HIGHEST/LOWEST by rating then time. */
+function reviewsPage(all, sort, page, size) {
+  const byTime = (a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt);
+  const sorted = [...all].sort(sort === "OLDEST" ? (a, b) => -byTime(a, b) : sort === "HIGHEST" ? (a, b) => b.rating - a.rating || byTime(a, b) : sort === "LOWEST" ? (a, b) => a.rating - b.rating || byTime(a, b) : byTime);
+  const s = Math.min(size, 20);
+  return { success: true, data: sorted.slice(page * s, page * s + s), message: null, page, size: s, totalElements: all.length, totalPages: Math.ceil(all.length / s) };
+}
 export const CANCEL_URL = "https://beautica.app/book/cancel/123e4567-e89b-42d3-a456-426614174000";
 export const MEDIA = "https://media.beautica.test";
 export const GUEST_TOKEN = "guest-token-ok";
@@ -43,10 +68,11 @@ const masterInfo = (over = {}) => ({
   salon: null,
   avgRating: 4.9,
   reviewCount: 128,
-  categories: [
-    { id: "c1", name: "Нігтьовий сервіс" },
-    { id: "c2", name: "Подологія" },
-  ],
+  categories: CATS,
+  ratingDistribution: DIST,
+  street: "вул. Хрещатик",
+  buildingNo: "22",
+  locationNote: "2 поверх, офіс 5",
   portfolio: [1, 2, 3].map((n) => ({ id: `p${n}`, entityType: "MASTER", entityId: MASTER_ID, mediaType: "PORTFOLIO", url: `${MEDIA}/p${n}.jpg`, createdAt: "2026-10-01T10:00:00Z" })),
   latestReviews: [
     review(1, "Марина К.", 5, "Дуже акуратна робота, покриття тримається вже третій тиждень.", "Манікюр+гель лак", 3),
@@ -60,7 +86,7 @@ const masterInfo = (over = {}) => ({
 
 const MASTERS = {
   "oksana-ab12": () => masterInfo(),
-  "sparse-0001": () => masterInfo({ masterName: "Нова Майстриня", avatarUrl: null, bio: null, professionalTitle: null, city: null, region: null, avgRating: null, reviewCount: 0, categories: [], portfolio: [], latestReviews: [] }),
+  "sparse-0001": () => masterInfo({ masterName: "Нова Майстриня", avatarUrl: null, bio: null, professionalTitle: null, city: null, region: null, avgRating: null, reviewCount: 0, categories: [], ratingDistribution: DIST.map((b) => ({ ...b, count: 0 })), street: null, buildingNo: null, locationNote: null, portfolio: [], latestReviews: [] }),
   "closed-aaaa": () => masterInfo({ bookable: false }),
   "conflict-9999": () => masterInfo(),
   "bookdown-7777": () => masterInfo(),
@@ -68,7 +94,7 @@ const MASTERS = {
   "cache-4444": () => masterInfo(),
   "rail-8888": () => masterInfo({ portfolio: Array.from({ length: 12 }, (_, i) => ({ id: `p${i}`, entityType: "MASTER", entityId: MASTER_ID, mediaType: "PORTFOLIO", url: `${MEDIA}/p${i}.jpg`, createdAt: "2026-10-01T10:00:00Z" })) }),
   "headers-3333": () => masterInfo(),
-  "salonmaster-5555": () => masterInfo({ masterName: "Дарина Мельник", salon: { name: "Салон «Лаванда»", bookingSlug: "lavanda-1111" } }),
+  "salonmaster-5555": () => masterInfo({ masterName: "Дарина Мельник", street: null, buildingNo: null, locationNote: null, salon: { name: "Салон «Лаванда»", bookingSlug: "lavanda-1111" } }),
 };
 
 const salonInfo = (over = {}) => ({
@@ -85,6 +111,15 @@ const salonInfo = (over = {}) => ({
   street: "вул. Хрещатик",
   buildingNo: "22",
   updatedAt: "2026-10-20T10:00:00Z",
+  description: "Світлий салон у центрі Києва: манікюр, педикюр, брови.\nПрацюємо щодня.",
+  locationNote: "Вхід з двору, 2 поверх",
+  portfolio: [1, 2, 3, 4].map((n) => ({ id: `sp${n}`, entityType: "SALON", entityId: "7a7a7a7a-1111-4222-8333-944455556666", mediaType: "PORTFOLIO", url: `${MEDIA}/s${n}.jpg`, createdAt: "2026-10-01T10:00:00Z" })),
+  serviceCategories: [
+    { category: "NAIL_SERVICE", displayName: "Нігтьовий сервіс", count: 2, services: [{ id: "s1", name: "Манікюр класичний", baseDurationMinutes: 60, priceDisplay: "450 ₴" }, { id: "s2", name: "Манікюр+гель лак", baseDurationMinutes: 90, priceDisplay: "650 ₴" }] },
+    { category: "BROWS", displayName: "Оформлення брів", count: 1, services: [{ id: "s3", name: "Корекція брів", baseDurationMinutes: 30, priceDisplay: "600 - 900 ₴" }] },
+  ],
+  ratingDistribution: [5, 4, 3, 2, 1].map((rating, i) => ({ rating, count: [270, 30, 8, 3, 1][i] })),
+  latestReviews: ALL_REVIEWS.slice(0, 5).map((r) => ({ ...r, masterFirstName: "Оксана", masterLastName: "Коваленко" })),
   ...over,
 });
 const SALONS = { "lavanda-1111": () => salonInfo(), "salonhdr-4444": () => salonInfo(), "shut-2222": () => salonInfo({ bookable: false, masters: [] }) };
@@ -151,6 +186,15 @@ export async function startMockApi() {
       const f = MASTERS[slug];
       return f ? json(res, 200, f(), { "cache-control": "public, max-age=0, s-maxage=30", etag: 'W/"m1"' }) : err(res, 404, "Not found");
     }
+    if ((m = /^\/api\/v1\/book\/(s\/)?([a-z0-9-]+)\/reviews$/.exec(path))) {
+      const salon = !!m[1];
+      if (!(salon ? SALONS : MASTERS)[m[2]]) return err(res, 404, "Not found");
+      const sort = url.searchParams.get("sort") ?? "NEWEST";
+      if (!["NEWEST", "OLDEST", "HIGHEST", "LOWEST"].includes(sort)) return err(res, 400, "Invalid sort");
+      const page = Number(url.searchParams.get("page") ?? 0);
+      const size = Number(url.searchParams.get("size") ?? 20);
+      return json(res, 200, reviewsPage(ALL_REVIEWS, sort, page, size), { "cache-control": "public, max-age=0, s-maxage=30", etag: 'W/"r1"' });
+    }
     if ((m = /^\/api\/v1\/book\/([a-z0-9-]+)\/availability$/.exec(path))) {
       if (!MASTERS[m[1]]) return err(res, 404, "Not found");
       const date = url.searchParams.get("date");
@@ -182,6 +226,7 @@ export async function startMockApi() {
       const b = body ?? {};
       const ids = b.masterServiceIds ?? (b.serviceId ? [b.serviceId] : []);
       if (b.privacyAccepted !== true || !b.privacyPolicyVersion || !b.name || !b.surname || !b.startsAt || ids.length === 0 || (b.serviceId && b.masterServiceIds)) return err(res, 400, "Validation failed");
+      if (b.clientComment !== undefined && (typeof b.clientComment !== "string" || b.clientComment.length > 1000 || /[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/.test(b.clientComment))) return err(res, 400, "Comment must be at most 1000 characters");
       if (slug === "conflict-9999") return err(res, 409, "Slot not available");
       if (slug === "bookdown-7777") return err(res, 503, "Service unavailable");
       const names = ids.map((id) => SVC.find((s) => s.id === id)?.name).filter(Boolean);

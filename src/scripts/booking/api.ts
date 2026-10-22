@@ -20,6 +20,8 @@ export interface BookingRequest {
   name: string;
   surname: string;
   policyVersion: string;
+  /** Optional note for the master (backend phase 385: at most 1000 chars). Omitted when blank. */
+  clientComment?: string;
 }
 
 const TIMEOUT_MS = 15000;
@@ -80,7 +82,7 @@ export function verifyOtp(api: string, phone: string, code: string): Promise<Res
 
 export function createBooking(api: string, slug: string, guestToken: string, b: BookingRequest): Promise<Result<BookingCreated>> {
   const ids = b.serviceIds.length === 1 ? { serviceId: b.serviceIds[0] } : { masterServiceIds: b.serviceIds };
-  const body = { ...ids, startsAt: b.startsAt, name: b.name, surname: b.surname, privacyAccepted: true, privacyPolicyVersion: b.policyVersion };
+  const body = { ...ids, startsAt: b.startsAt, name: b.name, surname: b.surname, privacyAccepted: true, privacyPolicyVersion: b.policyVersion, ...(b.clientComment ? { clientComment: b.clientComment } : {}) };
   return call(`${api}/api/v1/book/${slug}/booking`, post(body, guestToken), (j) => {
     const o = obj(j);
     return typeof o.startsAt === "string"

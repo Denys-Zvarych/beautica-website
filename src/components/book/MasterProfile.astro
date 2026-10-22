@@ -7,21 +7,25 @@ import CtaButton from "../CtaButton.astro";
 import Icon from "../Icon.astro";
 import BookTopBar from "./BookTopBar.astro";
 import ServiceTile from "./ServiceTile.astro";
-import Stars from "./Stars.astro";
+import CategoryGroup from "./CategoryGroup.astro";
+import ReviewsSection from "./ReviewsSection.astro";
 import { t } from "../../i18n/t";
-import { categoryIconUrl } from "../../lib/categoryIcon";
-import { formatDuration, formatPriceFrom, formatRating, pluralReviews, relativeUk } from "../../lib/booking/format";
-import type { MasterInfo } from "../../lib/booking/types";
+import { formatDuration, formatPriceFrom, formatRating, groupByCategory, streetLine, type ReviewSort } from "../../lib/booking/format";
+import type { MasterInfo, ReviewItem } from "../../lib/booking/types";
 
 interface Props {
   info: MasterInfo;
   backHref: string;
+  apiOrigin: string;
+  sort: ReviewSort;
+  /** The reviews of the first view (latestReviews, or page 0 of the chosen sort). */
+  reviews: ReviewItem[];
 }
-const { info, backHref } = Astro.props;
-const location = info.city ?? info.region;
+const { info, backHref, apiOrigin, sort, reviews } = Astro.props;
+// Independent masters have a street (the app's rule): "Київ, вул. Хрещатик, 22", else the city only.
+const location = [info.city ?? info.region, streetLine(info.street, info.buildingNo)].filter(Boolean).join(", ") || null;
+const groups = groupByCategory(info.services, info.categories, t("book.master.otherServices"));
 const cut = info.avgRating === null ? 100 : Math.max(0, Math.min(100, (1 - info.avgRating / 5) * 100));
-const avatarClass = (name: string) => `av-${(Array.from(name).reduce((a, c) => a + c.codePointAt(0)!, 0) % 6) + 1}`;
-const now = new Date();
 const canBook = info.bookable && info.services.length > 0;
 ---
 
@@ -52,6 +56,7 @@ const canBook = info.bookable && info.services.length > 0;
                 <>
                   <div class="g-xs"></div>
                   <span class="meta-line"><Icon name="location-on" /><span class="t-fb muted">{location}</span></span>
+                  {info.locationNote && <span class="t-fb muted addr-note">{info.locationNote}</span>}
                 </>
               )
             }
@@ -124,54 +129,17 @@ const canBook = info.bookable && info.services.length > 0;
         <div class="tabpanel" id="panel-1" data-panel="1">
           <h2 class="sr-only">{t("book.master.servicesLabel")}</h2>
           {
-            info.categories.length > 0 && (
-              <div class="cat-list svc-block">
-                {info.categories.map((c) => (
-                  <div class="cat">
-                    <span class="ico"><span class="ai" aria-hidden="true" style={`--src: url(${categoryIconUrl(c.name)})`}></span></span>
-                    <span class="lbl t-sub13 ellipsis">{c.name}</span>
-                  </div>
-                ))}
-              </div>
-            )
+            groups.map((g) => (
+              <CategoryGroup name={g.name} categoryKey={g.key || null} count={g.items.length}>
+                {g.items.map((sv) => <ServiceTile name={sv.name} price={formatPriceFrom(sv.priceFrom)} duration={formatDuration(sv.durationMinutes)} />)}
+              </CategoryGroup>
+            ))
           }
-          <div class="list-sm svc-block">
-            {info.services.map((s) => <ServiceTile name={s.name} price={formatPriceFrom(s.priceFrom)} duration={formatDuration(s.durationMinutes)} />)}
-          </div>
         </div>
 
         <div class="tabpanel" id="panel-2" data-panel="2">
           <h2 class="sr-only">{t("book.master.reviewsLabel")}</h2>
-          <NeuCard class="rsum">
-            <div class="left">
-              <span class="t-avg">{formatRating(info.avgRating)}</span>
-              {info.reviewCount > 0 && <Stars rating={info.avgRating ?? 0} label={t("book.master.ratingOf", { rating: formatRating(info.avgRating) })} big />}
-              <span class="t-fb muted">{pluralReviews(info.reviewCount)}</span>
-            </div>
-          </NeuCard>
-          {
-            info.latestReviews.length === 0 ? (
-              <p class="t-fb muted centered pad-v">{t("book.master.noReviews")}</p>
-            ) : (
-              <>
-                <div class="g-md"></div>
-                <div class="list-md">
-                  {info.latestReviews.map((r) => (
-                    <NeuCard as="article" pad="md-plus" class="rev">
-                      <div class="head">
-                        <span class={`ravatar ${avatarClass(r.clientDisplayName)}`} aria-hidden="true"><Icon name="person" /></span>
-                        <span class="t-sub12 ellipsis">{r.clientDisplayName}</span>
-                        <span class="t-fb muted">{relativeUk(r.createdAt, now)}</span>
-                      </div>
-                      <Stars rating={r.rating} label={t("book.master.ratingOf", { rating: r.rating })} />
-                      {r.comment && <p class="t-strong body-text">{r.comment}</p>}
-                      {r.serviceName && <div class="svc"><Icon name="spa" /><span class="t-fb muted w600 ellipsis">{r.serviceName}</span></div>}
-                    </NeuCard>
-                  ))}
-                </div>
-              </>
-            )
-          }
+          <ReviewsSection kind="master" slug={info.slug} apiOrigin={apiOrigin} avg={info.avgRating} count={info.reviewCount} buckets={info.ratingDistribution} reviews={reviews} sort={sort} anchor="panel-2" />
         </div>
       </div>
     </div>

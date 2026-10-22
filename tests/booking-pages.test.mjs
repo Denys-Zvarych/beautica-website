@@ -6,6 +6,7 @@ import { rawRequest, requireBase, freshIp, BASE, MOCK_API } from "./helpers/env.
 import { launch } from "./helpers/browser.mjs";
 import { bookPage, mockLog, callsTo, shot } from "./helpers/book.mjs";
 import { visibleBox } from "./helpers/browser.mjs";
+const text = (loc) => loc.innerText().then((s) => s.replace(/\s+/g, " ").trim());
 
 requireBase();
 const decode = (s) => s.replace(/&#39;/g, "'").replace(/&amp;/g, "&").replace(/&quot;/g, '"');
@@ -222,7 +223,7 @@ describe("salon page", async () => {
     assert.equal(/Салон Салон/.test(meta(h, /<meta name="description" content="([^"]*)"/)), false);
     assert.ok(meta(h, /<meta name="description" content="([^"]*)"/).startsWith("Салон «Лаванда»:"));
   });
-  test("SEO: title, description, canonical, one H1, JSON-LD (no rating: no reviews are rendered)", () => {
+  test("SEO: title, description, canonical, one H1, JSON-LD", () => {
     assert.equal(meta(h, /<link rel="canonical" href="([^"]*)"/), "https://beautica.app/book/s/lavanda-1111");
     assert.equal(meta(h, /<meta name="robots" content="([^"]*)"/), "index, follow");
     assert.ok(meta(h, /<title>([^<]*)<\/title>/).length <= 60);
@@ -233,7 +234,7 @@ describe("salon page", async () => {
     assert.equal(biz["@type"], "HealthAndBeautyBusiness");
     assert.equal(biz.address.streetAddress, "вул. Хрещатик, 22");
     assert.equal(biz.address.addressLocality, "Київ");
-    assert.equal(biz.aggregateRating, undefined);
+    assert.equal(biz.aggregateRating.ratingValue, 4.8);
   });
   test("every bookable master is a link to that master's page (all 8 are in the HTML; none is client-rendered)", () => {
     const links = [...h.matchAll(/<a class="mcard[^"]*" href="(\/book\/[^"]+)"/g)].map((m) => m[1]);
@@ -317,7 +318,7 @@ describe("rendering at 360 / 768 / 1280", () => {
   const ROUTES = [
     { path: "/book/oksana-ab12", name: "master", boxes: [".avatar-well", ".stat", ".rolechip", ".shelf .cta", ".tab", ".bio", ".ptile"], h1: "Оксана Коваленко" },
     { path: "/book/sparse-0001", name: "master-sparse", boxes: [".avatar-well", ".stat", ".shelf .cta"], h1: "Нова Майстриня" },
-    { path: "/book/s/lavanda-1111", name: "salon", boxes: [".cover", ".hero-wrap", ".slogo", ".mcard", ".shelf .cta"], h1: "Салон «Лаванда»" },
+    { path: "/book/s/lavanda-1111", name: "salon", boxes: [".cover", ".hero-wrap", ".slogo", "[data-tabs]", ".bio-text", ".shelf .cta"], h1: "Салон «Лаванда»" },
     { path: "/book/closed-aaaa", name: "unbookable", boxes: [".notice"], h1: "Ця сторінка більше не працює" },
     { path: "/book/nobody-0000", name: "notfound", boxes: [".notice"], h1: "Сторінку не знайдено", status: 404 },
   ];
@@ -402,6 +403,7 @@ describe("rendering at 360 / 768 / 1280", () => {
     const env = await bookPage(browser, null, { path: "/book/s/lavanda-1111" });
     try {
       const { page } = env;
+      await page.getByRole("tab", { name: "Майстри" }).click();
       await page.waitForSelector("#showall:not([hidden])");
       assert.equal(await page.locator("#mrest").isVisible(), false);
       await page.click("#showall");
@@ -424,7 +426,7 @@ describe("rendering at 360 / 768 / 1280", () => {
         const visible = [...p.children].find((c) => c.getBoundingClientRect().height > 1);
         return visible.className;
       });
-      assert.match(first, /cat-list/, "the services panel opens with the category cards, not a heading");
+      assert.match(first, /cat-group/, "the services panel opens with the category accordions, not a heading");
       const gap = await page.evaluate(() => document.querySelector("[data-panel='1'] .cat").getBoundingClientRect().top - document.querySelector(".tabs").getBoundingClientRect().bottom);
       assert.ok(gap >= 20 && gap <= 30, `underline to first category card is ${gap}px (design 25)`);
       const bg = await page.locator("#book-cta").evaluate((b) => getComputedStyle(b).backgroundImage);
@@ -446,6 +448,7 @@ describe("rendering at 360 / 768 / 1280", () => {
   test("a master card of the salon opens that master's page (and the master page links back to the salon)", async () => {
     const env = await bookPage(browser, null, { path: "/book/s/lavanda-1111" });
     try {
+      await env.page.getByRole("tab", { name: "Майстри" }).click();
       await env.page.locator(".mcard").first().click();
       await env.page.waitForURL(`${BASE}/book/oksana-ab12`);
       assert.equal(await env.page.getByRole("heading", { level: 1 }).innerText(), "Оксана Коваленко");
@@ -458,5 +461,141 @@ describe("rendering at 360 / 768 / 1280", () => {
     } finally {
       await sm.context.close();
     }
+  });
+});
+
+describe("parity with the app (backend 383-385)", () => {
+  test("master: services are category accordions (API order) with count badges; the header shows street + note", async () => {
+    const env = await bookPage(browser, "oksana-ab12");
+    try {
+      const { page } = env;
+      const hero = (await text(page.locator(".hero-row"))).replace(/\s+/g, " ");
+      assert.ok(hero.includes("Київ, вул. Хрещатик, 22") && hero.includes("2 поверх, офіс 5"), hero);
+      await page.getByRole("tab", { name: "Послуги" }).click();
+      const groups = await page.locator("[data-panel='1'] [data-cat-group]").evaluateAll((gs) => gs.map((g) => ({ name: g.querySelector(".lbl").textContent.trim(), badge: g.querySelector(".badge:not(.sel)").textContent.trim(), tiles: g.querySelectorAll(".stile").length, open: g.open })));
+      assert.deepEqual(groups, [
+        { name: "Нігтьовий сервіс", badge: "2", tiles: 2, open: true },
+        { name: "Подологія", badge: "1", tiles: 1, open: true },
+        { name: "Оформлення брів", badge: "1", tiles: 1, open: true },
+      ]);
+      await page.locator("[data-panel='1'] summary").first().click();
+      assert.equal(await page.locator("[data-panel='1'] [data-cat-group]").first().evaluate((g) => g.open), false, "an accordion closes");
+      assert.ok(await page.locator("[data-panel='1'] [data-cat-group] .ai").first().evaluate((e) => getComputedStyle(e).maskImage.includes("category_nail_service.svg")), "icon follows the category key");
+    } finally {
+      await env.context.close();
+    }
+  });
+
+  test("master: JSON-LD carries the street; a master without an address has none", async () => {
+    const [biz] = ldBlocks((await get("/book/oksana-ab12")).body);
+    assert.equal(biz.address.streetAddress, "вул. Хрещатик, 22");
+    assert.equal(ldBlocks((await get("/book/salonmaster-5555")).body)[0].address.streetAddress, undefined, "salon masters have no street of their own");
+  });
+
+  test("reviews: distribution bars from the API (5 -> 1, zero-filled), widths = share of all reviews", async () => {
+    const env = await bookPage(browser, "oksana-ab12");
+    try {
+      const { page } = env;
+      await page.getByRole("tab", { name: "Відгуки" }).click();
+      const rows = await page.locator("[data-panel='2'] .drow").evaluateAll((rs) => rs.map((r) => [r.children[0].textContent.trim(), r.querySelector(".cnt").textContent.trim(), r.querySelector(".fillbar").style.width]));
+      assert.deepEqual(rows.map((r) => r.slice(0, 2)), [["5", "110"], ["4", "14"], ["3", "3"], ["2", "1"], ["1", "0"]]);
+      assert.equal(rows[0][2], "85.9%");
+      assert.equal(rows[4][2], "0%");
+      assert.ok(await visibleBox(page.locator("[data-panel='2'] .rsum .divider")));
+    } finally {
+      await env.context.close();
+    }
+  });
+
+  test("reviews without JS: the sort menu is ?sort= links; the server renders page 0 of that sort, cached separately from the default", async () => {
+    const def = await get("/book/oksana-ab12");
+    assert.ok(def.body.includes('href="?sort=LOWEST#panel-2"'));
+    const low = await get("/book/oksana-ab12?sort=LOWEST");
+    const text1 = strip(low.body);
+    assert.ok(text1.indexOf("Клієнт5 К.") > -1 && text1.indexOf("Клієнт5 К.") < text1.indexOf("Клієнт3 К."), "lowest rating first");
+    assert.equal(text1.includes("Марина К."), false, "the default view's reviews are not mixed in");
+    const again = await get("/book/oksana-ab12?sort=LOWEST&utm_source=x");
+    assert.equal(again.headers["x-beautica-cache"], "HIT");
+    assert.equal(strip(again.body), text1);
+    assert.equal(strip((await get("/book/oksana-ab12")).body).includes("Марина К."), true, "the default entry is untouched");
+    await fetch(`${MOCK_API}/__mock/reset`, { method: "POST" });
+    await get("/book/sparse-0001?sort=BOGUS");
+    assert.deepEqual(await mockLog((e) => e.path.includes("BOGUS")), [], "an unknown sort never reaches the backend");
+  });
+
+  test("reviews with JS: re-sort replaces the list from /reviews, «Показати ще» appends the next page, errors are shown", async () => {
+    const env = await bookPage(browser, "oksana-ab12");
+    try {
+      const { page } = env;
+      await page.getByRole("tab", { name: "Відгуки" }).click();
+      assert.equal(await page.locator("[data-review-list] article").count(), 3);
+      await page.locator("[data-sortmenu] summary").click();
+      await page.locator("[data-sort-option=HIGHEST]").click();
+      await page.waitForFunction(() => document.querySelectorAll("[data-review-list] article").length === 5);
+      assert.equal(await text(page.locator("[data-sort-label]")), "Найвищий рейтинг");
+      const first = await page.locator("[data-review-list] article").first().evaluate((a) => ({ name: a.querySelector(".t-sub12").textContent, on: a.querySelectorAll(".stars .on").length, svc: a.querySelector(".svc .t-fb").textContent }));
+      assert.equal(first.on, 5);
+      assert.ok(first.name.startsWith("Клієнт"));
+      const req = (await mockLog((e) => e.path.includes("/reviews?sort=HIGHEST"))).at(-1);
+      assert.equal(req.path, "/api/v1/book/oksana-ab12/reviews?sort=HIGHEST&page=0&size=5");
+      await page.click("[data-more]");
+      await page.waitForFunction(() => document.querySelectorAll("[data-review-list] article").length === 10);
+      await page.click("[data-more]");
+      await page.waitForFunction(() => document.querySelectorAll("[data-review-list] article").length === 12);
+      assert.equal(await page.locator("[data-more]").isVisible(), false, "no more pages");
+      const ratings = await page.locator("[data-review-list] article").evaluateAll((as) => as.map((a) => a.querySelectorAll(".stars .on").length));
+      assert.deepEqual(ratings, [...ratings].sort((a, b) => b - a), "highest first across pages");
+      await page.context().route(`${MOCK_API}/api/v1/book/oksana-ab12/reviews*`, (r) => r.fulfill({ status: 500, headers: { "access-control-allow-origin": "*" }, body: "" }));
+      await page.locator("[data-sortmenu] summary").click();
+      await page.locator("[data-sort-option=OLDEST]").click();
+      await page.waitForSelector("[data-rev-status]:not([hidden])");
+      assert.ok((await text(page.locator("[data-rev-status]"))).includes("Не вдалося завантажити відгуки"));
+    } finally {
+      await env.context.close();
+    }
+  });
+
+  test("backend contract of /reviews: a bad sort is 400, size is clamped to 20 (the mock mirrors the backend)", async () => {
+    assert.equal((await fetch(`${MOCK_API}/api/v1/book/oksana-ab12/reviews?sort=NOPE`)).status, 400);
+    const j = await (await fetch(`${MOCK_API}/api/v1/book/s/lavanda-1111/reviews?sort=NEWEST&size=99`)).json();
+    assert.equal(j.size, 20);
+    assert.equal(j.totalElements, 12);
+  });
+
+  test("salon: four tabs in the app's order, anchor links without JS, ARIA tabs with JS", async () => {
+    const html = (await get("/book/s/lavanda-1111")).body;
+    assert.deepEqual([...html.matchAll(/<a class="tab"[^>]*href="(#panel-\d)"/g)].map((m) => m[1]), ["#panel-0", "#panel-1", "#panel-2", "#panel-3"]);
+    const t = strip(html);
+    for (const s of ["Про салон", "Майстри", "Послуги", "Відгуки", "Світлий салон у центрі Києва", "Вхід з двору, 2 поверх", "Нігтьовий сервіс", "600 - 900 ₴", "Клієнт0 К.", "270"]) assert.ok(t.includes(s), s);
+    assert.equal(/role="tab"/.test(html), false);
+    const env = await bookPage(browser, null, { path: "/book/s/lavanda-1111" });
+    try {
+      const { page } = env;
+      await page.waitForSelector("[data-tabs][role=tablist]");
+      assert.deepEqual(await page.getByRole("tab").allInnerTexts(), ["Про салон", "Майстри", "Послуги", "Відгуки"]);
+      assert.equal(await page.locator("[data-panel='1']").isVisible(), false);
+      await page.locator(".shelf a.cta").click();
+      assert.equal(await page.locator("[data-panel='1']").isVisible(), true, "«Записатись на послугу» opens the masters tab");
+      await page.getByRole("tab", { name: "Послуги" }).click();
+      const open = await page.locator("[data-panel='2'] [data-cat-group]").evaluateAll((gs) => gs.map((g) => [g.querySelector(".lbl").textContent.trim(), g.querySelector(".badge:not(.sel)").textContent.trim(), g.open]));
+      assert.deepEqual(open, [["Нігтьовий сервіс", "2", true], ["Оформлення брів", "1", false]], "first group open, the rest collapsed, backend counts");
+      await page.getByRole("tab", { name: "Про салон" }).click();
+      assert.ok(await visibleBox(page.locator("[data-panel='0'] .rail")), "portfolio rail");
+      await page.getByRole("tab", { name: "Відгуки" }).click();
+      assert.equal(await page.locator("[data-panel='3'] .drow").count(), 5);
+      await page.locator("[data-sortmenu] summary").click();
+      await page.locator("[data-sort-option=LOWEST]").click();
+      await page.waitForFunction(() => document.querySelector("[data-review-list] article .stars .on")?.parentElement.querySelectorAll(".on").length === 1);
+      assert.ok((await mockLog((e) => e.path.includes("/s/lavanda-1111/reviews?sort=LOWEST"))).length >= 1);
+    } finally {
+      await env.context.close();
+    }
+  });
+
+  test("salon JSON-LD: rating and the rendered reviews are included now that the page renders them; offers come from the service groups", async () => {
+    const [biz] = ldBlocks((await get("/book/s/lavanda-1111")).body);
+    assert.equal(biz.aggregateRating.reviewCount, 312);
+    assert.equal(biz.review.length, 5);
+    assert.deepEqual(biz.makesOffer.map((o) => o.itemOffered.name), ["Манікюр класичний", "Манікюр+гель лак", "Корекція брів"]);
   });
 });

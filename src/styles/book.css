@@ -365,6 +365,52 @@ a.tab {
   margin-top: var(--vt-space-sm);
 }
 
+/* Category accordion (CatalogueCategoryCard + service tiles): <details>, so it works without script. */
+.cat-group + .cat-group {
+  margin-top: var(--vt-space-md);
+}
+.cat-group > summary {
+  list-style: none;
+  cursor: pointer;
+  min-height: var(--vt-touch-min);
+}
+.cat-group > summary::-webkit-details-marker {
+  display: none;
+}
+.cat-group .chev {
+  display: inline-flex;
+  color: var(--vt-color-accent);
+  --icon-size: var(--vt-app-icon-22);
+  --icon-gap: 0;
+  transition: transform var(--vt-dur-fast) var(--vt-ease);
+}
+.cat-group:not([open]) .chev {
+  transform: rotate(-90deg);
+}
+.acc-body {
+  padding-top: var(--vt-space-md);
+}
+.acc-body > * + * {
+  margin-top: var(--vt-space-md);
+}
+.badge {
+  display: inline-flex;
+  align-items: center;
+  padding: calc(var(--vt-space-xs) / 2) var(--vt-space-sm);
+  border-radius: var(--vt-radius-pill);
+  background: var(--vt-color-base);
+  box-shadow: var(--vt-shadow-extruded-small);
+  color: var(--vt-color-text-secondary);
+}
+.badge.sel {
+  padding: calc(var(--vt-space-xs) * 0.75) var(--vt-space-sm);
+  background: var(--vt-gradient-accent);
+  gap: calc(var(--vt-space-xs) * 0.75);
+  color: var(--vt-color-cream);
+  --icon-size: var(--vt-app-icon-12);
+  --icon-gap: 0;
+}
+
 /* ---------- CatalogueServiceTile ---------- */
 .stile {
   display: flex;
@@ -684,7 +730,7 @@ a.tab {
   flex-direction: column;
   align-items: center;
   gap: calc(var(--vt-space-xs) + var(--vt-space-xs) / 2);
-  flex: 1;
+  flex: none;
 }
 .stars {
   display: inline-flex;
@@ -1580,4 +1626,148 @@ a.tab {
   clip-path: inset(50%);
   white-space: nowrap;
   border: 0;
+}
+
+/* ---------- rating distribution (RatingSummaryCard) ---------- */
+.rsum .divider {
+  width: var(--vt-app-hair);
+  align-self: stretch;
+  background: var(--vt-color-faint);
+}
+.rsum .dist {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  gap: var(--vt-space-sm);
+}
+.drow {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--vt-space-xs) * 0.75);
+  color: var(--vt-color-accent);
+  --icon-size: var(--vt-app-icon-12);
+  --icon-gap: 0;
+}
+.drow .track {
+  flex: 1;
+  height: calc(var(--vt-space-sm) - var(--vt-space-xs) / 2);
+  border-radius: var(--vt-radius-pill);
+  background: color-mix(in srgb, var(--vt-color-faint) 45%, transparent);
+  margin-inline: calc(var(--vt-space-xs) * 0.75);
+  overflow: hidden;
+}
+.drow .fillbar {
+  display: block;
+  height: 100%;
+  border-radius: var(--vt-radius-pill);
+  background: linear-gradient(to right, var(--vt-color-accent), var(--vt-color-accent-latte));
+}
+.drow .cnt {
+  width: calc(var(--vt-space-lg) + var(--vt-space-xs) / 2);
+  text-align: right;
+}
+
+/* ---------- review sort row + menu, "more" ---------- */
+.sortrow {
+  display: flex;
+  align-items: center;
+  gap: var(--vt-space-sm);
+}
+.sortrow .t-fb {
+  flex: 1;
+  min-width: 0;
+  font-weight: 700;
+}
+.sortmenu {
+  position: relative;
+}
+.sortmenu > summary {
+  list-style: none;
+  cursor: pointer;
+}
+.sortmenu > summary::-webkit-details-marker {
+  display: none;
+}
+.sortbtn {
+  display: grid;
+  place-items: center;
+  width: var(--vt-touch-min);
+  height: var(--vt-touch-min);
+  border-radius: var(--vt-radius-field);
+  background: var(--vt-color-base);
+  box-shadow: var(--vt-shadow-extruded-small);
+  color: var(--vt-color-text-secondary);
+  --icon-size: var(--vt-app-icon-22);
+  --icon-gap: 0;
+}
+.sortmenu .menu {
+  position: absolute;
+  right: 0;
+  z-index: 5;
+  margin-top: var(--vt-space-sm);
+  min-width: calc(var(--vt-app-tile) * 3);
+  padding: var(--vt-space-xs);
+  border-radius: var(--vt-radius-field);
+  background: var(--vt-color-base-emphasis);
+  box-shadow: var(--vt-shadow-extruded-card);
+}
+.sortmenu .menu a {
+  display: flex;
+  align-items: center;
+  min-height: var(--vt-touch-min);
+  padding: 0 var(--vt-space-md);
+  border-radius: var(--vt-radius-field);
+  color: var(--vt-color-text);
+  text-decoration: none;
+}
+.sortmenu .menu a[aria-current="true"] {
+  background: var(--vt-color-base);
+  box-shadow: var(--vt-app-shadow-inset);
+  color: var(--vt-color-accent-deep);
+}
+.more-reviews {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: var(--vt-touch-min);
+  margin-top: var(--vt-space-md);
+  border: 0;
+  cursor: pointer;
+  border-radius: var(--vt-radius-field);
+  background: var(--vt-color-base);
+  box-shadow: var(--vt-shadow-extruded-small);
+  color: var(--vt-color-accent-deep);
+}
+.more-reviews[disabled] {
+  opacity: 0.7;
+  cursor: progress;
+}
+.rev-status {
+  margin-top: var(--vt-space-md);
+  text-align: center;
+}
+.addr-note {
+  display: block;
+  margin-top: var(--vt-space-xs);
+  padding-left: calc(var(--vt-app-icon-13) + var(--vt-space-xs));
+}
+.sect + .sect-tight {
+  margin-top: var(--vt-space-md);
+}
+.lrow .val {
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+}
+.bio-text {
+  margin: 0;
+  white-space: pre-line;
+}
+.addr-note-row {
+  margin: var(--vt-space-md) 0 0;
+  white-space: pre-line;
+}
+.tabpanel .sect:not(:first-child),
+.tabpanel > p + .sect {
+  margin-top: var(--vt-space-xl);
 }

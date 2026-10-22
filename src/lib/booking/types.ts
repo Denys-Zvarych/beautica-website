@@ -7,6 +7,12 @@ export interface ServiceSummary {
   name: string;
   durationMinutes: number;
   priceFrom: number;
+  /** Category key (joins `categories[].key`); null when the API did not send one. */
+  category: string | null;
+}
+export interface RatingBucket {
+  rating: number;
+  count: number;
 }
 export interface ReviewItem {
   id: string;
@@ -15,6 +21,8 @@ export interface ReviewItem {
   rating: number;
   comment: string | null;
   createdAt: string;
+  /** Salon reviews only: "First Last" of the master the review is about. */
+  masterName?: string | null;
 }
 export interface MasterInfo {
   slug: string;
@@ -29,7 +37,11 @@ export interface MasterInfo {
   salon: { name: string; bookingSlug: string | null } | null;
   avgRating: number | null;
   reviewCount: number;
-  categories: { id: string; name: string }[];
+  categories: { id: string; name: string; key: string | null }[];
+  ratingDistribution: RatingBucket[];
+  street: string | null;
+  buildingNo: string | null;
+  locationNote: string | null;
   portfolio: string[];
   latestReviews: ReviewItem[];
   bookable: boolean;
@@ -40,6 +52,18 @@ export interface SalonMasterItem {
   name: string;
   avatarUrl: string | null;
   professionalTitle: string | null;
+}
+export interface SalonService {
+  id: string;
+  name: string;
+  durationMinutes: number;
+  priceLabel: string;
+}
+export interface SalonServiceGroup {
+  category: string;
+  displayName: string;
+  count: number;
+  services: SalonService[];
 }
 export interface SalonInfo {
   slug: string;
@@ -56,6 +80,12 @@ export interface SalonInfo {
   bookable: boolean;
   masters: SalonMasterItem[];
   updatedAt: string | null;
+  description: string | null;
+  locationNote: string | null;
+  portfolio: string[];
+  serviceCategories: SalonServiceGroup[];
+  ratingDistribution: RatingBucket[];
+  latestReviews: ReviewItem[];
 }
 
 type Json = Record<string, unknown>;
@@ -79,6 +109,40 @@ export function safeImageUrl(v: unknown): string | null {
   }
 }
 
+function parseBuckets(v: unknown): RatingBucket[] {
+  const out = arr(v).flatMap((b) => {
+    const rating = isObj(b) ? num(b.rating) : null;
+    const count = isObj(b) ? num(b.count) : null;
+    return rating !== null && count !== null && rating >= 1 && rating <= 5 ? [{ rating: Math.round(rating), count: Math.max(0, count) }] : [];
+  });
+  // Always five rows, 5 -> 1, zero-filled: the bars never depend on what the API left out.
+  return [5, 4, 3, 2, 1].map((r) => out.find((b) => b.rating === r) ?? { rating: r, count: 0 });
+}
+
+function parseReviews(v: unknown): ReviewItem[] {
+  return arr(v).flatMap((r) => {
+    if (!isObj(r)) return [];
+    const rating = num(r.rating);
+    const id = str(r.id);
+    if (!id || rating === null) return [];
+    const first = str(r.masterFirstName);
+    const last = str(r.masterLastName);
+    return [{ id, clientDisplayName: str(r.clientDisplayName) ?? "", serviceName: str(r.serviceName) ?? "", rating: Math.min(5, Math.max(0, Math.round(rating))), comment: str(r.comment), createdAt: str(r.createdAt) ?? "", masterName: [first, last].filter(Boolean).join(" ") || null }];
+  });
+}
+
+/** One page of `/reviews` (PageResponse). */
+export interface ReviewsPage {
+  items: ReviewItem[];
+  page: number;
+  totalPages: number;
+  totalElements: number;
+}
+export function parseReviewsPage(raw: unknown): ReviewsPage | null {
+  if (!isObj(raw) || !Array.isArray(raw.data)) return null;
+  return { items: parseReviews(raw.data), page: num(raw.page) ?? 0, totalPages: num(raw.totalPages) ?? 0, totalElements: num(raw.totalElements) ?? 0 };
+}
+
 export function parseMasterInfo(slug: string, raw: unknown): MasterInfo | null {
   if (!isObj(raw)) return null;
   const name = str(raw.masterName);
@@ -96,7 +160,7 @@ export function parseMasterInfo(slug: string, raw: unknown): MasterInfo | null {
       const n = str(s.name);
       const d = num(s.durationMinutes);
       const p = num(s.priceFrom);
-      return id && n && d !== null && p !== null ? [{ id, name: n, durationMinutes: d, priceFrom: p }] : [];
+      return id && n && d !== null && p !== null ? [{ id, name: n, durationMinutes: d, priceFrom: p, category: str(s.category) }] : [];
     }),
     masterId,
     professionalTitle: str(raw.professionalTitle),
@@ -105,18 +169,16 @@ export function parseMasterInfo(slug: string, raw: unknown): MasterInfo | null {
     salon,
     avgRating: num(raw.avgRating),
     reviewCount: Math.max(0, num(raw.reviewCount) ?? 0),
-    categories: arr(raw.categories).flatMap((c) => (isObj(c) && str(c.id) && str(c.name) ? [{ id: str(c.id) as string, name: str(c.name) as string }] : [])),
+    categories: arr(raw.categories).flatMap((c) => (isObj(c) && str(c.id) && str(c.name) ? [{ id: str(c.id) as string, name: str(c.name) as string, key: str(c.key) }] : [])),
+    ratingDistribution: parseBuckets(raw.ratingDistribution),
+    street: str(raw.street),
+    buildingNo: str(raw.buildingNo),
+    locationNote: str(raw.locationNote),
     portfolio: arr(raw.portfolio).flatMap((m) => {
       const u = isObj(m) ? safeImageUrl(m.url) : null;
       return u ? [u] : [];
     }),
-    latestReviews: arr(raw.latestReviews).flatMap((r) => {
-      if (!isObj(r)) return [];
-      const rating = num(r.rating);
-      const id = str(r.id);
-      if (!id || rating === null) return [];
-      return [{ id, clientDisplayName: str(r.clientDisplayName) ?? "", serviceName: str(r.serviceName) ?? "", rating: Math.min(5, Math.max(0, Math.round(rating))), comment: str(r.comment), createdAt: str(r.createdAt) ?? "" }];
-    }),
+    latestReviews: parseReviews(raw.latestReviews),
     bookable: raw.bookable === true,
     updatedAt: str(raw.updatedAt),
   };
@@ -147,5 +209,24 @@ export function parseSalonInfo(slug: string, raw: unknown): SalonInfo | null {
       return masterSlug && n ? [{ masterSlug, name: n, avatarUrl: safeImageUrl(m.avatarUrl), professionalTitle: str(m.professionalTitle) }] : [];
     }),
     updatedAt: str(raw.updatedAt),
+    description: str(raw.description),
+    locationNote: str(raw.locationNote),
+    portfolio: arr(raw.portfolio).flatMap((m) => {
+      const u = isObj(m) ? safeImageUrl(m.url) : null;
+      return u ? [u] : [];
+    }),
+    serviceCategories: arr(raw.serviceCategories).flatMap((g) => {
+      if (!isObj(g) || !str(g.category)) return [];
+      const services = arr(g.services).flatMap((sv) => {
+        if (!isObj(sv)) return [];
+        const id = str(sv.id);
+        const n = str(sv.name);
+        const d = num(sv.baseDurationMinutes);
+        return id && n && d !== null ? [{ id, name: n, durationMinutes: d, priceLabel: str(sv.priceDisplay) ?? "" }] : [];
+      });
+      return services.length === 0 ? [] : [{ category: str(g.category) as string, displayName: str(g.displayName) ?? (str(g.category) as string), count: Math.max(num(g.count) ?? 0, 0) || services.length, services }];
+    }),
+    ratingDistribution: parseBuckets(raw.ratingDistribution),
+    latestReviews: parseReviews(raw.latestReviews),
   };
 }

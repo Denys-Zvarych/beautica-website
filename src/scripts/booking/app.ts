@@ -42,6 +42,8 @@ export function initBooking(root: HTMLElement): void {
   const salon = root.dataset.salon ?? "";
   const city = root.dataset.city ?? "";
   const masterName = root.dataset.master ?? "";
+  const address = root.dataset.address ?? "";
+  const note = root.dataset.note ?? "";
   const S: Strings = JSON.parse($("#book-i18n").textContent ?? "{}");
   const services: Svc[] = $$("#svc-list [data-id]").map((b) => ({ id: b.dataset.id!, name: b.dataset.name!, minutes: Number(b.dataset.min), price: Number(b.dataset.price) }));
   const today = kyivToday();
@@ -189,8 +191,17 @@ export function initBooking(root: HTMLElement): void {
     // A different service set means different slots: the chosen time is no longer valid.
     st.slot = null;
     st.slots = [];
+    syncBadges();
     renderShelf("services");
     if (on) track("service_selected", { count: st.picked.size });
+  }
+  function syncBadges(): void {
+    $$("#svc-list [data-cat-group]").forEach((g) => {
+      const n = $$("[data-id][aria-pressed=true]", g).length;
+      const badge = $("[data-sel-badge]", g);
+      badge.hidden = n === 0;
+      $("[data-sel-n]", badge).textContent = String(n);
+    });
   }
   for (const tile of $$("#svc-list [data-id]")) tile.addEventListener("click", () => toggle(tile.dataset.id!, tile.getAttribute("aria-pressed") !== "true"));
   $("#cta-services").addEventListener("click", () => totals().n && go("date"));
@@ -308,6 +319,11 @@ export function initBooking(root: HTMLElement): void {
   const surname = $<HTMLInputElement>("#surname");
   const phone = $<HTMLInputElement>("#phone");
   const consent = $<HTMLInputElement>("#consent");
+  const comment = $<HTMLTextAreaElement>("#comment");
+  comment.addEventListener("input", () => {
+    $("#counter").textContent = fmt(S.counter, { n: comment.value.length });
+    if (st.step === "confirm") recap($("#confirm-card"), false); // the summary shows the note as it is typed
+  });
   let prevDigits = "";
   phone.addEventListener("input", (e) => {
     const deleting = (e as InputEvent).inputType?.startsWith("delete") ?? false;
@@ -500,9 +516,10 @@ export function initBooking(root: HTMLElement): void {
   });
 
   // ------------------------------------------------------------------ confirm (BookingSummaryCards + BookingRecap)
-  function lrow(label: string, value: string): string {
+  function lrow(label: string, value: string, detail = ""): string {
     const d = el("div", "lrow");
     d.append(el("span", "lbl t-label", label), el("span", "val t-value-12", value));
+    if (detail) d.append(el("span", "det t-fb muted w600", detail));
     return d.outerHTML;
   }
   function recap(into: HTMLElement, compact: boolean): void {
@@ -511,8 +528,12 @@ export function initBooking(root: HTMLElement): void {
     const day = st.day!;
     let h = "";
     if (salon) h += lrow(S.salonLabel, salon) + sep;
-    if (city) h += lrow(S.cityLabel, city) + sep;
+    // Independent masters have a street address (and a note): the app's «Адреса» row; otherwise just the city.
+    if (address) h += lrow(S.addressLabel, [city, address].filter(Boolean).join(", "), note) + sep;
+    else if (city) h += lrow(S.cityLabel, city) + sep;
     h += lrow(S.dateLabel, dayLong(day)) + `<div class="g-sm"></div>` + lrow(S.timeLabel, `${kyivTime(st.slot!.startsAt)}–${kyivTime(endIso())}`) + sep;
+    const memo = comment.value.trim();
+    if (!compact && memo) h += lrow(S.commentRow, memo) + sep;
     into.innerHTML = h;
     const head = el("div", "row");
     head.append(el("span", "t-label", S.servicesLabel), el("span", "sp"), el("span", "t-fb muted", pluralServices(t.n)));
@@ -542,7 +563,7 @@ export function initBooking(root: HTMLElement): void {
     const btn = $<HTMLButtonElement>("#cta-confirm");
     view("#submit-error", false);
     busy(btn, true);
-    const r = await createBooking(api, slug, st.guestToken, { serviceIds: chosen().map((s) => s.id), startsAt: st.slot.startsAt, name: name.value.trim(), surname: surname.value.trim(), policyVersion: policy });
+    const r = await createBooking(api, slug, st.guestToken, { serviceIds: chosen().map((s) => s.id), startsAt: st.slot.startsAt, name: name.value.trim(), surname: surname.value.trim(), policyVersion: policy, clientComment: comment.value.trim() });
     busy(btn, false);
     if (!r.ok) return void bookingFailed(r.fail);
     st.done = true;

@@ -687,3 +687,97 @@ describe("every step renders on phone, tablet and desktop", () => {
     });
   }
 });
+
+describe("parity with the app: category accordions, comment, address (backend 383 + 385)", () => {
+  test("services step: category accordions with the app's count badge and a live «selected» badge", async () => {
+    await withPage("oksana-ab12", {}, async ({ page }) => {
+      await page.click("#book-cta");
+      const names = await page.locator("#svc-list [data-cat-group] .lbl").allInnerTexts();
+      assert.deepEqual(names, ["Нігтьовий сервіс", "Подологія", "Оформлення брів"]);
+      assert.deepEqual(await page.locator("#svc-list [data-cat-group] .badge:not(.sel)").allInnerTexts(), ["2", "1", "1"]);
+      const sel = page.locator("#svc-list [data-cat-group]").first().locator("[data-sel-badge]");
+      assert.equal(await sel.isVisible(), false);
+      await page.click(`#svc-list [data-id="${SVC_ID.classic}"]`);
+      await page.click(`#svc-list [data-id="${SVC_ID.gel}"]`);
+      assert.equal(await sel.isVisible(), true);
+      assert.equal(await text(sel), "2");
+      await page.click(`#svc-list [data-id="${SVC_ID.gel}"]`);
+      assert.equal(await text(sel), "1");
+      await page.click(`#svc-list [data-id="${SVC_ID.classic}"]`);
+      assert.equal(await sel.isVisible(), false, "the badge hides at zero");
+      await page.locator("#svc-list summary").nth(1).click();
+      assert.equal(await page.locator(`#svc-list [data-id="${SVC_ID.pedi}"]`).isVisible(), false, "a collapsed group hides its tiles");
+    });
+  });
+
+  test("confirm: optional «Коментар для майстра» (1000 max, counter), trimmed, sent as clientComment, shown in the summary", async () => {
+    await withPage("oksana-ab12", {}, async ({ page }) => {
+      await driveTo(page, "confirm", { contact: { name: "Коментар" } });
+      assert.equal(await page.getAttribute("#comment", "maxlength"), "1000");
+      assert.equal(await page.getAttribute("#comment", "placeholder"), "Необов'язково");
+      assert.equal(await text(page.locator("#counter")), "0 / 1000");
+      assert.ok((await text(page.locator("[data-screen=confirm]"))).includes("Коментар для майстра"));
+      const typed = "  Прийду з дитиною\nдякую  ";
+      await page.fill("#comment", typed);
+      assert.equal(await text(page.locator("#counter")), `${typed.length} / 1000`);
+    });
+  });
+
+  test("a comment is sent trimmed as clientComment and shown in the confirm summary; blank is omitted; never in the done recap", async () => {
+    for (const [name, comment] of [["КоментарТак", "  Прийду з дитиною\nдякую  "], ["КоментарНі", "   "]]) {
+      await withPage("oksana-ab12", {}, async ({ page }) => {
+        await driveTo(page, "time");
+        await page.click("#cta-time");
+        await fillContact(page, { name });
+        await page.click("#cta-contact");
+        await page.waitForSelector("#otp", { state: "visible" });
+        for (const [i, d] of [..."123456"].entries()) await page.locator("#otp input").nth(i).fill(d);
+        await page.click("#cta-otp");
+        await page.waitForSelector("#confirm-card", { state: "visible" });
+        await page.fill("#comment", comment);
+        const recap = await text(page.locator("#confirm-card"));
+        assert.equal(recap.includes("Коментар"), name === "КоментарТак", recap);
+        if (name === "КоментарТак") assert.ok(recap.includes("Прийду з дитиною"));
+        await page.click("#cta-confirm");
+        await page.waitForSelector("#done-card", { state: "visible" });
+        assert.equal((await text(page.locator("#done-card"))).includes("Прийду"), false);
+        const booking = callsTo(await mockLog((e) => e.body?.name === name), "POST", "/booking").at(-1);
+        if (name === "КоментарТак") assert.equal(booking.body.clientComment, "Прийду з дитиною\nдякую");
+        else assert.equal("clientComment" in booking.body, false, "a blank comment is omitted");
+        assert.equal(JSON.stringify(await page.evaluate(() => ({ ...localStorage, ...sessionStorage, u: location.href }))).includes("дитиною"), false, "never stored or in the URL");
+      });
+    }
+  });
+
+  test("a comment the backend rejects (over 1000 chars or control characters, 400) shows the generic fix-it message, no double booking", async () => {
+    for (const bad of ["я".repeat(1001), "а\u0007б"]) {
+      await withPage("oksana-ab12", {}, async ({ page }) => {
+        await driveTo(page, "confirm", { contact: { name: "Поганий" } });
+        await page.locator("#comment").evaluate((el, v) => { el.value = v; el.dispatchEvent(new Event("input", { bubbles: true })); }, bad); // bypasses maxlength like a pasted value
+        await page.click("#cta-confirm");
+        await page.waitForSelector("#submit-error", { state: "visible" });
+        assert.ok((await text(page.locator("#submit-error"))).includes("Перевірте дані запису"));
+        assert.equal(await page.locator("#cta-confirm").isEnabled(), true);
+        assert.equal(await visibleScreen(page), "confirm");
+      });
+    }
+    const direct = await fetch(`${MOCK_API}/api/v1/book/oksana-ab12/booking`, { method: "POST", headers: { "content-type": "application/json", authorization: "Bearer guest-token-ok" }, body: JSON.stringify({ serviceId: SVC_ID.classic, startsAt: "2030-01-01T10:00:00+02:00", name: "а", surname: "б", privacyAccepted: true, privacyPolicyVersion: "2026-10-22", clientComment: "x".repeat(1001) }) });
+    assert.equal(direct.status, 400);
+    const ok = await fetch(`${MOCK_API}/api/v1/book/oksana-ab12/booking`, { method: "POST", headers: { "content-type": "application/json", authorization: "Bearer guest-token-ok" }, body: JSON.stringify({ serviceId: SVC_ID.classic, startsAt: "2030-01-01T10:00:00+02:00", name: "а", surname: "б", privacyAccepted: true, privacyPolicyVersion: "2026-10-22", clientComment: "x".repeat(1000) + "" }) });
+    assert.equal(ok.status, 201, "exactly 1000 is allowed");
+  });
+
+  test("confirm: an independent master's «Адреса» row (street, building, city) with the note below; a salon master shows «Салон» and no address", async () => {
+    await withPage("oksana-ab12", {}, async ({ page }) => {
+      await driveTo(page, "confirm", { contact: { name: "Адреса" } });
+      const recap = await text(page.locator("#confirm-card"));
+      assert.ok(recap.includes("Адреса Київ, вул. Хрещатик, 22 2 поверх, офіс 5"), recap);
+      assert.equal(recap.includes("Місто"), false);
+    });
+    await withPage("salonmaster-5555", {}, async ({ page }) => {
+      await driveTo(page, "confirm", { contact: { name: "СалонАдреса" } });
+      const recap = await text(page.locator("#confirm-card"));
+      assert.ok(recap.includes("Салон «Лаванда»") && recap.includes("Місто Київ") && !recap.includes("Адреса"), recap);
+    });
+  });
+});

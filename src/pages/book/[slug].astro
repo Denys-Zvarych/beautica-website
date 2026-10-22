@@ -12,9 +12,9 @@ import BookingFlow from "../../components/book/BookingFlow.astro";
 import { t } from "../../i18n/t";
 import { isValidSlug } from "../../lib/booking/slug";
 import { bookingConfig } from "../../lib/booking/config";
-import { fetchMasterInfo } from "../../lib/booking/info";
+import { fetchMasterInfo, fetchReviewsFirstPage } from "../../lib/booking/info";
 import { imageOrigins, noticeResponse, okResponse } from "../../lib/booking/respond";
-import { fitDescription, fitTitle, formatPriceFrom } from "../../lib/booking/format";
+import { fitDescription, fitTitle, formatPriceFrom, parseSort, streetLine } from "../../lib/booking/format";
 import { breadcrumbList, profileBusiness } from "../../lib/jsonld";
 
 const slug = Astro.params.slug;
@@ -41,6 +41,8 @@ if (info && result.kind === "ok") {
   okResponse(Astro.response, cfg, result.ttl, imageOrigins([info.avatarUrl, ...info.portfolio]));
 }
 
+const sort = parseSort(Astro.url.searchParams.get("sort"));
+const firstReviews = info && sort !== "NEWEST" ? ((await fetchReviewsFirstPage(cfg, "master", slug as string, sort, Astro.request.headers.get("cf-connecting-ip") ?? undefined)) ?? info.latestReviews) : (info?.latestReviews ?? []);
 const canonical = `${site}/book/${slug}`;
 const name = info?.masterName ?? "";
 const title = info
@@ -58,10 +60,10 @@ const jsonLd = info
         name,
         image: info.avatarUrl,
         description: info.bio ? fitDescription(info.bio, 300) : null,
-        address: { locality: info.city, region: info.region },
+        address: { locality: info.city, region: info.region, street: streetLine(info.street, info.buildingNo) },
         offers: info.services.map((s) => ({ name: s.name, priceFrom: s.priceFrom })),
         rating: info.avgRating !== null && info.reviewCount > 0 ? { value: Math.round(info.avgRating * 10) / 10, count: info.reviewCount } : null,
-        reviews: info.latestReviews.map((r) => ({ author: r.clientDisplayName, rating: r.rating, text: r.comment, published: r.createdAt })),
+        reviews: firstReviews.map((r) => ({ author: r.clientDisplayName, rating: r.rating, text: r.comment, published: r.createdAt })),
       }),
       breadcrumbList([{ name: t("book.master.crumbHome"), url: `${site}/` }, { name, url: canonical }]),
     ]
@@ -85,8 +87,10 @@ const canBook = !!info && info.services.length > 0;
         data-master={info.masterName}
         data-city={info.city ?? info.region ?? ""}
         data-salon={info.salon?.name ?? ""}
+        data-address={streetLine(info.street, info.buildingNo) ?? ""}
+        data-note={info.locationNote ?? ""}
       >
-        <MasterProfile info={info} backHref={backHref} />
+        <MasterProfile info={info} backHref={backHref} apiOrigin={cfg.apiOrigin} sort={sort} reviews={firstReviews} />
         {canBook && <BookingFlow info={info} />}
       </main>
     ) : (
