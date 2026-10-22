@@ -11,6 +11,7 @@ import MasterStrip from "./MasterStrip.astro";
 import ServiceTile from "./ServiceTile.astro";
 import CategoryGroup from "./CategoryGroup.astro";
 import { t } from "../../i18n/t";
+import { safeJson } from "../../lib/safeJson";
 import { formatDuration, formatPriceFrom, groupByCategory } from "../../lib/booking/format";
 import type { MasterInfo } from "../../lib/booking/types";
 
@@ -28,7 +29,7 @@ const js = {
   invalid: t("book.confirm.invalid"), limit: t("book.confirm.limit"), unavailable: t("book.confirm.unavailable", { email: "{email}" }), error: t("book.confirm.error"), supportEmail: t("site.supportEmail"),
   calendar: t("book.done.calendar"), counter: t("book.confirm.counter", { n: "{n}", max: 500 }), addressLabel: t("book.confirm.address"), commentRow: t("book.confirm.commentRow"), icsSummary: t("book.ics.summary", { master: "{master}" }), icsDescription: t("book.ics.description", { services: "{services}" }),
 };
-const jsJson = JSON.stringify(js).replace(/</g, "\\u003c");
+const jsJson = safeJson(js);
 const groups = groupByCategory(info.services, info.categories, t("book.master.otherServices"));
 const strip = { name: info.masterName, subtitle: info.professionalTitle, avatarUrl: info.avatarUrl, rating: info.avgRating, reviewCount: info.reviewCount };
 ---

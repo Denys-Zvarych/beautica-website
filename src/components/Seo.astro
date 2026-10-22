@@ -1,5 +1,6 @@
 ---
 import { locales, defaultLocale, t } from "../i18n/t";
+import { safeJson } from "../lib/safeJson";
 
 interface Props {
   title: string;
@@ -83,4 +84,4 @@ const alternates =
   )
 }
 
-{ldBlocks.map((block) => <script type="application/ld+json" set:html={JSON.stringify(block)} />)}
+{ldBlocks.map((block) => <script type="application/ld+json" set:html={safeJson(block)} />)}

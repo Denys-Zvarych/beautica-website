@@ -67,7 +67,7 @@ describe(".ics", () => {
     assert.match(ics, /END:VEVENT\r\nEND:VCALENDAR\r\n$/);
   });
   test("text is escaped and long lines are folded (RFC 5545)", () => {
-    assert.ok(ics.includes("Оксани\; Коваленко"));
+    assert.ok(ics.includes("Оксани\\; Коваленко"));
     assert.ok(ics.includes("A\\, B\\nрядок"));
     assert.ok(ics.split("\r\n").every((l) => Buffer.byteLength(l) <= 75), "no line over 75 octets");
   });
@@ -81,5 +81,14 @@ describe("phone mask", () => {
     assert.equal(formatPhoneGrouped("50"), "+380 50");
     assert.equal(formatPhoneGrouped(""), "");
     assert.equal(nationalDigits("+380 (50) 123-45-67"), "501234567");
+  });
+});
+
+describe(".ics escaping of ; , \\ and line breaks (RFC 5545 section 3.3.11)", () => {
+  const ics = buildIcs({ uid: "u", startsAt: "2026-10-23T12:00:00+03:00", minutes: 30, summary: "A;B,C\\D", description: "x;y,z\\w\nline", location: "" }, new Date("2026-10-22T10:00:00Z"));
+  test("semicolon, comma and backslash are backslash-escaped, newline becomes \\n", () => {
+    assert.ok(ics.includes("SUMMARY:A\\;B\\,C\\\\D"), ics);
+    assert.ok(ics.includes("DESCRIPTION:x\\;y\\,z\\\\w\\nline"), ics);
+    assert.equal(/SUMMARY:A;B/.test(ics), false, "no bare semicolon");
   });
 });

@@ -5,6 +5,7 @@ import assert from "node:assert/strict";
 import { rawRequest, requireBase, freshIp, BASE, MOCK_API } from "./helpers/env.mjs";
 import { launch } from "./helpers/browser.mjs";
 import { bookPage, mockLog, callsTo, shot } from "./helpers/book.mjs";
+import { EVIL } from "./helpers/mock-api.mjs";
 import { visibleBox } from "./helpers/browser.mjs";
 const text = (loc) => loc.innerText().then((s) => s.replace(/\s+/g, " ").trim());
 
@@ -733,5 +734,41 @@ describe("html validity and robots consistency", () => {
       assert.equal(r.headers["x-robots-tag"], "noindex, nofollow", path);
       assert.equal(meta(r.body, /<meta name="robots" content="([^"]*)"/), "noindex, nofollow", path);
     }
+  });
+});
+
+describe("user text never becomes markup (stored HTML injection)", () => {
+  // Quoted attribute values (og:title ...) may hold a literal "<": inert there (quotes are escaped), so they are not counted.
+  const scripts = (h) => { const t = h.replace(/="[^"]*"/g, '=""'); return { open: (t.match(/<script[\s>]/gi) ?? []).length, close: (t.match(/<\/script/gi) ?? []).length }; };
+  test("master page: hostile bio, title, review, author stay text; the JSON-LD parses back to the exact strings", async () => {
+    const h = (await get("/book/evil-0666")).body;
+    const s = scripts(h);
+    assert.equal(s.open, s.close, `unbalanced script tags: ${JSON.stringify(s)}`);
+    assert.equal(/<img src=x|<svg onload|<meta http-equiv|onerror=alert|<b>Автор/i.test(h.replace(/<script[^>]*>[\s\S]*?<\/script>/g, "").replace(/="[^"]*"/g, '=""').replace(/&lt;[^]*?&gt;/g, "")), false, "no injected element survives outside escaped text and inert attribute values");
+    const [biz] = ldBlocks(h);
+    assert.equal(biz.description, EVIL.bio);
+    assert.equal(biz.review[0].reviewBody, EVIL.comment);
+    assert.equal(biz.review[0].author.name, EVIL.author);
+    const raw = h.match(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/)[1];
+    assert.equal(/[<>&\u2028\u2029]/.test(raw), false, "the serialized JSON has none of the characters that end an HTML context");
+    assert.ok(raw.includes("\\u003c/script\\u003e"));
+  });
+  test("master page in a browser: no injected element, no refresh, the text is shown literally", async () => {
+    const env = await bookPage(browser, "evil-0666");
+    try {
+      const { page } = env;
+      assert.equal(await page.locator("img[src='x'], svg[onload], meta[http-equiv]").count(), 0);
+      assert.ok(page.url().endsWith("/book/evil-0666"), "no meta refresh happened");
+      assert.ok((await text(page.locator("[data-panel='0']"))).includes(EVIL.bio), "the bio is displayed as text");
+    } finally {
+      await env.context.close();
+    }
+  });
+  test("salon page: a hostile description is inert too", async () => {
+    const h = (await get("/book/s/evilsalon-0666")).body;
+    const s = scripts(h);
+    assert.equal(s.open, s.close);
+    assert.equal(/<script>alert\(3\)/.test(h), false);
+    assert.equal(ldBlocks(h)[0].description, EVIL.salon);
   });
 });

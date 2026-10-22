@@ -62,8 +62,8 @@ describe("axe: master and salon pages, every tab", () => {
       }
     });
   }
-  test(WIDTHS.includes(360) ? "booking steps @360 (services, date, time, contact with errors, code, confirm, done)" : "booking steps (360 only: skipped)", { skip: !WIDTHS.includes(360) }, async () => {
-    const env = await bookPage(browser, "oksana-ab12");
+  for (const width of WIDTHS) test(`booking steps @${width} (services, date, time, contact with errors, code, confirm, done)`, async () => {
+    const env = await bookPage(browser, "oksana-ab12", { width });
     try {
       const { page } = env;
       await page.click("#book-cta");

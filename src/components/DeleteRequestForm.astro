@@ -5,6 +5,7 @@
 import CtaButton from "./CtaButton.astro";
 import Icon from "./Icon.astro";
 import { t } from "../i18n/t";
+import { safeJson } from "../lib/safeJson";
 import { ROLES, COMMENT_MAX, EMAIL_MAX, PHONE_MAX } from "../lib/deleteRequest";
 
 const msgs = {
@@ -16,7 +17,7 @@ const msgs = {
 };
 ---
 
-<dialog id="delete-request-dialog" class="dr" aria-labelledby="dr-title" data-msgs={JSON.stringify(msgs)} data-submit={t("deleteRequest.submit")} data-sending={t("deleteRequest.sending")} data-status={t("deleteRequest.sendingStatus")}>
+<dialog id="delete-request-dialog" class="dr" aria-labelledby="dr-title" data-msgs={safeJson(msgs)} data-submit={t("deleteRequest.submit")} data-sending={t("deleteRequest.sending")} data-status={t("deleteRequest.sendingStatus")}>
   <div class="panel">
     <div class="head">
       <h2 id="dr-title" class="vt-heading" tabindex="-1" autofocus>{t("deleteRequest.title")}</h2>

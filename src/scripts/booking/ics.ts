@@ -1,5 +1,5 @@
 // Client-side .ics (RFC 5545) for "add to calendar": built and downloaded in the browser, nothing leaves the page.
-const esc = (s: string) => s.replace(/\\/g, "\\\\").replace(/;/g, "\;").replace(/,/g, "\\,").replace(/\r?\n/g, "\\n");
+const esc = (s: string) => s.replace(/\\/g, "\\\\").replace(/;/g, "\\;").replace(/,/g, "\\,").replace(/\r?\n/g, "\\n");
 const stamp = (d: Date) => d.toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "");
 /** Lines longer than 75 octets (Cyrillic = 2 octets per char, so folded every 35 chars) are folded (CRLF + space). */
 const fold = (line: string) => line.replace(/(.{35})(?=.)/g, "$1\r\n ");

@@ -55,6 +55,15 @@ const review = (n, author, rating, comment, service, days) => ({
   createdAt: new Date(Date.now() - days * 86400000).toISOString(),
 });
 
+/** Hostile text in every field a user controls: it must never become markup. */
+export const EVIL = {
+  bio: "</script><img src=x onerror=alert(1)>",
+  title: "</SCRIPT ><svg onload=alert(2)>",
+  comment: '<meta http-equiv=refresh content="0;url=https://evil.test"> & <!-- \u2028 -->',
+  author: "<b>Автор</b>",
+  salon: "</script><script>alert(3)</script>",
+};
+
 const masterInfo = (over = {}) => ({
   masterName: "Оксана Коваленко",
   avatarUrl: `${MEDIA}/avatar.jpg`,
@@ -91,6 +100,7 @@ const MASTERS = {
   "conflict-9999": () => masterInfo(),
   "bookdown-7777": () => masterInfo(),
   "expired-6666": () => masterInfo(),
+  "evil-0666": () => masterInfo({ bio: EVIL.bio, professionalTitle: EVIL.title, latestReviews: [{ ...review(1, "Автор", 5, EVIL.comment, "Послуга", 1), clientDisplayName: EVIL.author }] }),
   "cache-4444": () => masterInfo(),
   "rail-8888": () => masterInfo({ portfolio: Array.from({ length: 12 }, (_, i) => ({ id: `p${i}`, entityType: "MASTER", entityId: MASTER_ID, mediaType: "PORTFOLIO", url: `${MEDIA}/p${i}.jpg`, createdAt: "2026-10-01T10:00:00Z" })) }),
   "headers-3333": () => masterInfo(),
@@ -122,7 +132,7 @@ const salonInfo = (over = {}) => ({
   latestReviews: ALL_REVIEWS.slice(0, 5).map((r) => ({ ...r, masterFirstName: "Оксана", masterLastName: "Коваленко" })),
   ...over,
 });
-const SALONS = { "lavanda-1111": () => salonInfo(), "salonhdr-4444": () => salonInfo(), "shut-2222": () => salonInfo({ bookable: false, masters: [] }) };
+const SALONS = { "evilsalon-0666": () => salonInfo({ description: EVIL.salon }), "lavanda-1111": () => salonInfo(), "salonhdr-4444": () => salonInfo(), "shut-2222": () => salonInfo({ bookable: false, masters: [] }) };
 
 /** UTC offset of Europe/Kyiv on a calendar date, "+02:00" / "+03:00". */
 function kyivOffset(date) {
