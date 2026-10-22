@@ -78,6 +78,7 @@ const backHref = info?.salon?.bookingSlug ? `/book/s/${info.salon.bookingSlug}` 
 const canBook = !!info && info.services.length > 0;
 ---
 
+{/* preloadLatin stays false: better FCP, no LCP gain from preloading the Latin fonts, and the salon page gets worse. */}
 <Layout title={title} description={description} noindex={!info} image={info?.avatarUrl ?? undefined} imageAlt={name || undefined} robots={info && sort !== "NEWEST" ? "noindex, follow" : undefined} twitterCard="summary" ogType="profile" jsonLd={jsonLd} hideHeader hideFooter preloadLatin={false}>
   {
     info ? (

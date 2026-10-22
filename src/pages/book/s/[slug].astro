@@ -68,6 +68,7 @@ const jsonLd = info
   : undefined;
 ---
 
+{/* preloadLatin stays false: better FCP, no LCP gain from preloading the Latin fonts, and the salon page gets worse. */}
 <Layout title={title} description={description} noindex={!info} image={info?.avatarUrl ?? info?.coverImageUrl ?? undefined} imageAlt={name || undefined} robots={info && sort !== "NEWEST" ? "noindex, follow" : undefined} twitterCard="summary" ogType="website" jsonLd={jsonLd} hideHeader hideFooter preloadLatin={false}>
   {
     info ? (

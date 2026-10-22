@@ -4,7 +4,7 @@
 // the real LCP with prod photos (R2 offers no resize: dimensions are explicit, decoding async, below-fold images lazy).
 // median LCP / TBT / CLS and total JS transfer. Fails when a budget is broken:  LCP < 2400 ms (target 2000), TBT < 50 ms, CLS < 0.02, JS <= 20480 B.
 //
-//   npm run build && node scripts/lighthouse-ssr.mjs [--runs 3] [--report]      (CHROME_PATH or a Chromium in the usual places)
+//   npm run build && node scripts/lighthouse-ssr.mjs [--runs 3]      (CHROME_PATH or a Chromium in the usual places)
 import { spawn } from "node:child_process";
 import { createServer } from "node:net";
 import { existsSync, mkdtempSync, readFileSync } from "node:fs";
@@ -15,8 +15,8 @@ import { startMockApi } from "../tests/helpers/mock-api.mjs";
 const arg = (k, d) => (process.argv.includes(k) ? process.argv[process.argv.indexOf(k) + 1] : d);
 const RUNS = Number(arg("--runs", 3));
 const PAGES = ["/book/oksana-ab12", "/book/rail-8888", "/book/s/lavanda-1111", "/book/oksana-ab12?sort=OLDEST"];
-// LCP target is 2000 ms. The neumorphic cards (large blurred shadows) cost paint time under the 4x CPU throttle, and the master page measures
-// about 2.2 s locally, so the FAIL line is 2400 ms (LCP_BUDGET to override) and anything between 2000 and 2400 is printed as a warning:
+// LCP target is 2000 ms. LCP is network-bound under Lantern (CPU 1x gives the same LCP; paint < 30 ms). The cost is font bytes requested before
+// the observed LCP (Latin subsets are needed for spaces and digits). Shadows are not a factor. The master page measures about 2.2 s locally, so the FAIL line is 2400 ms (LCP_BUDGET to override) and anything between 2000 and 2400 is printed as a warning:
 // ratchet the line down once the prod run (real photos, real network) is checked.
 const TARGET_LCP = 2000;
 const BUDGET = { lcp: Number(process.env.LCP_BUDGET ?? 2400), tbt: 50, cls: 0.02, js: 20480 };
