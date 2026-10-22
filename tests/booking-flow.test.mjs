@@ -32,6 +32,7 @@ describe("happy path: one service", () => {
       await page.waitForSelector("#book-cta:visible");
       assert.equal(await visibleScreen(page), "profile");
       await page.click("#book-cta");
+      await page.waitForSelector("[data-screen=services]:not([hidden])"); // the island loads on the tap
       assert.equal(await visibleScreen(page), "services");
       assert.equal(await page.locator("#cta-services").isDisabled(), true, "no service yet: Далі is disabled");
       assert.ok((await text(page.locator("[data-sb='services']"))).includes("Оберіть хоча б одну послугу"));

@@ -1,0 +1,507 @@
+/* Booking-flow styles (steps: strip, calendar, slots, recap, fields, code cells, success). Loaded with the booking island (src/scripts/booking/app.ts)
+   when the visitor opens the flow, so the profile pages carry only the profile CSS. Same tokens, same rules as book.css. */
+
+/* ---------- MasterStrip ---------- */
+.strip {
+  display: flex;
+  align-items: center;
+  gap: var(--vt-space-md);
+  padding: calc(var(--vt-space-sm) + var(--vt-space-xs));
+  border-radius: var(--vt-radius-card);
+  background: var(--vt-color-base-emphasis);
+  border: var(--vt-app-hair) solid var(--vt-color-faint);
+  box-shadow: var(--vt-shadow-bordered-card);
+}
+.strip .disc {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: var(--vt-app-strip-disc);
+  height: var(--vt-app-strip-disc);
+  border-radius: 50%;
+  background: var(--vt-app-grad-avatar-1);
+  box-shadow: var(--vt-shadow-extruded-small);
+  color: color-mix(in srgb, var(--vt-color-cream) 82%, transparent);
+  overflow: hidden;
+  --icon-size: var(--vt-app-icon-26);
+  --icon-gap: 0;
+}
+.strip .disc img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.strip .txt {
+  flex: 1;
+  min-width: 0;
+}
+.strip .txt > p {
+  margin: 0;
+}
+.strip .txt .t-fb.sec {
+  margin-bottom: calc(var(--vt-space-xs) / 2);
+}
+.strip .sub {
+  display: flex;
+  align-items: center;
+  gap: var(--vt-space-sm);
+  margin-top: calc(var(--vt-space-xs) / 2);
+}
+.strip .sub > :first-child {
+  flex: 1;
+  min-width: 0;
+}
+.strip .rate {
+  display: inline-flex;
+  align-items: center;
+  gap: calc(var(--vt-space-xs) / 2);
+  color: var(--vt-color-accent);
+  --icon-size: var(--vt-space-md);
+  --icon-gap: 0;
+}
+
+/* ---------- booking: calendar (MonthCalendar) ---------- */
+.cal {
+  padding: var(--vt-space-sm) var(--vt-space-xs) 0;
+}
+.cal-head {
+  padding-inline: calc(var(--vt-space-lg) - var(--vt-space-xs));
+}
+.cal-head {
+  display: flex;
+  align-items: center;
+  margin-bottom: var(--vt-space-sm);
+}
+.cal-head .t-title {
+  flex: 1;
+  text-align: center;
+}
+.chevbtn {
+  position: relative;
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: var(--vt-touch-min);
+  height: var(--vt-touch-min);
+  border: 0;
+  cursor: pointer;
+  border-radius: var(--vt-radius-field);
+  background: var(--vt-color-base);
+  box-shadow: var(--vt-shadow-extruded-small);
+  color: var(--vt-color-accent-deep);
+  --icon-size: var(--vt-space-lg);
+}
+.chevbtn[disabled] {
+  opacity: 0.55;
+  box-shadow: none;
+  color: var(--vt-color-faint);
+  cursor: not-allowed;
+}
+.chevbtn:active:not([disabled]) {
+  box-shadow: none;
+}
+.wk {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  padding: 0 var(--vt-space-xs);
+  margin-bottom: var(--vt-space-xs);
+  text-align: center;
+}
+.wk span {
+  font: var(--vt-fw-label) var(--vt-fs-label) / normal var(--vt-font-body);
+  letter-spacing: var(--vt-ls-label);
+  color: var(--vt-color-text-secondary);
+}
+.wk span.we {
+  color: var(--vt-color-weekend);
+}
+.cal-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  row-gap: calc(var(--vt-space-xs) / 2);
+}
+.cal-grid .cell {
+  height: var(--vt-touch-min);
+  display: grid;
+  place-items: center;
+  position: relative;
+}
+.cal-grid .cell.sel::before {
+  content: "";
+  position: absolute;
+  inset: calc(var(--vt-space-xs) * 0.75) 0;
+  border-radius: calc(var(--vt-space-sm) + var(--vt-space-xs));
+  background: var(--vt-color-base);
+  box-shadow: var(--vt-app-shadow-inset);
+}
+.dbtn {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: var(--vt-touch-min);
+  border: 0;
+  background: none;
+  cursor: pointer;
+  font: inherit;
+  padding: 0;
+}
+.dbtn[disabled] {
+  cursor: default;
+}
+.dbtn .n {
+  display: grid;
+  place-items: center;
+  width: var(--vt-app-cal-badge);
+  height: var(--vt-app-cal-badge);
+  border-radius: 50%;
+}
+.dbtn.today:not(.sel) .n {
+  border: var(--vt-app-line-2) solid var(--vt-color-accent);
+}
+.dbtn.off .n {
+  color: var(--vt-color-faint);
+}
+.dbtn.ok .n {
+  color: var(--vt-color-accent-deep);
+}
+.dbtn.ok.we .n {
+  color: var(--vt-color-weekend);
+}
+.dbtn.sel .n {
+  color: var(--vt-color-accent-deep);
+  font-weight: 700;
+}
+.dbtn:focus-visible {
+  outline: medium solid var(--vt-color-accent-deep);
+  outline-offset: calc(var(--vt-space-xs) * -1);
+  border-radius: calc(var(--vt-space-sm) + var(--vt-space-xs));
+}
+.sgroup-label {
+  display: flex;
+  align-items: center;
+  gap: var(--vt-space-sm);
+  padding-bottom: var(--vt-space-sm);
+}
+.sgroup-label i {
+  flex: 1;
+  height: var(--vt-app-hair);
+  background: color-mix(in srgb, var(--vt-color-faint) 45%, transparent);
+}
+.sgroup {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--vt-space-sm);
+}
+.part {
+  margin-bottom: var(--vt-space-md);
+}
+
+/* ---------- confirm: BookingSummaryCards / LabelledRow / BookingRecap ---------- */
+.lrow .lbl {
+  display: block;
+}
+.lrow .val {
+  display: block;
+  margin-top: calc(var(--vt-space-xs) - var(--vt-app-hair));
+}
+.lrow .det {
+  display: block;
+  margin-top: var(--vt-app-hair);
+}
+.rule {
+  height: var(--vt-app-hair);
+  background: color-mix(in srgb, var(--vt-color-faint) 50%, transparent);
+  margin: var(--vt-space-md) 0;
+}
+.rule.dense {
+  margin: calc(var(--vt-space-sm) + var(--vt-space-xs) / 2) 0;
+}
+.recap-row {
+  display: flex;
+  align-items: center;
+  gap: var(--vt-space-md);
+  padding: var(--vt-space-sm) 0;
+}
+.recap-row.dense {
+  padding: calc(var(--vt-space-xs) + var(--vt-app-hair)) 0;
+}
+.recap-row .grow {
+  flex: 1;
+  min-width: 0;
+}
+.recap-row .grow .t-fb {
+  margin-top: var(--vt-app-hair);
+}
+.recap-div {
+  height: var(--vt-app-hair);
+  background: color-mix(in srgb, var(--vt-color-faint) 32%, transparent);
+}
+.recap-sum {
+  height: var(--vt-app-hair);
+  background: color-mix(in srgb, var(--vt-color-faint) 60%, transparent);
+  margin: var(--vt-space-sm) 0 calc(var(--vt-space-sm) + var(--vt-space-xs) / 2);
+}
+.total-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--vt-space-sm);
+}
+.total-row .l {
+  display: flex;
+  align-items: baseline;
+  gap: var(--vt-space-sm);
+}
+.calwrap {
+  display: flex;
+  justify-content: flex-end;
+}
+.calbtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--vt-space-sm);
+  min-height: var(--vt-size-cta);
+  padding: 0 var(--vt-space-md);
+  cursor: pointer;
+  text-decoration: none;
+  border-radius: var(--vt-radius-button);
+  background: var(--vt-color-base);
+  border: var(--vt-app-hair) solid color-mix(in srgb, var(--vt-color-accent) 35%, transparent);
+  box-shadow: 0 0 var(--vt-space-sm) color-mix(in srgb, var(--vt-color-shadow-dark-button) 45%, transparent); /* borderedButton */
+  color: var(--vt-color-accent-deep);
+  --icon-size: var(--vt-app-icon-17);
+  --icon-gap: 0;
+}
+.calbtn:active {
+  transform: scale(0.97);
+}
+
+/* ---------- fields (NeumorphicTextField) + OTP (OtpCodeField) ---------- */
+.field .flabel {
+  padding: 0 0 var(--vt-space-sm) calc(var(--vt-space-sm) - var(--vt-space-xs) / 2);
+  display: block;
+}
+.field .box {
+  position: relative;
+  display: flex;
+  align-items: center;
+  height: var(--vt-size-field);
+  border-radius: var(--vt-radius-field);
+  background: var(--vt-color-base);
+  box-shadow: var(--vt-app-shadow-inset);
+  color: var(--vt-color-accent);
+  --icon-size: var(--vt-app-icon-18);
+  --icon-gap: 0;
+}
+/* The 2 px focus / error border is drawn over the box (not on it), so the input inside keeps the full 49 px as its hit area. */
+.field .box::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  border: var(--vt-app-line-2) solid transparent;
+  pointer-events: none;
+  transition: border-color var(--vt-dur-fast) var(--vt-ease);
+}
+.field .box:focus-within::after {
+  border-color: var(--vt-color-accent);
+}
+.field.invalid .box::after {
+  border-color: var(--vt-color-error);
+}
+.field .box > .icon {
+  margin-left: var(--vt-space-md);
+}
+.field input,
+.field textarea {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  padding: 0 var(--vt-space-md);
+  font: var(--vt-fw-input) var(--vt-fs-input) / normal var(--vt-font-body);
+  color: var(--vt-color-text);
+  caret-color: var(--vt-color-accent);
+}
+.field .box > .icon + input {
+  padding-left: var(--vt-space-sm);
+}
+.field input::placeholder,
+.field textarea::placeholder {
+  color: var(--vt-color-placeholder);
+}
+.field textarea {
+  padding: var(--vt-space-sm) var(--vt-space-md);
+  resize: none;
+  line-height: 1.5;
+  font-size: var(--vt-fs-label);
+  font-weight: 700;
+}
+.field .box.ta {
+  height: auto;
+  align-items: stretch;
+}
+.field .ferr {
+  display: flex;
+  gap: calc(var(--vt-space-xs) + var(--vt-space-xs) / 2);
+  align-items: flex-start;
+  padding: var(--vt-space-sm) 0 0 calc(var(--vt-space-sm) - var(--vt-space-xs) / 2);
+  color: var(--vt-color-error);
+  --icon-size: var(--vt-app-icon-15);
+  --icon-gap: 0;
+}
+.counter {
+  text-align: right;
+  margin-top: var(--vt-space-xs);
+}
+.otp {
+  display: flex;
+  justify-content: center;
+  gap: calc(var(--vt-space-sm) + var(--vt-space-xs) / 2);
+}
+.otp label {
+  position: relative;
+  flex: 1 1 0;
+  min-width: 0;
+  max-width: var(--vt-app-otp-w);
+  display: block;
+}
+.otp label::after {
+  content: "";
+  position: absolute;
+  inset: calc(var(--vt-space-xs) * -1) calc(var(--vt-space-xs) * -0.875);
+}
+.otp input {
+  display: block;
+  width: 100%;
+  height: var(--vt-app-otp-h);
+  padding: 0;
+  text-align: center;
+  border: 0;
+  border-radius: var(--vt-radius-field);
+  background: var(--vt-color-base);
+  box-shadow: var(--vt-shadow-extruded-small);
+  outline: 0;
+  font: var(--vt-fw-heading) var(--vt-fs-heading) / normal var(--vt-font-display);
+  color: var(--vt-color-accent-deep); /* the app's digit is accent (2:1 on the base, fails AA); accentDeep keeps the hue */
+  caret-color: var(--vt-color-accent);
+  transition: box-shadow var(--vt-dur-fast) var(--vt-ease);
+}
+.otp input:focus {
+  box-shadow: none;
+  outline: var(--vt-app-line-2) solid var(--vt-color-accent);
+  outline-offset: calc(var(--vt-app-line-2) * -1);
+}
+.otp.invalid input {
+  outline: var(--vt-app-line-2) solid var(--vt-color-error);
+  outline-offset: calc(var(--vt-app-line-2) * -1);
+  box-shadow: none;
+}
+.mail-tile {
+  display: grid;
+  place-items: center;
+  width: var(--vt-app-mail-tile);
+  height: var(--vt-app-mail-tile);
+  margin-inline: auto;
+  border-radius: var(--vt-radius-logo-tile);
+  background: var(--vt-color-base);
+  box-shadow: var(--vt-shadow-extruded-small);
+  color: var(--vt-color-accent);
+  --icon-size: var(--vt-app-icon-30);
+  --icon-gap: 0;
+}
+.turn {
+  min-height: var(--vt-size-field);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.turn:empty {
+  display: none;
+}
+
+/* ---------- success (BookingSuccessScaffold) ---------- */
+.medallion {
+  display: grid;
+  place-items: center;
+  width: var(--vt-app-medallion);
+  height: var(--vt-app-medallion);
+  margin-inline: auto;
+}
+.medallion span {
+  display: grid;
+  place-items: center;
+  width: var(--vt-app-medallion-disc);
+  height: var(--vt-app-medallion-disc);
+  border-radius: 50%;
+  background: var(--vt-color-accent);
+  color: var(--vt-color-cream);
+  --icon-size: var(--vt-app-icon-34);
+  --icon-gap: 0;
+}
+.reveal {
+  animation: reveal calc(var(--vt-dur-base) * 2) var(--vt-ease) both;
+}
+@keyframes reveal {
+  from {
+    opacity: 0;
+    transform: translateY(var(--vt-space-md));
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.cta2 {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: center;
+  gap: var(--vt-space-sm);
+  min-height: var(--vt-size-cta);
+  padding: 0 var(--vt-space-sm);
+  border: 0;
+  cursor: pointer;
+  text-decoration: none;
+  border-radius: var(--vt-radius-button);
+  background: var(--vt-color-base);
+  box-shadow: var(--vt-shadow-extruded-button);
+  color: var(--vt-color-accent-deep);
+  transition:
+    transform var(--vt-dur-fast) var(--vt-ease),
+    box-shadow var(--vt-dur-fast) var(--vt-ease);
+  --icon-size: var(--vt-space-lg);
+  --icon-gap: 0;
+}
+.cta2:active {
+  box-shadow: none;
+  transform: scale(0.98);
+}
+@media (hover: hover) {
+  .cta2:hover {
+    transform: translateY(calc(var(--vt-lift) * -1));
+  }
+}
+.cta2:focus-visible {
+  transform: translateY(calc(var(--vt-lift) * -1));
+}
+.install {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--vt-space-sm);
+  justify-content: center;
+}
+.install ul {
+  display: contents;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.install li {
+  list-style: none;
+}
+

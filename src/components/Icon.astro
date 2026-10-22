@@ -4,14 +4,14 @@
 // Paths: Simple Icons (https://simpleicons.org, v16.35.0), licensed CC0 1.0. Trademarks belong to Google LLC / Apple Inc.;
 // these are glyphs inside our own chips, not official badges. Inline SVG only: no requests, no raster.
 import * as M from "../lib/icons/materialPaths";
-import { calendarAdd } from "../lib/icons/strokePaths";
+import { calendarAdd, starOutline } from "../lib/icons/strokePaths";
 // Material set (booking-link pages): the app's own glyphs, subset of MaterialIcons-Regular.otf (src/lib/icons/materialPaths.ts).
 export type MaterialIconName =
   | "star" | "spa" | "person" | "person-outline" | "done" | "schedule" | "arrow-back-ios" | "keyboard-arrow-down" | "expand-more-rounded"
   | "error-outline" | "chevron-right" | "chevron-left" | "phone" | "location-on" | "swap-vert" | "alternate-email" | "event-busy"
   | "event-available" | "check-circle" | "auto-awesome" | "arrow-forward" | "add" | "reviews" | "photo-camera-back" | "mail-read"
   | "home" | "edit-calendar" | "design-services" | "person-baseline" | "close-rounded";
-export type IconName = "google-play" | "app-store" | "arrow-back" | "mail" | "close" | "check" | "expand-more" | "calendar-add" | MaterialIconName;
+export type IconName = "google-play" | "app-store" | "arrow-back" | "mail" | "close" | "check" | "expand-more" | "calendar-add" | "star-outline" | MaterialIconName;
 interface Props {
   name: IconName;
   /** "lg" = 32 px glyph (success badge). Default unchanged. */
@@ -26,6 +26,7 @@ const materialPath = (M as Record<string, string>)[name.replace(/-(\w)/g, (_, c:
 const chev = name === "expand-more"; // disclosure chevron: turns over while its <details> is open
 const nudge = name === "arrow-back"; // directional glyph: slides toward its direction when the parent link is hovered/focused
 const paths: Record<string, string> = {
+  "star-outline": starOutline,
   // Material Symbols arrow_back (Apache-2.0).
   "arrow-back": "M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z",
   // Material Symbols expand_more (Apache-2.0).

@@ -15,7 +15,7 @@ const { name, categoryKey = null, count, open = true, selectable = false } = Ast
 
 <details class="cat-group" open={open} data-cat-group>
   <summary class="cat">
-    <span class="ico"><span class="ai" aria-hidden="true" style={`--src: url(${categoryIconFor(name, categoryKey)})`}></span></span>
+    <span class="ico"><span class="ai" aria-hidden="true" data-src={categoryIconFor(name, categoryKey)}></span></span>
     <span class="lbl t-sub13 ellipsis">{name}</span>
     {selectable && <span class="badge sel" data-sel-badge hidden><Icon name="done" /><span class="t-fb w800" data-sel-n>0</span></span>}
     <span class="badge"><span class="t-fb w800">{count}</span></span>

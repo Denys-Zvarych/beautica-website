@@ -1,0 +1,196 @@
+/* Salon link page only (cover, hero card, masters grid): imported by src/pages/book/s/[slug].astro, so master pages do not carry it. */
+
+.cover {
+  position: relative;
+  height: var(--vt-app-cover-h);
+  background: var(--vt-app-grad-cover);
+  overflow: hidden;
+}
+.cover img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.cover::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(to bottom, transparent 45%, color-mix(in srgb, var(--vt-color-accent-deep) 45%, transparent));
+  pointer-events: none;
+}
+.cover .cam {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: color-mix(in srgb, var(--vt-color-cream) 28%, transparent);
+  --icon-size: var(--vt-app-icon-44);
+  --icon-gap: 0;
+}
+.cover .btns {
+  position: absolute;
+  z-index: 2;
+  inset-inline: var(--vt-space-lg);
+  top: var(--vt-space-sm);
+  display: flex;
+  justify-content: space-between;
+}
+.cib {
+  display: grid;
+  place-items: center;
+  width: var(--vt-touch-min);
+  height: var(--vt-touch-min);
+  border: 0;
+  cursor: pointer;
+  border-radius: var(--vt-radius-field);
+  background: var(--vt-app-color-cover-btn);
+  box-shadow: var(--vt-app-shadow-cover-btn);
+  color: var(--vt-color-text);
+  text-decoration: none;
+  --icon-size: var(--vt-app-icon-22);
+  --icon-gap: 0;
+  transition: transform var(--vt-dur-fast) var(--vt-ease);
+}
+.cib:active {
+  transform: scale(0.92);
+}
+.hero-wrap {
+  position: relative;
+  z-index: 1;
+  margin: calc(var(--vt-app-cover-overlap) * -1) var(--vt-space-lg) 0;
+}
+.slogo {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: var(--vt-app-salon-logo);
+  height: var(--vt-app-salon-logo);
+  border-radius: 50%;
+  background: var(--vt-app-grad-logo);
+  box-shadow: var(--vt-shadow-extruded-small);
+  border: var(--vt-app-line-2) solid color-mix(in srgb, var(--vt-color-cream) 35%, transparent);
+  color: color-mix(in srgb, var(--vt-color-cream) 92%, transparent);
+  font: var(--vt-fw-heading) var(--vt-app-fs-30) / 1 var(--vt-font-display);
+  overflow: hidden;
+}
+.slogo img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.ratingline {
+  display: flex;
+  align-items: center;
+  gap: var(--vt-space-xs);
+  min-width: 0;
+  color: var(--vt-color-accent-deep);
+  --icon-size: var(--vt-space-md);
+  --icon-gap: 0;
+}
+.addr-line {
+  display: flex;
+  align-items: flex-start;
+  gap: calc(var(--vt-space-xs) + var(--vt-app-hair));
+  padding-left: calc(var(--vt-app-salon-logo) + var(--vt-space-md));
+  color: var(--vt-color-accent-deep);
+  --icon-size: var(--vt-app-icon-15);
+  --icon-gap: 0;
+}
+.addr-line .icon {
+  margin-top: var(--vt-app-hair);
+}
+.mgrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--vt-space-md);
+}
+.mcard {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  height: var(--vt-app-master-card-h);
+  width: 100%;
+  padding: var(--vt-space-md) calc(var(--vt-space-md) - var(--vt-space-xs) / 2);
+  font: inherit;
+  color: inherit;
+  text-align: center;
+  border-radius: var(--vt-radius-card);
+  background: var(--vt-color-base);
+  box-shadow: var(--vt-shadow-extruded-card);
+  text-decoration: none;
+  transition:
+    transform var(--vt-dur-fast) var(--vt-ease),
+    box-shadow var(--vt-dur-fast) var(--vt-ease);
+}
+.mcard:active {
+  transform: scale(0.97);
+  box-shadow: none;
+}
+@media (hover: hover) {
+  .mcard:hover {
+    transform: translateY(calc(var(--vt-lift) * -1));
+  }
+}
+.mcard:focus-visible {
+  transform: translateY(calc(var(--vt-lift) * -1));
+}
+.mcard .mav {
+  display: grid;
+  place-items: center;
+  width: var(--vt-app-master-avatar);
+  height: var(--vt-app-master-avatar);
+  border-radius: 50%;
+  box-shadow: var(--vt-shadow-extruded-small);
+  color: color-mix(in srgb, var(--vt-color-cream) 82%, transparent);
+  margin-bottom: var(--vt-space-sm);
+  flex: none;
+  overflow: hidden;
+  --icon-size: var(--vt-app-icon-34);
+  --icon-gap: 0;
+}
+.mcard .mav img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.mcard .t-sub11 {
+  max-width: 100%;
+}
+.mcard .role {
+  margin-top: calc(var(--vt-space-xs) / 2);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.showall {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--vt-space-xs);
+  width: 100%;
+  min-height: var(--vt-touch-min);
+  border: 0;
+  cursor: pointer;
+  border-radius: var(--vt-radius-field);
+  background: var(--vt-color-base);
+  box-shadow: var(--vt-shadow-extruded-small);
+  color: var(--vt-color-accent-deep);
+  --icon-size: var(--vt-app-icon-20);
+  --icon-gap: 0;
+}
+.mgrid.more {
+  margin-top: var(--vt-space-md);
+}
+.mcard .mrate {
+  display: inline-flex;
+  align-items: center;
+  gap: calc(var(--vt-space-xs) * 0.75);
+  margin-top: var(--vt-space-xs);
+  color: var(--vt-color-accent-deep);
+  --icon-size: var(--vt-app-icon-13);
+  --icon-gap: 0;
+}

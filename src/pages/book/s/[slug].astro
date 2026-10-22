@@ -5,6 +5,7 @@
 export const prerender = false;
 
 import "../../../styles/book.css";
+import "../../../styles/book-salon.css";
 import Layout from "../../../components/Layout.astro";
 import BookNotice from "../../../components/book/BookNotice.astro";
 import SalonProfile from "../../../components/book/SalonProfile.astro";
@@ -18,7 +19,12 @@ import { breadcrumbList, profileBusiness } from "../../../lib/jsonld";
 
 const slug = Astro.params.slug;
 const cfg = bookingConfig();
-const result = isValidSlug(slug) ? await fetchSalonInfo(cfg, slug, Astro.request.headers.get("cf-connecting-ip") ?? undefined) : ({ kind: "not-found" } as const);
+const ip = Astro.request.headers.get("cf-connecting-ip") ?? undefined;
+const sort = parseSort(Astro.url.searchParams.get("sort"));
+// The profile and (for a non-default sort) page 0 of the chosen sort are independent calls: fetched in parallel.
+const [result, sortedReviews] = isValidSlug(slug)
+  ? await Promise.all([fetchSalonInfo(cfg, slug, ip), sort !== "NEWEST" ? fetchReviewsFirstPage(cfg, "salon", slug, sort, ip) : Promise.resolve(null)])
+  : ([{ kind: "not-found" } as const, null] as const);
 const site = (Astro.site as URL).origin;
 const home = { href: "/", label: t("book.notice.home") };
 const retry = { href: Astro.url.pathname, label: t("book.notice.unavailable.cta") };
@@ -33,11 +39,12 @@ else if (result.kind === "unavailable") notice = { ...pick("unavailable"), statu
 else if (!result.data.bookable || result.data.masters.length === 0) notice = { ...pick("salonUnbookable"), status: 200 };
 
 if (notice) noticeResponse(Astro.response, notice.status, notice.retryAfter);
+// An unknown slug (the backend's 404) may be answered from the edge for a few seconds so a probe loop stays off the backend. Internal header, stripped by the middleware.
+if (result.kind === "not-found" && isValidSlug(slug)) Astro.response.headers.set("X-Beautica-Neg-Ttl", "15");
 const info = result.kind === "ok" && !notice ? result.data : null;
 if (info && result.kind === "ok") okResponse(Astro.response, cfg, result.ttl, imageOrigins([info.avatarUrl, info.coverImageUrl, ...info.portfolio, ...info.masters.map((m) => m.avatarUrl)]), { noindexFollow: parseSort(Astro.url.searchParams.get("sort")) !== "NEWEST" });
 
-const sort = parseSort(Astro.url.searchParams.get("sort"));
-const firstReviews = info && sort !== "NEWEST" ? ((await fetchReviewsFirstPage(cfg, "salon", slug as string, sort, Astro.request.headers.get("cf-connecting-ip") ?? undefined)) ?? info.latestReviews) : (info?.latestReviews ?? []);
+const firstReviews = info ? (sortedReviews ?? info.latestReviews) : [];
 const canonical = `${site}/book/s/${slug}`;
 const name = info?.name ?? "";
 const title = info ? fitTitle(60, ...(info.city ? [`${name} · ${info.city} — ${t("book.salon.metaTitleSuffix")}`] : []), `${name} — ${t("book.salon.metaTitleSuffix")}`, name) : (notice?.metaTitle ?? "");
@@ -61,7 +68,7 @@ const jsonLd = info
   : undefined;
 ---
 
-<Layout title={title} description={description} noindex={!info} image={info?.avatarUrl ?? info?.coverImageUrl ?? undefined} imageAlt={name || undefined} robots={info && sort !== "NEWEST" ? "noindex, follow" : undefined} twitterCard="summary" ogType="website" jsonLd={jsonLd} hideHeader hideFooter>
+<Layout title={title} description={description} noindex={!info} image={info?.avatarUrl ?? info?.coverImageUrl ?? undefined} imageAlt={name || undefined} robots={info && sort !== "NEWEST" ? "noindex, follow" : undefined} twitterCard="summary" ogType="website" jsonLd={jsonLd} hideHeader hideFooter preloadLatin={false}>
   {
     info ? (
       <main class="phone" id="main">

@@ -123,6 +123,13 @@ jobs:
         env:
           AXE_WIDTHS: "768,1280"
 
+      # Lighthouse (mobile) on the SSR link pages against wrangler dev + the mock backend: master, 12-photo rail, salon, sorted view; 3 runs each.
+      # Budgets (median of the runs): LCP < 2400 ms (target 2000, warns above it), TBT < 50 ms, CLS < 0.02, JS <= 20 KB.
+      - name: Lighthouse - SSR link pages
+        run: node scripts/lighthouse-ssr.mjs --runs 3
+        env:
+          CHROME_PATH: /usr/bin/google-chrome
+
       # Cold-cache layout shift. Lighthouse profile (412 px, lost font preload => reflow) on four representative routes; the late-font
       # stress profile (360/320 px, fonts delayed) on the home page, the four legal pages and the token shell.
       - name: CLS probe - Lighthouse-like profile

@@ -27,11 +27,13 @@ interface Props {
   hideHeader?: boolean;
   /** Hide the footer (the booking-link pages are one app-like column with its own bottom bar). Default false. */
   hideFooter?: boolean;
+  /** Preload the two Latin font files too (default true). The link pages skip them: their Latin glyphs are a few digits, and four parallel font downloads delayed the Cyrillic ones (LCP). */
+  preloadLatin?: boolean;
   /** `<meta name="referrer" content="no-referrer">` so sub-resource requests never carry a token URL (token routes). Default false. */
   noReferrer?: boolean;
 }
 
-const { hideHeader = false, hideFooter = false, noReferrer = false, ...seo } = Astro.props;
+const { hideHeader = false, hideFooter = false, noReferrer = false, preloadLatin = true, ...seo } = Astro.props;
 ---
 
 <!doctype html>
@@ -45,11 +47,11 @@ const { hideHeader = false, hideFooter = false, noReferrer = false, ...seo } = A
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <link rel="preload" as="font" type="font/woff2" href={nunitoCyr} crossorigin />
     <!-- Latin too: « » digits and brand names inside Ukrainian prose use it, and a late arrival reflowed lines (CLS). -->
-    <link rel="preload" as="font" type="font/woff2" href={nunitoLat} crossorigin />
+    {preloadLatin && <link rel="preload" as="font" type="font/woff2" href={nunitoLat} crossorigin />}
     <link rel="preload" as="font" type="font/woff2" href={comfortaaCyr} crossorigin />
     <!-- Comfortaa Latin: the "Beautica" wordmark/headings render with it on every route, so it arrives with the first paint
          (a lazy fetch swapped the face after layout; token pages also need it preloaded so no fetch carries the page URL as Referer). -->
-    <link rel="preload" as="font" type="font/woff2" href={comfortaaLat} crossorigin />
+    {preloadLatin && <link rel="preload" as="font" type="font/woff2" href={comfortaaLat} crossorigin />}
     <Seo {...seo} />
   </head>
   <body>

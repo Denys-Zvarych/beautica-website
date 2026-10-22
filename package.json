@@ -19,7 +19,8 @@
     "test": "node scripts/run-tests.mjs",
     "test:static": "node --test --test-reporter=spec tests/static-build.test.mjs",
     "check:cls:ci": "node scripts/measure-cls.mjs --runs 1 --routes /,/privacy,/delete-account,/l/cancel",
-    "check:lighthouse": "lhci autorun"
+    "check:lighthouse": "lhci autorun",
+    "check:lighthouse-ssr": "node scripts/lighthouse-ssr.mjs"
   },
   "dependencies": {
     "@astrojs/cloudflare": "14.3.4",

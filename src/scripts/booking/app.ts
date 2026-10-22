@@ -10,6 +10,8 @@ import { mountTurnstile, type Widget } from "./turnstile";
 import { calendarAdd } from "../../lib/icons/strokePaths";
 import { closeRounded, errorOutline, eventAvailable, expandMoreRounded, schedule } from "../../lib/icons/materialPaths";
 import { track } from "../track";
+import { hydrateIcons } from "./icons";
+import "../../styles/book-flow.css"; // step styles ship with the island: the profile pages do not carry them
 
 type Step = "profile" | "services" | "date" | "time" | "contact" | "otp" | "confirm" | "done";
 interface Svc {
@@ -34,7 +36,14 @@ function el<K extends keyof HTMLElementTagNameMap>(tag: K, cls = "", text = ""):
   return e;
 }
 
-export function initBooking(root: HTMLElement): void {
+/** Adopts the server-rendered steps (a <template>, so they cost no DOM until the visitor opens the flow), then wires them. */
+export function initBooking(root: HTMLElement): { open(): void } {
+  const tpl = document.getElementById("book-steps") as HTMLTemplateElement | null;
+  if (tpl) {
+    root.append(tpl.content);
+    tpl.remove();
+    hydrateIcons(root);
+  }
   const api = root.dataset.api ?? "";
   const slug = root.dataset.slug ?? "";
   const siteKey = root.dataset.siteKey ?? "";
@@ -123,9 +132,6 @@ export function initBooking(root: HTMLElement): void {
     if (step === "confirm") renderConfirm();
   }
 
-  $("#book-cta").addEventListener("click", () => go("services"));
-  $("[data-nojs]")?.setAttribute("hidden", "");
-  $("[data-book-cta]").hidden = false;
 
   // ------------------------------------------------------------------ shelf (BookingSummaryBar + SelectedServicesShelf)
   function renderShelf(step: "services" | "date" | "time"): void {
@@ -615,4 +621,5 @@ export function initBooking(root: HTMLElement): void {
     }
   }
 
+  return { open: () => go("services") };
 }

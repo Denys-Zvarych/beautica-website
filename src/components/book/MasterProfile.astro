@@ -68,8 +68,8 @@ const canBook = info.bookable && info.services.length > 0;
       <div class="stats">
         <div class="stat">
           <span class="rstar" aria-hidden="true">
-            <span class="ai base" style="--src: url(/icons/star.svg)"></span>
-            <span class="ai fill" style={`--src: url(/icons/star.svg); --cut: ${cut.toFixed(1)}%`}></span>
+            <span class="base"><Icon name="star-outline" /></span>
+            <span class="fill" style={`--cut: ${cut.toFixed(1)}%`}><Icon name="star-outline" /></span>
           </span>
           <span class="t-stat">{formatRating(info.avgRating)}</span>
           <span class="t-stat-cap">{t("book.master.stats.rating")}</span>
