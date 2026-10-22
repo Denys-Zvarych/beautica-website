@@ -1779,3 +1779,12 @@ a.tab {
 .tabpanel > p + .sect {
   margin-top: var(--vt-space-xl);
 }
+.mcard .mrate {
+  display: inline-flex;
+  align-items: center;
+  gap: calc(var(--vt-space-xs) * 0.75);
+  margin-top: var(--vt-space-xs);
+  color: var(--vt-color-accent-deep);
+  --icon-size: var(--vt-app-icon-13);
+  --icon-gap: 0;
+}

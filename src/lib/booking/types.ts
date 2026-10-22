@@ -52,6 +52,9 @@ export interface SalonMasterItem {
   name: string;
   avatarUrl: string | null;
   professionalTitle: string | null;
+  /** null while the master has no reviews (the app shows «—»). */
+  avgRating: number | null;
+  reviewCount: number;
 }
 export interface SalonService {
   id: string;
@@ -206,7 +209,7 @@ export function parseSalonInfo(slug: string, raw: unknown): SalonInfo | null {
       if (!isObj(m)) return [];
       const masterSlug = str(m.masterSlug);
       const n = str(m.name);
-      return masterSlug && n ? [{ masterSlug, name: n, avatarUrl: safeImageUrl(m.avatarUrl), professionalTitle: str(m.professionalTitle) }] : [];
+      return masterSlug && n ? [{ masterSlug, name: n, avatarUrl: safeImageUrl(m.avatarUrl), professionalTitle: str(m.professionalTitle), avgRating: num(m.avgRating), reviewCount: Math.max(0, num(m.reviewCount) ?? 0) }] : [];
     }),
     updatedAt: str(raw.updatedAt),
     description: str(raw.description),

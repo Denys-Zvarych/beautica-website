@@ -106,7 +106,7 @@ const salonInfo = (over = {}) => ({
   avgRating: 4.8,
   reviewCount: 312,
   bookable: true,
-  masters: Array.from({ length: 8 }, (_, i) => ({ masterSlug: i === 0 ? "oksana-ab12" : `master-${i}abc`, name: `Майстер${i + 1} Тест`, avatarUrl: null, professionalTitle: i % 2 ? "Косметолог" : "Майстер манікюру" })),
+  masters: Array.from({ length: 8 }, (_, i) => ({ masterSlug: i === 0 ? "oksana-ab12" : `master-${i}abc`, name: `Майстер${i + 1} Тест`, avatarUrl: null, professionalTitle: i % 2 ? "Косметолог" : "Майстер манікюру", avgRating: i === 2 ? null : [4.9, 4.8, null, 4.7, 5, 4.6, 4.9, 4.5][i], reviewCount: i === 2 ? 0 : 10 + i })),
   region: "Київська область",
   street: "вул. Хрещатик",
   buildingNo: "22",

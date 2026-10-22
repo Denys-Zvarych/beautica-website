@@ -88,11 +88,11 @@ const firstName = (n: string) => n.trim().split(/\s+/)[0] ?? n;
         info.portfolio.length > 0 && (
           <div class="sect">
             <h3 class="t-section sect-label">{t("book.salon.portfolio")}</h3>
-            <div class="rail" role="region" tabindex="0" aria-label={t("book.salon.portfolio")}>
+            <section class="rail" tabindex="0" aria-label={t("book.salon.portfolio")}>
               {info.portfolio.map((src, i) => (
                 <span class="ptile"><img src={src} alt={t("book.salon.photoAlt", { n: i + 1 })} width="72" height="72" loading="lazy" decoding="async" referrerpolicy="no-referrer" /></span>
               ))}
-            </div>
+            </section>
           </div>
         )
       }
@@ -103,10 +103,11 @@ const firstName = (n: string) => n.trim().split(/\s+/)[0] ?? n;
       <div class="mgrid">
         {
           first.map((m) => (
-            <a class="mcard" href={`/book/${m.masterSlug}`} aria-label={m.professionalTitle ? `${m.name}, ${m.professionalTitle}` : m.name}>
+            <a class="mcard" href={`/book/${m.masterSlug}`} aria-label={[m.name, m.professionalTitle, m.avgRating !== null ? t("book.salon.ratingOf", { rating: formatRating(m.avgRating) }) : null].filter(Boolean).join(", ")}>
               <span class={`mav ${avatarClass(m.name)}`}>{m.avatarUrl ? <img src={m.avatarUrl} alt="" width="73" height="73" loading="lazy" decoding="async" referrerpolicy="no-referrer" /> : <Icon name="person" />}</span>
               <span class="t-sub11 ellipsis">{firstName(m.name)}</span>
               {m.professionalTitle && <span class="role t-fb muted">{m.professionalTitle}</span>}
+              {m.avgRating !== null && <span class="mrate"><Icon name="star" /><span class="t-strong11">{formatRating(m.avgRating)}</span></span>}
             </a>
           ))
         }
@@ -118,10 +119,11 @@ const firstName = (n: string) => n.trim().split(/\s+/)[0] ?? n;
             <button type="button" class="showall js-only" id="showall" hidden><span class="t-link">{t("book.salon.showAll")}</span><Icon name="keyboard-arrow-down" /></button>
             <div class="mgrid more" id="mrest" data-collapsible>
               {rest.map((m) => (
-                <a class="mcard" href={`/book/${m.masterSlug}`} aria-label={m.professionalTitle ? `${m.name}, ${m.professionalTitle}` : m.name}>
+                <a class="mcard" href={`/book/${m.masterSlug}`} aria-label={[m.name, m.professionalTitle, m.avgRating !== null ? t("book.salon.ratingOf", { rating: formatRating(m.avgRating) }) : null].filter(Boolean).join(", ")}>
                   <span class={`mav ${avatarClass(m.name)}`}>{m.avatarUrl ? <img src={m.avatarUrl} alt="" width="73" height="73" loading="lazy" decoding="async" referrerpolicy="no-referrer" /> : <Icon name="person" />}</span>
                   <span class="t-sub11 ellipsis">{firstName(m.name)}</span>
                   {m.professionalTitle && <span class="role t-fb muted">{m.professionalTitle}</span>}
+              {m.avgRating !== null && <span class="mrate"><Icon name="star" /><span class="t-strong11">{formatRating(m.avgRating)}</span></span>}
                 </a>
               ))}
             </div>

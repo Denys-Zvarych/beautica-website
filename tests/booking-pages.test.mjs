@@ -607,7 +607,7 @@ describe("audit cycle 3", () => {
       try {
         const rail = env.page.locator(".rail");
         assert.equal(await rail.getAttribute("tabindex"), "0", path);
-        assert.equal(await rail.getAttribute("role"), "region");
+        assert.equal(await rail.evaluate((e) => e.tagName), "SECTION", "a labelled <section> is the region landmark");
         assert.equal(await rail.getAttribute("aria-label"), label);
       } finally {
         await env.context.close();
@@ -640,13 +640,14 @@ describe("audit cycle 3", () => {
     }
   });
 
-  test("salon: logo initial skips «Салон» (Л), master cards show the first name only, no invented rating", async () => {
+  test("salon: logo initial skips «Салон» (Л), master cards show the first name and the ★ rating (none while unreviewed)", async () => {
     const h = (await get("/book/s/lavanda-1111")).body;
     assert.match(h, /class="slogo"[^>]*>Л</);
     const names = [...h.matchAll(/<a class="mcard[^>]*>[\s\S]*?<span class="t-sub11 ellipsis">([^<]*)<\/span>/g)].map((m) => m[1]);
     assert.equal(names[0], "Майстер1");
     assert.equal(strip(h).includes("Майстер1 Тест"), false, "first name only, as in the design");
-    assert.equal(/class="mrate"/.test(h), false);
+    const rates = [...h.matchAll(/<a class="mcard[^>]*>[\s\S]*?<\/a>/g)].map((m) => (m[0].match(/class="t-strong11">([^<]*)</) ?? [])[1] ?? null);
+    assert.deepEqual(rates, ["4.9", "4.8", null, "4.7", "5.0", "4.6", "4.9", "4.5"], "★ rating per master as the app's card; no line while unreviewed");
   });
 
   test("the location note is aligned under the address text (same left edge as the street line)", async () => {
@@ -716,6 +717,21 @@ describe("audit cycle 3", () => {
       assert.equal(geo.up, true);
     } finally {
       await env.context.close();
+    }
+  });
+});
+
+describe("html validity and robots consistency", () => {
+  test("rails are <section> (focusable, labelled); notice pages stay noindex, nofollow even with ?sort=", async () => {
+    for (const path of ["/book/oksana-ab12", "/book/s/lavanda-1111"]) {
+      const h = (await get(path)).body;
+      assert.match(h, /<section class="rail" tabindex="0" aria-label="Портфоліо"/);
+      assert.equal(/<div class="rail"/.test(h), false);
+    }
+    for (const path of ["/book/nobody-0000?sort=OLDEST", "/book/closed-aaaa?sort=LOWEST", "/book/s/nosalon-3333?sort=OLDEST"]) {
+      const r = await get(path);
+      assert.equal(r.headers["x-robots-tag"], "noindex, nofollow", path);
+      assert.equal(meta(r.body, /<meta name="robots" content="([^"]*)"/), "noindex, nofollow", path);
     }
   });
 });

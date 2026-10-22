@@ -84,7 +84,7 @@ let code = 1;
 try {
   await waitReady();
   const files = process.argv.slice(2);
-  const targets = files.length ? files : readdirSync("tests").filter((f) => f.endsWith(".test.mjs")).map((f) => join("tests", f));
+  const targets = files.length ? files : readdirSync("tests").filter((f) => f.endsWith(".test.mjs") && !(process.env.TEST_EXCLUDE ?? "").split(",").filter(Boolean).some((x) => f.includes(x))).map((f) => join("tests", f));
   const run = spawn(process.execPath, ["--test", "--test-concurrency=2", "--test-reporter=spec", ...targets], {
     stdio: "inherit",
     env: { ...process.env, TEST_BASE_URL: base, TEST_WRANGLER_LOG: logPath, TEST_API_ORIGIN: mockApi.origin },

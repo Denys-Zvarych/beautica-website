@@ -116,11 +116,11 @@ const canBook = info.bookable && info.services.length > 0;
             info.portfolio.length > 0 && (
               <div class="sect">
                 <h2 class="t-section sect-label">{t("book.master.portfolio")}</h2>
-                <div class="rail" role="region" tabindex="0" aria-label={t("book.master.portfolio")}>
+                <section class="rail" tabindex="0" aria-label={t("book.master.portfolio")}>
                   {info.portfolio.map((src, i) => (
                     <span class="ptile"><img src={src} alt={t("book.master.photoAlt", { n: i + 1 })} width="72" height="72" loading="lazy" decoding="async" referrerpolicy="no-referrer" /></span>
                   ))}
-                </div>
+                </section>
               </div>
             )
           }

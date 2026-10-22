@@ -61,7 +61,7 @@ const jsonLd = info
   : undefined;
 ---
 
-<Layout title={title} description={description} noindex={!info} image={info?.avatarUrl ?? info?.coverImageUrl ?? undefined} imageAlt={name || undefined} robots={sort !== "NEWEST" ? "noindex, follow" : undefined} twitterCard="summary" ogType="website" jsonLd={jsonLd} hideHeader hideFooter>
+<Layout title={title} description={description} noindex={!info} image={info?.avatarUrl ?? info?.coverImageUrl ?? undefined} imageAlt={name || undefined} robots={info && sort !== "NEWEST" ? "noindex, follow" : undefined} twitterCard="summary" ogType="website" jsonLd={jsonLd} hideHeader hideFooter>
   {
     info ? (
       <main class="phone" id="main">

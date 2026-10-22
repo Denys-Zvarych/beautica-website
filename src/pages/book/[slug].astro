@@ -72,7 +72,7 @@ const backHref = info?.salon?.bookingSlug ? `/book/s/${info.salon.bookingSlug}` 
 const canBook = !!info && info.services.length > 0;
 ---
 
-<Layout title={title} description={description} noindex={!info} image={info?.avatarUrl ?? undefined} imageAlt={name || undefined} robots={sort !== "NEWEST" ? "noindex, follow" : undefined} twitterCard="summary" ogType="profile" jsonLd={jsonLd} hideHeader hideFooter>
+<Layout title={title} description={description} noindex={!info} image={info?.avatarUrl ?? undefined} imageAlt={name || undefined} robots={info && sort !== "NEWEST" ? "noindex, follow" : undefined} twitterCard="summary" ogType="profile" jsonLd={jsonLd} hideHeader hideFooter>
   {
     info ? (
       <main
