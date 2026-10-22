@@ -1,5 +1,6 @@
 #!/usr/bin/env node
-// Verifies docs/claims.md: each row's source file exists and the line is in range, and each page anchor exists in dist/client.
+// Verifies docs/claims.md: each row's source file exists and the line is in range, and each page anchor exists in dist/client
+// (or, for SSR pages, `src:<file>#<needle>` is found in the file that renders the claim).
 // Sibling-repo sources (paths starting with ../) are skipped with a warning when the repo is absent (e.g. on CI).
 // Exit 1 on any broken row. Needs a prior `npm run build` for anchor checks (missing dist = error).
 import { existsSync, readFileSync } from "node:fs";
@@ -43,6 +44,16 @@ rows.forEach((cells, i) => {
       const lines = readFileSync(file, "utf8").split("\n").length;
       if (Number(m[2]) < 1 || Number(m[2]) > lines) fail(n, `line ${m[2]} out of range (file has ${lines}): ${m[1]}`);
     }
+  }
+
+  // SSR pages (/book/{slug}) have no built HTML to hold an id: `src:<file>#<needle>` anchors the claim to the repo file that renders it,
+  // which must exist and contain the needle verbatim (tests/claims-pins.test.mjs then compares the NUMBERS with the backend).
+  const sa = anchor.match(/^src:([^#]+)#(.+)$/);
+  if (sa) {
+    const f = join(root, sa[1]);
+    if (!existsSync(f)) return fail(n, `anchor file not found: ${sa[1]}`);
+    if (!readFileSync(f, "utf8").includes(sa[2])) fail(n, `anchor text «${sa[2]}» not in ${sa[1]}`);
+    return;
   }
 
   const a = anchor.match(/^([a-z0-9/-]+)#([A-Za-z0-9_-]+)$/);

@@ -1,0 +1,6 @@
+{
+  "_": "One entry per PUBLISHED privacy-policy version, oldest first. sha256 = SHA-256 of src/content/legal/uk/privacy.md without its front matter. See tests/booking-config.test.mjs.",
+  "versions": [
+    { "version": "2026-10-22", "sha256": "2554e820bd0249d8ecb6fd78f133e40fdad4a257f6d25f12a59aeb8db99bba8d" }
+  ]
+}

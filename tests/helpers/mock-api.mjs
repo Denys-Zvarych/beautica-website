@@ -18,10 +18,12 @@ export const SVC = [
   { id: "33333333-3333-4333-8333-333333333333", name: "Педикюр апаратний", durationMinutes: 90, priceFrom: 800, category: "PODOLOGY" },
   { id: "44444444-4444-4444-8444-444444444444", name: "Корекція брів", durationMinutes: 30, priceFrom: 250, category: "BROWS" },
 ];
+// Ids are real UUIDs, as in the backend DTOs (tests/contract-booking-api.test.mjs validates every payload against them).
+const uid = (kind, n) => `${kind}${String(n).padStart(7, "0")}-1111-4222-8333-944455556666`;
 const CATS = [
-  { id: "c1", name: "Нігтьовий сервіс", key: "NAIL_SERVICE" },
-  { id: "c2", name: "Подологія", key: "PODOLOGY" },
-  { id: "c3", name: "Оформлення брів", key: "BROWS" },
+  { id: uid("c", 1), name: "Нігтьовий сервіс", key: "NAIL_SERVICE" },
+  { id: uid("c", 2), name: "Подологія", key: "PODOLOGY" },
+  { id: uid("c", 3), name: "Оформлення брів", key: "BROWS" },
 ];
 /** 110 + 14 + 3 + 1 + 0 = 128 reviews, as the design's example. */
 export const DIST = [5, 4, 3, 2, 1].map((rating, i) => ({ rating, count: [110, 14, 3, 1, 0][i] }));
@@ -82,7 +84,7 @@ const masterInfo = (over = {}) => ({
   street: "вул. Хрещатик",
   buildingNo: "22",
   locationNote: "2 поверх, офіс 5",
-  portfolio: [1, 2, 3].map((n) => ({ id: `p${n}`, entityType: "MASTER", entityId: MASTER_ID, mediaType: "PORTFOLIO", url: `${MEDIA}/p${n}.jpg`, createdAt: "2026-10-01T10:00:00Z" })),
+  portfolio: [1, 2, 3].map((n) => ({ id: uid("a", n), entityType: "MASTER", entityId: MASTER_ID, mediaType: "PORTFOLIO", url: `${MEDIA}/p${n}.jpg`, createdAt: "2026-10-01T10:00:00Z" })),
   latestReviews: [
     review(1, "Марина К.", 5, "Дуже акуратна робота, покриття тримається вже третій тиждень.", "Манікюр+гель лак", 3),
     review(2, "Ірина Л.", 4, "Тихо, чисто, ніяких черг.", "Манікюр класичний", 9),
@@ -102,7 +104,7 @@ const MASTERS = {
   "expired-6666": () => masterInfo(),
   "evil-0666": () => masterInfo({ bio: EVIL.bio, professionalTitle: EVIL.title, latestReviews: [{ ...review(1, "Автор", 5, EVIL.comment, "Послуга", 1), clientDisplayName: EVIL.author }] }),
   "cache-4444": () => masterInfo(),
-  "rail-8888": () => masterInfo({ portfolio: Array.from({ length: 12 }, (_, i) => ({ id: `p${i}`, entityType: "MASTER", entityId: MASTER_ID, mediaType: "PORTFOLIO", url: `${MEDIA}/p${i}.jpg`, createdAt: "2026-10-01T10:00:00Z" })) }),
+  "rail-8888": () => masterInfo({ portfolio: Array.from({ length: 12 }, (_, i) => ({ id: uid("a", i), entityType: "MASTER", entityId: MASTER_ID, mediaType: "PORTFOLIO", url: `${MEDIA}/p${i}.jpg`, createdAt: "2026-10-01T10:00:00Z" })) }),
   "headers-3333": () => masterInfo(),
   "salonmaster-5555": () => masterInfo({ masterName: "Дарина Мельник", street: null, buildingNo: null, locationNote: null, salon: { name: "Салон «Лаванда»", bookingSlug: "lavanda-1111" } }),
 };
@@ -123,10 +125,10 @@ const salonInfo = (over = {}) => ({
   updatedAt: "2026-10-20T10:00:00Z",
   description: "Світлий салон у центрі Києва: манікюр, педикюр, брови.\nПрацюємо щодня.",
   locationNote: "Вхід з двору, 2 поверх",
-  portfolio: [1, 2, 3, 4].map((n) => ({ id: `sp${n}`, entityType: "SALON", entityId: "7a7a7a7a-1111-4222-8333-944455556666", mediaType: "PORTFOLIO", url: `${MEDIA}/s${n}.jpg`, createdAt: "2026-10-01T10:00:00Z" })),
+  portfolio: [1, 2, 3, 4].map((n) => ({ id: uid("b", n), entityType: "SALON", entityId: "7a7a7a7a-1111-4222-8333-944455556666", mediaType: "PORTFOLIO", url: `${MEDIA}/s${n}.jpg`, createdAt: "2026-10-01T10:00:00Z" })),
   serviceCategories: [
-    { category: "NAIL_SERVICE", displayName: "Нігтьовий сервіс", count: 2, services: [{ id: "s1", name: "Манікюр класичний", baseDurationMinutes: 60, priceDisplay: "450 ₴" }, { id: "s2", name: "Манікюр+гель лак", baseDurationMinutes: 90, priceDisplay: "650 ₴" }] },
-    { category: "BROWS", displayName: "Оформлення брів", count: 1, services: [{ id: "s3", name: "Корекція брів", baseDurationMinutes: 30, priceDisplay: "600 - 900 ₴" }] },
+    { category: "NAIL_SERVICE", displayName: "Нігтьовий сервіс", count: 2, services: [{ id: uid("d", 1), name: "Манікюр класичний", baseDurationMinutes: 60, priceDisplay: "450 ₴" }, { id: uid("d", 2), name: "Манікюр+гель лак", baseDurationMinutes: 90, priceDisplay: "650 ₴" }] },
+    { category: "BROWS", displayName: "Оформлення брів", count: 1, services: [{ id: uid("d", 3), name: "Корекція брів", baseDurationMinutes: 30, priceDisplay: "600 - 900 ₴" }] },
   ],
   ratingDistribution: [5, 4, 3, 2, 1].map((rating, i) => ({ rating, count: [270, 30, 8, 3, 1][i] })),
   latestReviews: ALL_REVIEWS.slice(0, 5).map((r) => ({ ...r, masterFirstName: "Оксана", masterLastName: "Коваленко" })),
