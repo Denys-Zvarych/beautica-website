@@ -127,6 +127,10 @@ describe("happy path: one service", () => {
       assert.equal(done.includes("Керуйте записами"), false, "no install block: the done step is the design's");
       assert.equal(await page.locator("[data-screen=done] .chip").count(), 0);
       assert.ok(await visibleBox(page.locator("[data-screen=done] .calbtn svg")), "calendar glyph is drawn");
+      const paint = await page.locator("[data-screen=done] .calbtn svg").evaluate((s) => { const c = getComputedStyle(s); return { fill: c.fill, stroke: c.stroke, w: c.strokeWidth }; });
+      assert.equal(paint.fill, "none", "a stroke glyph is an outline, not a filled blob");
+      assert.notEqual(paint.stroke, "none");
+      assert.ok(parseFloat(paint.w) >= 1.5);
       await page.getByRole("link", { name: "На головну" }).waitFor();
     });
   });

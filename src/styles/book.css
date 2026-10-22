@@ -162,6 +162,16 @@
 }
 
 /* ---------- inline icon (script-built nodes): same glyphs as the Icon component ---------- */
+/* Stroke glyphs (strokePaths.ts, the shared Icon's "outlined" icons): an outline, not a fill. CSS beats presentation attributes, so the
+   fill: currentColor above must be switched off here, for every stroke icon. */
+.mi.stroke,
+.icon svg[fill="none"] {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
 .mi {
   display: inline-block;
   flex: none;
@@ -307,7 +317,7 @@ a.tab {
 .tab[aria-current="true"] .bar {
   width: var(--vt-app-tab-line-w);
 }
-.tabpanel + .tabpanel {
+.tabpanel:not([role="tabpanel"]) + .tabpanel:not([role="tabpanel"]) {
   margin-top: var(--vt-space-xl);
 }
 .tabpanel.swap {

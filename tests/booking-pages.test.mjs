@@ -425,6 +425,8 @@ describe("rendering at 360 / 768 / 1280", () => {
         return visible.className;
       });
       assert.match(first, /cat-list/, "the services panel opens with the category cards, not a heading");
+      const gap = await page.evaluate(() => document.querySelector("[data-panel='1'] .cat").getBoundingClientRect().top - document.querySelector(".tabs").getBoundingClientRect().bottom);
+      assert.ok(gap >= 20 && gap <= 30, `underline to first category card is ${gap}px (design 25)`);
       const bg = await page.locator("#book-cta").evaluate((b) => getComputedStyle(b).backgroundImage);
       assert.equal((bg.match(/linear-gradient/g) ?? []).length, 2, "overlay + accent gradient");
     } finally {
@@ -433,6 +435,9 @@ describe("rendering at 360 / 768 / 1280", () => {
     const sp = await bookPage(browser, "sparse-0001");
     try {
       assert.ok(await visibleBox(sp.page.locator(".avatar-well svg")), "person icon placeholder");
+      const ph = await sp.page.locator(".avatar-well svg").evaluate((s) => ({ w: s.getBoundingClientRect().width, fill: getComputedStyle(s).fill, color: getComputedStyle(s.closest(".avatar-well")).color, op: getComputedStyle(s).opacity }));
+      assert.ok(ph.w >= 40, `icon is ${ph.w}px wide`);
+      assert.ok(ph.fill !== "none" && ph.op === "1" && ph.color !== "rgba(0, 0, 0, 0)", JSON.stringify(ph));
       assert.equal(await sp.page.locator(".avatar-well img").count(), 0);
     } finally {
       await sp.context.close();

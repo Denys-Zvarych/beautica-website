@@ -25,8 +25,7 @@ const $$ = <T extends HTMLElement = HTMLElement>(sel: string, root: ParentNode =
 const fmt = (s: string, vars: Record<string, string | number>) => s.replace(/\{(\w+)\}/g, (_, k: string) => String(vars[k] ?? ""));
 
 function icon(path: string, stroke = false): string {
-  const paint = stroke ? ' fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"' : "";
-  return `<svg class="mi" viewBox="0 0 24 24"${paint} aria-hidden="true" focusable="false"><path d="${path}"></path></svg>`;
+  return `<svg class="mi${stroke ? " stroke" : ""}" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="${path}"></path></svg>`;
 }
 function el<K extends keyof HTMLElementTagNameMap>(tag: K, cls = "", text = ""): HTMLElementTagNameMap[K] {
   const e = document.createElement(tag);
