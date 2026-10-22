@@ -261,8 +261,8 @@ describe("rendering at 360 / 768 / 1280", () => {
   before(async () => (browser = await launch()));
   after(async () => browser?.close());
   const ROUTES = [
-    { path: "/book/oksana-ab12", name: "master", boxes: [".avatar-well", ".stat", ".rolechip", ".tab", ".bio", ".ptile"], h1: "Оксана Коваленко" },
-    { path: "/book/sparse-0001", name: "master-sparse", boxes: [".avatar-well", ".stat"], h1: "Нова Майстриня" },
+    { path: "/book/oksana-ab12", name: "master", boxes: [".avatar-well", ".stat", ".rolechip", ".shelf .cta", ".tab", ".bio", ".ptile"], h1: "Оксана Коваленко" },
+    { path: "/book/sparse-0001", name: "master-sparse", boxes: [".avatar-well", ".stat", ".shelf .cta"], h1: "Нова Майстриня" },
     { path: "/book/s/lavanda-1111", name: "salon", boxes: [".cover", ".hero-wrap", ".slogo", ".mcard", ".shelf .cta"], h1: "Салон «Лаванда»" },
     { path: "/book/closed-aaaa", name: "unbookable", boxes: [".notice"], h1: "Ця сторінка більше не працює" },
     { path: "/book/nobody-0000", name: "notfound", boxes: [".notice"], h1: "Сторінку не знайдено", status: 404 },
@@ -338,6 +338,8 @@ describe("rendering at 360 / 768 / 1280", () => {
       assert.equal(await page.locator("[data-panel='2']").isVisible(), true);
       assert.equal(await page.locator("[data-panel='0']").isVisible(), false);
       assert.equal(await page.getByRole("tab", { name: "Відгуки" }).getAttribute("aria-selected"), "true");
+      assert.equal(await page.locator("[data-nojs]").isVisible(), false);
+      assert.equal(await page.locator("#book-cta").isVisible(), true);
     } finally {
       await js.context.close();
     }

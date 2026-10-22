@@ -1,0 +1,70 @@
+---
+// Mirrors SlotChip: a pill with the extruded-small shadow; selected / unavailable = pressed in. 48 px hit area around a 40 px face.
+// Server-rendered once inside a <template>; the booking island clones it per slot and fills `data-t` + the label.
+interface Props {
+  time: string;
+  selected?: boolean;
+  disabled?: boolean;
+}
+const { time, selected = false, disabled = false } = Astro.props;
+---
+
+<button type="button" class="slot" aria-pressed={selected ? "true" : "false"} data-t={time} disabled={disabled}>
+  <span class="face">{time}</span>
+</button>
+
+<style>
+  .slot {
+    position: relative;
+    display: block;
+    width: var(--vt-app-slot-w);
+    height: var(--vt-touch-min);
+    padding: 0;
+    border: 0;
+    background: none;
+    cursor: pointer;
+    font: inherit;
+  }
+  .face {
+    position: absolute;
+    inset: calc((var(--vt-touch-min) - var(--vt-app-slot-face)) / 2) 0;
+    display: grid;
+    place-items: center;
+    border-radius: var(--vt-radius-pill);
+    background: var(--vt-color-base);
+    box-shadow: var(--vt-shadow-extruded-small);
+    color: var(--vt-color-text);
+    font: 800 var(--vt-fs-label) / var(--vt-lh-body) var(--vt-font-body);
+    border: var(--vt-app-line-2) solid transparent;
+    transition:
+      transform var(--vt-dur-fast) var(--vt-ease),
+      box-shadow var(--vt-dur-fast) var(--vt-ease);
+  }
+  .slot:active .face {
+    transform: scale(0.96);
+    box-shadow: none;
+  }
+  .slot[aria-pressed="true"] .face {
+    box-shadow: var(--vt-app-shadow-inset);
+    border-color: var(--vt-color-accent);
+    color: var(--vt-color-accent-deep);
+  }
+  @media (hover: hover) {
+    .slot:not([disabled]):not([aria-pressed="true"]):hover .face {
+      transform: translateY(calc(var(--vt-lift) * -1));
+    }
+  }
+  .slot:focus-visible {
+    outline: medium solid var(--vt-color-accent-deep);
+    outline-offset: 0;
+    border-radius: var(--vt-radius-pill);
+  }
+  .slot[disabled] {
+    opacity: 0.7;
+    cursor: not-allowed;
+  }
+  .slot[disabled] .face {
+    box-shadow: var(--vt-app-shadow-inset);
+    color: var(--vt-color-faint);
+  }
+</style>

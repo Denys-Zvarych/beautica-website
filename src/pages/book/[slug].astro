@@ -8,6 +8,7 @@ import "../../styles/book.css";
 import Layout from "../../components/Layout.astro";
 import BookNotice from "../../components/book/BookNotice.astro";
 import MasterProfile from "../../components/book/MasterProfile.astro";
+import BookingFlow from "../../components/book/BookingFlow.astro";
 import { t } from "../../i18n/t";
 import { isValidSlug } from "../../lib/booking/slug";
 import { bookingConfig } from "../../lib/booking/config";
@@ -76,6 +77,7 @@ const canBook = !!info && info.services.length > 0;
         class="phone"
         id="main"
         data-book-root
+        data-booking={canBook ? "" : undefined}
         data-api={cfg.apiOrigin}
         data-site-key={cfg.turnstileSiteKey}
         data-policy={cfg.policyVersion}
@@ -85,6 +87,7 @@ const canBook = !!info && info.services.length > 0;
         data-salon={info.salon?.name ?? ""}
       >
         <MasterProfile info={info} backHref={backHref} />
+        {canBook && <BookingFlow info={info} />}
       </main>
     ) : (
       <BookNotice topbar={t("book.master.topbar")} title={notice!.title} text={notice!.text} cta={notice!.cta} />
