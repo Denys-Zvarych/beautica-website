@@ -20,6 +20,7 @@ function setup(root: HTMLElement): void {
   const menu = $<HTMLDetailsElement>("[data-sortmenu]");
   const tpl = $<HTMLTemplateElement>("[data-review-tpl]");
   if (!list || !more || !tpl) return;
+  const moreBtn: HTMLButtonElement = more;
   let sort = root.dataset.sort ?? "NEWEST";
   let page = 0;
   let totalPages = Math.ceil(Number(root.dataset.count ?? 0) / PAGE);
@@ -51,14 +52,14 @@ function setup(root: HTMLElement): void {
     status.textContent = text ?? "";
   };
   const paintMore = () => {
-    more.hidden = page + 1 >= totalPages;
-    more.disabled = false;
+    moreBtn.hidden = page + 1 >= totalPages;
+    moreBtn.disabled = false;
   };
 
   async function load(nextSort: string, nextPage: number, replace: boolean): Promise<void> {
     if (busy) return;
     busy = true;
-    more.disabled = true;
+    moreBtn.disabled = true;
     show(root.dataset.loading ?? "");
     try {
       const q = new URLSearchParams({ sort: nextSort, page: String(nextPage), size: String(PAGE) });
