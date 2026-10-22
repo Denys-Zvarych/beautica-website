@@ -1,0 +1,36 @@
+---
+// Mirrors NeumorphicInset: the pressed-in well (inset light/dark shadow pair). Fields, the bio card, avatar wells and role chips
+// sit in one. Extend additively (new props default off).
+interface Props {
+  as?: "div" | "span" | "section";
+  /** Corner radius: card 24 (default), field 16, pill 999, round 50 %. */
+  radius?: "card" | "field" | "pill" | "round";
+  class?: string;
+  /** Any other attribute (role, aria-*, data-*) is passed to the wrapper. */
+  [attr: string]: unknown;
+}
+const { as: Tag = "div", radius = "card", class: className, ...rest } = Astro.props;
+---
+
+<Tag class:list={["neu-inset", `r-${radius}`, className]} {...rest}>
+  <slot />
+</Tag>
+
+<style>
+  .neu-inset {
+    background: var(--vt-color-base);
+    box-shadow: var(--vt-app-shadow-inset);
+  }
+  .r-card {
+    border-radius: var(--vt-radius-card);
+  }
+  .r-field {
+    border-radius: var(--vt-radius-field);
+  }
+  .r-pill {
+    border-radius: var(--vt-radius-pill);
+  }
+  .r-round {
+    border-radius: 50%;
+  }
+</style>

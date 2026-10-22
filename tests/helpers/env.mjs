@@ -8,6 +8,8 @@ export const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 export const BASE = process.env.TEST_BASE_URL ?? "";
 export const WRANGLER_LOG = process.env.TEST_WRANGLER_LOG ?? "";
 export const API_ORIGIN = "https://api.beautica.app";
+/** Local stand-in backend (tests/helpers/mock-api.mjs) the Worker and the browser use for the booking-link pages. */
+export const MOCK_API = process.env.TEST_API_ORIGIN ?? "";
 export const TOKEN = "123e4567-e89b-42d3-a456-426614174000";
 
 /** UI copy: read from the same file the site renders from, so labels are never retyped (exact copy is covered by headers-seo). */

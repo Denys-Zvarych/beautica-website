@@ -1,0 +1,35 @@
+---
+// Mirrors CatalogueServiceTile. `selectable` = a toggle row of the booking flow (script toggles aria-checked); otherwise a
+// read-only row of the profile's service list. Label strings arrive pre-formatted (format.ts) so SSR and island agree.
+import Icon from "../Icon.astro";
+interface Props {
+  name: string;
+  price: string;
+  duration: string;
+  selectable?: boolean;
+  id?: string;
+  minutes?: number;
+  priceFrom?: number;
+}
+const { name, price, duration, selectable = false, id, minutes, priceFrom } = Astro.props;
+const Tag = selectable ? "button" : "div";
+---
+
+<Tag
+  class:list={["stile", { ro: !selectable }]}
+  type={selectable ? "button" : undefined}
+  aria-pressed={selectable ? "false" : undefined}
+  data-id={selectable ? id : undefined}
+  data-name={selectable ? name : undefined}
+  data-min={selectable ? minutes : undefined}
+  data-price={selectable ? priceFrom : undefined}
+>
+  {selectable && <span class="chk" aria-hidden="true"><Icon name="done" /></span>}
+  <span class="info">
+    <span class="t-strong name">{name}</span>
+    <span class="meta">
+      <span class="t-fb deep">{price}</span>
+      <span class="dur t-fb muted"><Icon name="schedule" />{duration}</span>
+    </span>
+  </span>
+</Tag>

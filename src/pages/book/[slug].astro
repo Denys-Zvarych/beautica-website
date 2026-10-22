@@ -1,0 +1,97 @@
+---
+// Master link page /book/{slug} (phases 008 + 009): on-demand (Worker) render of GET /api/v1/book/{slug}/info, edge-cached for the
+// upstream s-maxage (src/middleware.ts), plus the guest booking flow as a progressively enhanced island.
+// States: ok | unbookable (200, noindex) | gone 410 | unknown 404 | backend down 503. Booking steps never change the URL.
+export const prerender = false;
+
+import "../../styles/book.css";
+import Layout from "../../components/Layout.astro";
+import BookNotice from "../../components/book/BookNotice.astro";
+import MasterProfile from "../../components/book/MasterProfile.astro";
+import { t } from "../../i18n/t";
+import { isValidSlug } from "../../lib/booking/slug";
+import { bookingConfig } from "../../lib/booking/config";
+import { fetchMasterInfo } from "../../lib/booking/info";
+import { imageOrigins, noticeResponse, okResponse } from "../../lib/booking/respond";
+import { fitDescription, fitTitle, formatPriceFrom } from "../../lib/booking/format";
+import { breadcrumbList, profileBusiness } from "../../lib/jsonld";
+
+const slug = Astro.params.slug;
+const cfg = bookingConfig();
+const result = isValidSlug(slug) ? await fetchMasterInfo(cfg, slug, Astro.request.headers.get("cf-connecting-ip") ?? undefined) : ({ kind: "not-found" } as const);
+const site = (Astro.site as URL).origin;
+const home = { href: "/", label: t("book.notice.home") };
+
+type Notice = { title: string; text: string; metaTitle: string; status: number; cta?: { href: string; label: string }; retryAfter?: number };
+let notice: Notice | null = null;
+if (result.kind === "not-found") notice = { ...pick("notFound"), status: 404, cta: home };
+else if (result.kind === "gone") notice = { ...pick("unbookable"), status: 410, cta: home };
+else if (result.kind === "rate-limited") notice = { ...pick("unavailable"), status: 429, retryAfter: result.retryAfter, cta: { href: Astro.url.pathname, label: t("book.notice.unavailable.cta") } };
+else if (result.kind === "unavailable") notice = { ...pick("unavailable"), status: 503, retryAfter: result.retryAfter, cta: { href: Astro.url.pathname, label: t("book.notice.unavailable.cta") } };
+else if (!result.data.bookable) notice = { ...pick("unbookable"), status: 200, cta: home };
+
+function pick(k: "notFound" | "unbookable" | "unavailable") {
+  return { title: t(`book.notice.${k}.title`), text: t(`book.notice.${k}.text`), metaTitle: t(`book.notice.${k}.metaTitle`) };
+}
+
+if (notice) noticeResponse(Astro.response, notice.status, notice.retryAfter);
+const info = result.kind === "ok" && !notice ? result.data : null;
+if (info && result.kind === "ok") {
+  okResponse(Astro.response, cfg, result.ttl, imageOrigins([info.avatarUrl, ...info.portfolio]));
+}
+
+const canonical = `${site}/book/${slug}`;
+const name = info?.masterName ?? "";
+const title = info
+  ? fitTitle(60, ...(info.professionalTitle && (info.city ?? info.region) ? [`${name} — ${info.professionalTitle} · ${info.city ?? info.region}`] : []), ...(info.professionalTitle ? [`${name} — ${info.professionalTitle}`] : []), `${name} — ${t("book.master.metaTitleSuffix")}`, name)
+  : (notice?.metaTitle ?? "");
+const topServices = info ? info.services.slice(0, 3).map((s) => `${s.name} ${formatPriceFrom(s.priceFrom)}`).join(", ") : "";
+const description = info
+  ? fitDescription(topServices ? t("book.master.metaDescription", { services: `${name}: ${topServices}` }) : t("book.master.metaDescriptionNoServices", { name }), 155)
+  : t("book.notice.metaDescription");
+
+const jsonLd = info
+  ? [
+      profileBusiness({
+        url: canonical,
+        name,
+        image: info.avatarUrl,
+        description: info.bio ? fitDescription(info.bio, 300) : null,
+        address: { locality: info.city, region: info.region },
+        offers: info.services.map((s) => ({ name: s.name, priceFrom: s.priceFrom })),
+        rating: info.avgRating !== null && info.reviewCount > 0 ? { value: Math.round(info.avgRating * 10) / 10, count: info.reviewCount } : null,
+        reviews: info.latestReviews.map((r) => ({ author: r.clientDisplayName, rating: r.rating, text: r.comment, published: r.createdAt })),
+      }),
+      breadcrumbList([{ name: t("book.master.crumbHome"), url: `${site}/` }, { name, url: canonical }]),
+    ]
+  : undefined;
+const backHref = info?.salon?.bookingSlug ? `/book/s/${info.salon.bookingSlug}` : "/";
+const canBook = !!info && info.services.length > 0;
+---
+
+<Layout title={title} description={description} noindex={!info} image={info?.avatarUrl ?? undefined} imageAlt={name || undefined} twitterCard="summary" ogType="profile" jsonLd={jsonLd} hideHeader hideFooter>
+  {
+    info ? (
+      <main
+        class="phone"
+        id="main"
+        data-book-root
+        data-api={cfg.apiOrigin}
+        data-site-key={cfg.turnstileSiteKey}
+        data-policy={cfg.policyVersion}
+        data-slug={slug}
+        data-master={info.masterName}
+        data-city={info.city ?? info.region ?? ""}
+        data-salon={info.salon?.name ?? ""}
+      >
+        <MasterProfile info={info} backHref={backHref} />
+      </main>
+    ) : (
+      <BookNotice topbar={t("book.master.topbar")} title={notice!.title} text={notice!.text} cta={notice!.cta} />
+    )
+  }
+</Layout>
+
+<script>
+  import "../../scripts/booking/main";
+</script>

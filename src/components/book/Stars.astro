@@ -1,0 +1,14 @@
+---
+// Five rating stars (RatingStars): `rating` filled in deep accent, the rest faint. Decorative; the label is the accessible name.
+import Icon from "../Icon.astro";
+interface Props {
+  rating: number;
+  label: string;
+  big?: boolean;
+}
+const { rating, label, big = false } = Astro.props;
+---
+
+<span class:list={["stars", { big }]} role="img" aria-label={label}>
+  {[1, 2, 3, 4, 5].map((n) => <span class:list={{ on: n <= Math.round(rating) }}><Icon name="star" /></span>)}
+</span>

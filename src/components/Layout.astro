@@ -17,14 +17,20 @@ interface Props {
   noindex?: boolean;
   canonicalPath?: string;
   image?: string;
+  imageAlt?: string;
+  ogType?: string;
+  /** summary_large_image for static pages (default), summary for profiles. */
+  twitterCard?: "summary_large_image" | "summary";
   jsonLd?: Record<string, unknown> | Record<string, unknown>[];
   /** Hide the header (a hero page that already shows the logo). Default false. */
   hideHeader?: boolean;
+  /** Hide the footer (the booking-link pages are one app-like column with its own bottom bar). Default false. */
+  hideFooter?: boolean;
   /** `<meta name="referrer" content="no-referrer">` so sub-resource requests never carry a token URL (token routes). Default false. */
   noReferrer?: boolean;
 }
 
-const { hideHeader = false, noReferrer = false, ...seo } = Astro.props;
+const { hideHeader = false, hideFooter = false, noReferrer = false, ...seo } = Astro.props;
 ---
 
 <!doctype html>
@@ -49,6 +55,6 @@ const { hideHeader = false, noReferrer = false, ...seo } = Astro.props;
     <a class="skip-link" href="#main">{t("a11y.skipToContent")}</a>
     {!hideHeader && <Header />}
     <slot />
-    <Footer />
+    {!hideFooter && <Footer />}
   </body>
 </html>

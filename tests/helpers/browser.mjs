@@ -2,7 +2,7 @@
 // every context blocks other origins and reports them, tests that need the API mock it explicitly.
 import { existsSync } from "node:fs";
 import { chromium } from "playwright-core";
-import { BASE, API_ORIGIN } from "./env.mjs";
+import { BASE, API_ORIGIN, MOCK_API } from "./env.mjs";
 
 const CANDIDATES = ["/snap/bin/chromium", "/usr/bin/chromium", "/usr/bin/chromium-browser", "/usr/bin/google-chrome", "/usr/bin/google-chrome-stable"];
 
@@ -22,7 +22,7 @@ export async function open(browser, { width = 360, height = 800, ...opts } = {})
   const external = [];
   const problems = [];
   await context.route(
-    (url) => url.origin !== BASE,
+    (url) => url.origin !== BASE && url.origin !== MOCK_API,
     (route) => {
       external.push(route.request().url());
       return route.abort("blockedbyclient");

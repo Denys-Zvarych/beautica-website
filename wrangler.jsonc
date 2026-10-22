@@ -10,14 +10,28 @@
   "main": "@astrojs/cloudflare/entrypoints/server",
   "assets": {
     "binding": "ASSETS",
-    "not_found_handling": "404-page"
+    "not_found_handling": "404-page",
+    // The link pages /book/{slug} and /book/s/{slug} are rendered by the Worker (SSR). Without this the asset layer answers a browser
+    // navigation to an unknown path with the static 404 page and never invokes the Worker. /book/cancel/{token} stays an asset
+    // (static shell via _redirects). /api/* is listed too: once this array exists the asset layer no longer lets a GET to a path
+    // without an asset reach the Worker, and /api/delete-request must keep answering 405 to a GET (tests/headers-seo.test.mjs).
+    "run_worker_first": ["/book/*", "!/book/cancel/*", "/api/*"]
   },
+  // Booking-link pages (phases 008/009), read at run time by src/lib/booking/config.ts. Public values only; the Worker key is a secret.
+  //   API_ORIGIN               prod API. Previews (dev branch, staging) override it below; local dev: .dev.vars (see .dev.vars.example).
+  //   TURNSTILE_SITE_KEY       prod: the real site key of the beautica.app widget, set as a plain-text variable in the Cloudflare dashboard
+  //                            (never committed; keep_vars stops a deploy from wiping it). Previews: Cloudflare's always-pass test key.
+  //   BOOKING_INFO_WORKER_KEY  secret (wrangler secret put / dashboard Secrets, previews.secrets); same value as the backend env var.
+  "keep_vars": true,
+  "vars": { "API_ORIGIN": "https://api.beautica.app" },
   // Account-deletion requests (phase 011): Email Routing send binding, locked to the verified team inbox.
   "send_email": [{ "name": "DELETION_MAIL", "destination_address": "beautica.ua@gmail.com" }],
   // 3 requests / 60 s per IP on /api/delete-request.
   "ratelimits": [{ "name": "DELETION_LIMITER", "namespace_id": "1011", "simple": { "limit": 3, "period": 60 } }],
   // Previews do not inherit production bindings: same names, Preview-safe values (separate rate-limit namespace).
   "previews": {
+    // Staging: the Railway staging API and Cloudflare's always-pass Turnstile test key (the staging backend accepts only test secrets).
+    "vars": { "API_ORIGIN": "https://beautica-backend-staging.up.railway.app", "TURNSTILE_SITE_KEY": "1x00000000000000000000AA" },
     "send_email": [{ "name": "DELETION_MAIL", "destination_address": "beautica.ua@gmail.com" }],
     "ratelimits": [{ "name": "DELETION_LIMITER", "namespace_id": "1012", "simple": { "limit": 3, "period": 60 } }]
   }

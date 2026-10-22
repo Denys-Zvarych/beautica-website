@@ -1,0 +1,96 @@
+---
+// Salon link page body (mirrors PublicSalonProfileScreen): cover, hero card, bookable masters. Each master card opens that
+// master's own link page (the booking flow starts there). The public salon info carries no description, portfolio, services or
+// reviews, so those tabs of the app screen are not rendered (backend gap, reported).
+import NeuCard from "../NeuCard.astro";
+import CtaButton from "../CtaButton.astro";
+import Icon from "../Icon.astro";
+import { t } from "../../i18n/t";
+import { formatRating, pluralReviews } from "../../lib/booking/format";
+import type { SalonInfo } from "../../lib/booking/types";
+
+interface Props {
+  info: SalonInfo;
+}
+const { info } = Astro.props;
+const FIRST = 6;
+const first = info.masters.slice(0, FIRST);
+const rest = info.masters.slice(FIRST);
+const avatarClass = (name: string) => `av-${(Array.from(name).reduce((a, c) => a + c.codePointAt(0)!, 0) % 6) + 1}`;
+const street = [info.street, info.buildingNo].filter(Boolean).join(", ");
+const address = [street, info.city].filter(Boolean).join(", ");
+const monogram = Array.from(info.name.replace(/^[^\p{L}\p{N}]+/u, ""))[0]?.toUpperCase() ?? "";
+---
+
+<div class="body">
+  <div class="cover">
+    {info.coverImageUrl ? <img src={info.coverImageUrl} alt="" width="420" height="232" decoding="async" fetchpriority="high" referrerpolicy="no-referrer" /> : <span class="cam"><Icon name="photo-camera-back" /></span>}
+    <div class="btns">
+      <a class="cib" href="/" aria-label={t("book.back")}><Icon name="arrow-back-ios" /></a>
+    </div>
+  </div>
+  <div class="hero-wrap">
+    <NeuCard emphasis pad="md-plus">
+      <div class="hero-row">
+        <span class="slogo" role="img" aria-label={t("book.salon.logoAlt")}>{info.avatarUrl ? <img src={info.avatarUrl} alt="" width="68" height="68" decoding="async" referrerpolicy="no-referrer" /> : monogram}</span>
+        <div class="min0 grow">
+          <h1 class="t-name-17">{info.name}</h1>
+          <div class="g-xs"></div>
+          {
+            info.reviewCount > 0 && (
+              <div class="ratingline">
+                <Icon name="star" />
+                <span class="t-strong11">{formatRating(info.avgRating)}</span>
+                <span class="t-fb muted ellipsis">· {pluralReviews(info.reviewCount)}</span>
+              </div>
+            )
+          }
+        </div>
+      </div>
+      {
+        address && (
+          <>
+            <div class="g-xs"></div>
+            <div class="addr-line"><Icon name="location-on" /><span class="t-fb sec">{address}</span></div>
+          </>
+        )
+      }
+    </NeuCard>
+  </div>
+  <div class="g-lg"></div>
+  <div class="pad-h" id="masters">
+    <h2 class="t-section sect-label">{t("book.salon.mastersLabel")}</h2>
+    <div class="mgrid">
+      {
+        first.map((m) => (
+          <a class="mcard" href={`/book/${m.masterSlug}`}>
+            <span class={`mav ${avatarClass(m.name)}`}>{m.avatarUrl ? <img src={m.avatarUrl} alt="" width="73" height="73" loading="lazy" decoding="async" referrerpolicy="no-referrer" /> : <Icon name="person" />}</span>
+            <span class="t-sub11 ellipsis">{m.name}</span>
+            {m.professionalTitle && <span class="role t-fb muted">{m.professionalTitle}</span>}
+          </a>
+        ))
+      }
+    </div>
+    {
+      rest.length > 0 && (
+        <>
+          <div class="g-sm"></div>
+          <button type="button" class="showall js-only" id="showall" hidden><span class="t-link">{t("book.salon.showAll")}</span><Icon name="keyboard-arrow-down" /></button>
+          <div class="mgrid more" id="mrest" data-collapsible>
+            {rest.map((m) => (
+              <a class="mcard" href={`/book/${m.masterSlug}`}>
+                <span class={`mav ${avatarClass(m.name)}`}>{m.avatarUrl ? <img src={m.avatarUrl} alt="" width="73" height="73" loading="lazy" decoding="async" referrerpolicy="no-referrer" /> : <Icon name="person" />}</span>
+                <span class="t-sub11 ellipsis">{m.name}</span>
+                {m.professionalTitle && <span class="role t-fb muted">{m.professionalTitle}</span>}
+              </a>
+            ))}
+          </div>
+        </>
+      )
+    }
+  </div>
+  <div class="g-xxl"></div>
+</div>
+<div class="shelf salon">
+  <CtaButton href="#masters" icon="event-available">{t("book.salon.cta")}</CtaButton>
+</div>

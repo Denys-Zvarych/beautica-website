@@ -11,7 +11,8 @@ import { spawn } from "node:child_process";
 import { createWriteStream, existsSync, mkdtempSync, readdirSync, readFileSync } from "node:fs";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
+import { startMockApi } from "../tests/helpers/mock-api.mjs";
 
 if (!existsSync("dist/server/wrangler.json")) {
   console.error("run-tests: dist/ is missing, run `npm run build` first");
@@ -28,12 +29,22 @@ const freePort = () =>
     });
   });
 
+// Stand-in backend for the booking-link pages: the Worker fetches its data from it (API_ORIGIN) and the browser calls it.
+const mockApi = await startMockApi();
 const port = await freePort();
 const base = `http://127.0.0.1:${port}`;
 const logPath = join(mkdtempSync(join(tmpdir(), "beautica-wrangler-")), "wrangler.log");
 const log = createWriteStream(logPath);
 
-const wrangler = spawn("npx", ["--no-install", "wrangler", "dev", "--port", String(port), "--ip", "127.0.0.1", "--show-interactive-dev-session=false"], {
+const wrangler = spawn("npx", [
+    "--no-install", "wrangler", "dev", "--port", String(port), "--ip", "127.0.0.1", "--show-interactive-dev-session=false",
+    // Fresh local state per run: the Cache API persists on disk, and a page cached by an earlier run must never answer this one.
+    "--persist-to", join(dirname(logPath), "state"),
+    "--var", `API_ORIGIN:${mockApi.origin}`,
+    // Cloudflare's always-pass test key: the tests serve a fake Turnstile script, so the whole widget + token path is exercised.
+    "--var", "TURNSTILE_SITE_KEY:1x00000000000000000000AA",
+    "--var", "BOOKING_INFO_WORKER_KEY:test-worker-key-0123456789012345678901",
+  ], {
   stdio: ["ignore", "pipe", "pipe"],
   detached: true, // own process group: workerd children die with it
   env: { ...process.env, WRANGLER_SEND_METRICS: "false", CI: "1", FORCE_COLOR: "0", NO_COLOR: "1" },
@@ -44,6 +55,7 @@ let exited = false;
 wrangler.on("exit", () => (exited = true));
 
 const stop = () => {
+  mockApi.close();
   if (exited) return;
   try {
     process.kill(-wrangler.pid, "SIGKILL");
@@ -75,7 +87,7 @@ try {
   const targets = files.length ? files : readdirSync("tests").filter((f) => f.endsWith(".test.mjs")).map((f) => join("tests", f));
   const run = spawn(process.execPath, ["--test", "--test-concurrency=2", "--test-reporter=spec", ...targets], {
     stdio: "inherit",
-    env: { ...process.env, TEST_BASE_URL: base, TEST_WRANGLER_LOG: logPath },
+    env: { ...process.env, TEST_BASE_URL: base, TEST_WRANGLER_LOG: logPath, TEST_API_ORIGIN: mockApi.origin },
   });
   code = await new Promise((resolve) => run.on("exit", (c) => resolve(c ?? 1)));
 } catch (err) {

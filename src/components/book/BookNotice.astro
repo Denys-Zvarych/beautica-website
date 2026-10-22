@@ -1,0 +1,29 @@
+---
+// A link page that cannot show a profile: unbookable / retired (410-style card), unknown (404), or backend down (503).
+// Same column and card as the profile pages (the approved 410 design state); noindex is set by the page.
+import NeuCard from "../NeuCard.astro";
+import CtaButton from "../CtaButton.astro";
+import BookTopBar from "./BookTopBar.astro";
+
+interface Props {
+  topbar: string;
+  title: string;
+  text: string;
+  cta?: { href: string; label: string };
+}
+const { topbar, title, text, cta } = Astro.props;
+---
+
+<main class="phone" id="main">
+  <BookTopBar title={topbar} href="/" />
+  <div class="body">
+    <div class="scroll">
+      <NeuCard class="notice">
+        <h1 class="t-heading">{title}</h1>
+        <div class="g-sm"></div>
+        <p class="t-body">{text}</p>
+        {cta && <CtaButton href={cta.href}>{cta.label}</CtaButton>}
+      </NeuCard>
+    </div>
+  </div>
+</main>

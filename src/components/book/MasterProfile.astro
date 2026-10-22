@@ -1,0 +1,189 @@
+---
+// Master link page body (mirrors PublicMasterProfileScreen): hero card, stat tiles, tabs (progressive: every panel is in the
+// first HTML; the script turns them into tabs), sticky booking button. Everything indexable is server-rendered.
+import NeuCard from "../NeuCard.astro";
+import NeuInset from "../NeuInset.astro";
+import CtaButton from "../CtaButton.astro";
+import Icon from "../Icon.astro";
+import BookTopBar from "./BookTopBar.astro";
+import ServiceTile from "./ServiceTile.astro";
+import Stars from "./Stars.astro";
+import { t } from "../../i18n/t";
+import { categoryIconUrl } from "../../lib/categoryIcon";
+import { formatDuration, formatPriceFrom, formatRating, pluralReviews, relativeUk } from "../../lib/booking/format";
+import type { MasterInfo } from "../../lib/booking/types";
+
+interface Props {
+  info: MasterInfo;
+  backHref: string;
+}
+const { info, backHref } = Astro.props;
+const location = info.city ?? info.region;
+const cut = info.avgRating === null ? 100 : Math.max(0, Math.min(100, (1 - info.avgRating / 5) * 100));
+const avatarClass = (name: string) => `av-${(Array.from(name).reduce((a, c) => a + c.codePointAt(0)!, 0) % 6) + 1}`;
+const now = new Date();
+const canBook = info.bookable && info.services.length > 0;
+---
+
+<section class="screen" data-screen="profile">
+  <BookTopBar title={t("book.master.topbar")} href={backHref} />
+  <div class="body">
+    <div class="scroll">
+      <NeuCard emphasis pad="md" class="clip">
+        <div class="hero-row">
+          <NeuInset radius="round" class="avatar-well" role="img" aria-label={t("book.master.avatarAlt")}>
+            {info.avatarUrl ? <img src={info.avatarUrl} alt="" width="104" height="104" decoding="async" fetchpriority="high" referrerpolicy="no-referrer" /> : <Icon name="person-baseline" />}
+          </NeuInset>
+          <div class="min0 grow">
+            <h1 class="t-name">{info.masterName}</h1>
+            {
+              info.professionalTitle && (
+                <>
+                  <div class="g-xs"></div>
+                  <NeuInset as="span" radius="pill" class="rolechip">
+                    <Icon name="auto-awesome" />
+                    <span class="t-fb deep min0">{info.professionalTitle}</span>
+                  </NeuInset>
+                </>
+              )
+            }
+            {
+              location && (
+                <>
+                  <div class="g-xs"></div>
+                  <span class="meta-line"><Icon name="location-on" /><span class="t-fb muted">{location}</span></span>
+                </>
+              )
+            }
+          </div>
+        </div>
+      </NeuCard>
+
+      <div class="g-xl"></div>
+      <div class="stats">
+        <div class="stat">
+          <span class="rstar" aria-hidden="true">
+            <span class="ai base" style="--src: url(/icons/star.svg)"></span>
+            <span class="ai fill" style={`--src: url(/icons/star.svg); --cut: ${cut.toFixed(1)}%`}></span>
+          </span>
+          <span class="t-stat">{formatRating(info.avgRating)}</span>
+          <span class="t-stat-cap">{t("book.master.stats.rating")}</span>
+        </div>
+        <div class="stat">
+          <Icon name="design-services" />
+          <span class="t-stat">{info.services.length}</span>
+          <span class="t-stat-cap">{t("book.master.stats.services")}</span>
+        </div>
+        <div class="stat">
+          <Icon name="reviews" />
+          <span class="t-stat">{info.reviewCount}</span>
+          <span class="t-stat-cap">{t("book.master.stats.reviews")}</span>
+        </div>
+      </div>
+
+      <div class="g-lg"></div>
+      {/* Anchor links without script (jump to the section); the script upgrades them to ARIA tabs. Always rendered: no layout shift. */}
+      <nav class="tabs" data-tabs aria-label={t("book.master.tabsLabel")}>
+        {
+          ["about", "services", "reviews"].map((k, i) => (
+            <a class="tab" href={`#panel-${i}`} data-tab={i} aria-current={i === 0 ? "true" : undefined}>
+              <span class="t-sub11 ellipsis">{t(`book.master.tabs.${k}`)}</span>
+              <span class="bar"></span>
+            </a>
+          ))
+        }
+      </nav>
+      <div class="g-lg"></div>
+
+      <div data-panels>
+        <div class="tabpanel" id="panel-0" data-panel="0">
+          <div class="sect">
+            <h2 class="t-section sect-label">{t("book.master.aboutLabel")}</h2>
+            {
+              info.bio ? (
+                <NeuInset class="bio"><p class="t-strong">{info.bio}</p></NeuInset>
+              ) : (
+                <p class="t-fb muted muted-note">{t("book.master.noAbout")}</p>
+              )
+            }
+          </div>
+          {
+            info.portfolio.length > 0 && (
+              <div class="sect">
+                <h2 class="t-section sect-label">{t("book.master.portfolio")}</h2>
+                <div class="rail">
+                  {info.portfolio.map((src, i) => (
+                    <span class="ptile"><img src={src} alt={t("book.master.photoAlt", { n: i + 1 })} width="72" height="72" loading="lazy" decoding="async" referrerpolicy="no-referrer" /></span>
+                  ))}
+                </div>
+              </div>
+            )
+          }
+        </div>
+
+        <div class="tabpanel" id="panel-1" data-panel="1">
+          <h2 class="t-section sect-label">{t("book.master.servicesLabel")}</h2>
+          {
+            info.categories.length > 0 && (
+              <div class="cat-list svc-block">
+                {info.categories.map((c) => (
+                  <div class="cat">
+                    <span class="ico"><span class="ai" aria-hidden="true" style={`--src: url(${categoryIconUrl(c.name)})`}></span></span>
+                    <span class="lbl t-sub13 ellipsis">{c.name}</span>
+                  </div>
+                ))}
+              </div>
+            )
+          }
+          <div class="list-sm svc-block">
+            {info.services.map((s) => <ServiceTile name={s.name} price={formatPriceFrom(s.priceFrom)} duration={formatDuration(s.durationMinutes)} />)}
+          </div>
+        </div>
+
+        <div class="tabpanel" id="panel-2" data-panel="2">
+          <h2 class="t-section sect-label">{t("book.master.reviewsLabel")}</h2>
+          <NeuCard class="rsum">
+            <div class="left">
+              <span class="t-avg">{formatRating(info.avgRating)}</span>
+              {info.reviewCount > 0 && <Stars rating={info.avgRating ?? 0} label={t("book.master.ratingOf", { rating: formatRating(info.avgRating) })} big />}
+              <span class="t-fb muted">{pluralReviews(info.reviewCount)}</span>
+            </div>
+          </NeuCard>
+          {
+            info.latestReviews.length === 0 ? (
+              <p class="t-fb muted centered pad-v">{t("book.master.noReviews")}</p>
+            ) : (
+              <>
+                <div class="g-md"></div>
+                <div class="list-md">
+                  {info.latestReviews.map((r) => (
+                    <NeuCard as="article" pad="md-plus" class="rev">
+                      <div class="head">
+                        <span class={`ravatar ${avatarClass(r.clientDisplayName)}`} aria-hidden="true"><Icon name="person" /></span>
+                        <span class="t-sub12 ellipsis">{r.clientDisplayName}</span>
+                        <span class="t-fb muted">{relativeUk(r.createdAt, now)}</span>
+                      </div>
+                      <Stars rating={r.rating} label={t("book.master.ratingOf", { rating: r.rating })} />
+                      {r.comment && <p class="t-strong body-text">{r.comment}</p>}
+                      {r.serviceName && <div class="svc"><Icon name="spa" /><span class="t-fb muted w600 ellipsis">{r.serviceName}</span></div>}
+                    </NeuCard>
+                  ))}
+                </div>
+              </>
+            )
+          }
+        </div>
+      </div>
+    </div>
+  </div>
+  {
+    canBook && (
+      <div class="shelf">
+        <p class="t-body centered nojs" data-nojs>{t("book.master.noJs")}</p>
+        <div class="js-only" hidden data-book-cta>
+          <CtaButton type="button" id="book-cta" icon="add">{t("book.master.cta")}</CtaButton>
+        </div>
+      </div>
+    )
+  }
+</section>

@@ -3,7 +3,14 @@
 // here (token size, currentColor), so no consumer ever styles another component's SVG.
 // Paths: Simple Icons (https://simpleicons.org, v16.35.0), licensed CC0 1.0. Trademarks belong to Google LLC / Apple Inc.;
 // these are glyphs inside our own chips, not official badges. Inline SVG only: no requests, no raster.
-export type IconName = "google-play" | "app-store" | "arrow-back" | "mail" | "close" | "check" | "expand-more";
+import * as M from "../lib/icons/materialPaths";
+// Material set (booking-link pages): the app's own glyphs, subset of MaterialIcons-Regular.otf (src/lib/icons/materialPaths.ts).
+export type MaterialIconName =
+  | "star" | "spa" | "person" | "person-outline" | "done" | "schedule" | "arrow-back-ios" | "keyboard-arrow-down" | "expand-more-rounded"
+  | "error-outline" | "chevron-right" | "chevron-left" | "phone" | "location-on" | "swap-vert" | "alternate-email" | "event-busy"
+  | "event-available" | "check-circle" | "auto-awesome" | "arrow-forward" | "add" | "reviews" | "photo-camera-back" | "mail-read"
+  | "home" | "edit-calendar" | "design-services" | "person-baseline" | "close-rounded";
+export type IconName = "google-play" | "app-store" | "arrow-back" | "mail" | "close" | "check" | "expand-more" | "calendar-add" | MaterialIconName;
 interface Props {
   name: IconName;
   /** "lg" = 32 px glyph (success badge). Default unchanged. */
@@ -13,9 +20,11 @@ interface Props {
 }
 const { name, size, draw = false } = Astro.props;
 const stroked = name === "check"; // drawn as a stroke (so it can animate), not a filled path
+const outlined = name === "calendar-add"; // Material Symbols calendar_add_on: drawn as strokes (the Symbols font is 15 MB; no glyph source to subset)
+const materialPath = (M as Record<string, string>)[name.replace(/-(\w)/g, (_, c: string) => c.toUpperCase())];
 const chev = name === "expand-more"; // disclosure chevron: turns over while its <details> is open
 const nudge = name === "arrow-back"; // directional glyph: slides toward its direction when the parent link is hovered/focused
-const paths: Record<Exclude<IconName, "check">, string> = {
+const paths: Record<string, string> = {
   // Material Symbols arrow_back (Apache-2.0).
   "arrow-back": "M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z",
   // Material Symbols expand_more (Apache-2.0).
@@ -33,12 +42,16 @@ const paths: Record<Exclude<IconName, "check">, string> = {
 
 <span class:list={["icon", { nudge, chev, lg: size === "lg", draw }]} aria-hidden="true">
   {
-    stroked ? (
+    outlined ? (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg" focusable="false">
+        <path d="M8 3v3M16 3v3M5 9.5h14M12.5 20H7a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v5.5M18 15.5v5M15.5 18h5"></path>
+      </svg>
+    ) : stroked ? (
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg" focusable="false">
         <path d="M5 12.5l4.5 4.5L19 7.5" pathLength="1"></path>
       </svg>
     ) : (
-      <svg viewBox="0 0 24 24" width="1.25em" height="1.25em" fill="currentColor" xmlns="http://www.w3.org/2000/svg" focusable="false"><path d={paths[name]}></path></svg>
+      <svg viewBox="0 0 24 24" width="1.25em" height="1.25em" fill="currentColor" xmlns="http://www.w3.org/2000/svg" focusable="false"><path d={materialPath ?? paths[name]}></path></svg>
     )
   }
 </span>
@@ -47,9 +60,10 @@ const paths: Record<Exclude<IconName, "check">, string> = {
   .icon {
     display: inline-flex;
     flex: none;
-    width: calc(var(--vt-space-md) + var(--vt-space-xs));
-    height: calc(var(--vt-space-md) + var(--vt-space-xs));
-    margin-inline-end: var(--vt-space-sm);
+    /* --icon-size / --icon-gap: a parent sets them (e.g. .stat { --icon-size: var(--vt-app-icon-18) }); unset = unchanged. */
+    width: var(--icon-size, calc(var(--vt-space-md) + var(--vt-space-xs)));
+    height: var(--icon-size, calc(var(--vt-space-md) + var(--vt-space-xs)));
+    margin-inline-end: var(--icon-gap, var(--vt-space-sm));
   }
   .icon {
     transition: transform var(--vt-dur-fast) var(--vt-ease);

@@ -1,0 +1,28 @@
+---
+// Mirrors VelvetTopBar / BookingTopBar: round back button | centred title | 48 px spacer. `href` = a plain link (profile screens);
+// without it the button is wired by the booking island to history.back(). The title is a heading only where `heading` is set
+// (booking steps use h2; the page's single H1 is the master / salon name).
+import Icon from "../Icon.astro";
+import { t } from "../../i18n/t";
+interface Props {
+  title: string;
+  href?: string;
+  heading?: boolean;
+}
+const { title, href, heading = false } = Astro.props;
+const Title = heading ? "h2" : "p";
+---
+
+<header class="topbar">
+  <div class="in">
+    {
+      href ? (
+        <a class="nib" href={href} aria-label={t("book.back")}><Icon name="arrow-back-ios" /></a>
+      ) : (
+        <button class="nib" type="button" data-back aria-label={t("book.back")}><Icon name="arrow-back-ios" /></button>
+      )
+    }
+    <Title class="title t-title ellipsis" data-step-heading={heading ? "" : undefined} tabindex={heading ? -1 : undefined} aria-level={heading ? 1 : undefined}>{title}</Title>
+    <span class="nib-spacer"></span>
+  </div>
+</header>

@@ -15,6 +15,30 @@ export const CSP = [
   "object-src 'none'",
 ].join("; ");
 
+const TURNSTILE = "https://challenges.cloudflare.com";
+
+/**
+ * CSP of the SSR booking-link pages (/book/{slug}, /book/s/{slug}): the base policy plus the runtime API origin (booking calls),
+ * the image origins actually present in the API data (R2 media), and Cloudflare Turnstile only when a site key is configured.
+ * Set by the page itself (the middleware never overrides a header a route already set).
+ */
+export function bookingCsp(opts: { apiOrigin: string; imgOrigins: string[]; turnstile: boolean }): string {
+  const img = ["'self'", "data:", ...new Set(opts.imgOrigins)].join(" ");
+  return [
+    "default-src 'self'",
+    `script-src 'self'${opts.turnstile ? ` ${TURNSTILE}` : ""}`,
+    "style-src 'self' 'unsafe-inline'",
+    `img-src ${img}`,
+    "font-src 'self'",
+    `connect-src 'self' ${opts.apiOrigin}${opts.turnstile ? ` ${TURNSTILE}` : ""}`,
+    ...(opts.turnstile ? [`frame-src ${TURNSTILE}`] : []),
+    "form-action 'self'",
+    "frame-ancestors 'none'",
+    "base-uri 'self'",
+    "object-src 'none'",
+  ].join("; ");
+}
+
 export const SECURITY_HEADERS: Record<string, string> = {
   "Content-Security-Policy": CSP,
   "Strict-Transport-Security": "max-age=31536000; includeSubDomains",

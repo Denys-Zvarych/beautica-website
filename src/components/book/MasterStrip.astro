@@ -1,0 +1,34 @@
+---
+// Mirrors MasterStrip: avatar disc, «Запис до майстра», name, subtitle and the rating. Repeated on every booking step.
+import Icon from "../Icon.astro";
+import { t } from "../../i18n/t";
+import { formatRating } from "../../lib/booking/format";
+interface Props {
+  name: string;
+  subtitle: string | null;
+  avatarUrl: string | null;
+  rating: number | null;
+  reviewCount: number;
+}
+const { name, subtitle, avatarUrl, rating, reviewCount } = Astro.props;
+---
+
+<div class="strip">
+  <span class="disc" aria-hidden="true">{avatarUrl ? <img src={avatarUrl} alt="" width="52" height="52" loading="lazy" decoding="async" referrerpolicy="no-referrer" /> : <Icon name="person" />}</span>
+  <div class="txt">
+    <p class="t-fb sec">{t("book.strip.label")}</p>
+    <p class="t-sub13 ellipsis">{name}</p>
+    <div class="sub">
+      <span class="t-fb muted ellipsis">{subtitle ?? ""}</span>
+      {
+        reviewCount > 0 && (
+          <span class="rate">
+            <Icon name="star" />
+            <span class="t-strong11">{formatRating(rating)}</span>
+            <span class="t-fb muted">({reviewCount})</span>
+          </span>
+        )
+      }
+    </div>
+  </div>
+</div>

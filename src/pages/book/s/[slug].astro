@@ -1,0 +1,67 @@
+---
+// Salon link page /book/s/{slug} (phase 008): on-demand render of GET /api/v1/book/s/{slug}/info, edge-cached for the upstream
+// s-maxage (src/middleware.ts). No booking island: a master card opens that master's own link page, where the flow runs.
+// States: ok | no bookable master (200, noindex) | gone 410 | unknown 404 | backend down 503.
+export const prerender = false;
+
+import "../../../styles/book.css";
+import Layout from "../../../components/Layout.astro";
+import BookNotice from "../../../components/book/BookNotice.astro";
+import SalonProfile from "../../../components/book/SalonProfile.astro";
+import { t } from "../../../i18n/t";
+import { isValidSlug } from "../../../lib/booking/slug";
+import { bookingConfig } from "../../../lib/booking/config";
+import { fetchSalonInfo } from "../../../lib/booking/info";
+import { imageOrigins, noticeResponse, okResponse } from "../../../lib/booking/respond";
+import { fitDescription, fitTitle } from "../../../lib/booking/format";
+import { breadcrumbList, profileBusiness } from "../../../lib/jsonld";
+
+const slug = Astro.params.slug;
+const cfg = bookingConfig();
+const result = isValidSlug(slug) ? await fetchSalonInfo(cfg, slug, Astro.request.headers.get("cf-connecting-ip") ?? undefined) : ({ kind: "not-found" } as const);
+const site = (Astro.site as URL).origin;
+const home = { href: "/", label: t("book.notice.home") };
+const retry = { href: Astro.url.pathname, label: t("book.notice.unavailable.cta") };
+
+type Notice = { title: string; text: string; metaTitle: string; status: number; cta?: { href: string; label: string }; retryAfter?: number };
+const pick = (k: "notFound" | "salonUnbookable" | "unavailable") => ({ title: t(`book.notice.${k}.title`), text: t(`book.notice.${k}.text`), metaTitle: t(`book.notice.${k}.metaTitle`) });
+let notice: Notice | null = null;
+if (result.kind === "not-found") notice = { ...pick("notFound"), status: 404, cta: home };
+else if (result.kind === "gone") notice = { ...pick("salonUnbookable"), status: 410, cta: home };
+else if (result.kind === "rate-limited") notice = { ...pick("unavailable"), status: 429, retryAfter: result.retryAfter, cta: retry };
+else if (result.kind === "unavailable") notice = { ...pick("unavailable"), status: 503, retryAfter: result.retryAfter, cta: retry };
+else if (!result.data.bookable || result.data.masters.length === 0) notice = { ...pick("salonUnbookable"), status: 200, cta: home };
+
+if (notice) noticeResponse(Astro.response, notice.status, notice.retryAfter);
+const info = result.kind === "ok" && !notice ? result.data : null;
+if (info && result.kind === "ok") okResponse(Astro.response, cfg, result.ttl, imageOrigins([info.avatarUrl, info.coverImageUrl, ...info.masters.map((m) => m.avatarUrl)]));
+
+const canonical = `${site}/book/s/${slug}`;
+const name = info?.name ?? "";
+const title = info ? fitTitle(60, ...(info.city ? [`${name} · ${info.city} — ${t("book.salon.metaTitleSuffix")}`] : []), `${name} — ${t("book.salon.metaTitleSuffix")}`, name) : (notice?.metaTitle ?? "");
+const description = info ? fitDescription(t("book.salon.metaDescription", { name }), 155) : t("book.notice.metaDescription");
+const street = info ? [info.street, info.buildingNo].filter(Boolean).join(", ") : "";
+const jsonLd = info
+  ? [
+      // No aggregateRating: this page renders the rating line but no reviews.
+      profileBusiness({ url: canonical, name, image: info.avatarUrl ?? info.coverImageUrl, address: { locality: info.city, region: info.region, street: street || null }, offers: [] }),
+      breadcrumbList([{ name: t("book.master.crumbHome"), url: `${site}/` }, { name, url: canonical }]),
+    ]
+  : undefined;
+---
+
+<Layout title={title} description={description} noindex={!info} image={info?.avatarUrl ?? info?.coverImageUrl ?? undefined} imageAlt={name || undefined} twitterCard="summary" ogType="profile" jsonLd={jsonLd} hideHeader hideFooter>
+  {
+    info ? (
+      <main class="phone" id="main">
+        <SalonProfile info={info} />
+      </main>
+    ) : (
+      <BookNotice topbar={t("book.salon.topbar")} title={notice!.title} text={notice!.text} cta={notice!.cta} />
+    )
+  }
+</Layout>
+
+<script>
+  import "../../../scripts/booking/main";
+</script>
