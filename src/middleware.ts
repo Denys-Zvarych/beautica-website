@@ -67,7 +67,7 @@ async function cachedLinkPage(ctx: Parameters<Parameters<typeof defineMiddleware
   const res = withSecurityHeaders(await next());
   res.headers.set("X-Beautica-Cache", "MISS");
   const ttl = Number(/s-maxage=(\d+)/.exec(res.headers.get("Cache-Control") ?? "")?.[1] ?? 0);
-  if (cache && res.status === 200 && ttl > 0 && !res.headers.has("X-Robots-Tag") && !res.headers.has("Set-Cookie")) {
+  if (cache && res.status === 200 && ttl > 0 && !/nofollow/i.test(res.headers.get("X-Robots-Tag") ?? "") && !res.headers.has("Set-Cookie")) {
     const stored = new Response(res.clone().body, res);
     stored.headers.set("Cache-Control", `public, max-age=${ttl}`); // the Cache API stores by max-age; browsers get the original header
     stored.headers.set("X-Beautica-Ttl", String(ttl));

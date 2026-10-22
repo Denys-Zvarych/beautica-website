@@ -34,7 +34,7 @@ else if (!result.data.bookable || result.data.masters.length === 0) notice = { .
 
 if (notice) noticeResponse(Astro.response, notice.status, notice.retryAfter);
 const info = result.kind === "ok" && !notice ? result.data : null;
-if (info && result.kind === "ok") okResponse(Astro.response, cfg, result.ttl, imageOrigins([info.avatarUrl, info.coverImageUrl, ...info.masters.map((m) => m.avatarUrl)]));
+if (info && result.kind === "ok") okResponse(Astro.response, cfg, result.ttl, imageOrigins([info.avatarUrl, info.coverImageUrl, ...info.portfolio, ...info.masters.map((m) => m.avatarUrl)]), { noindexFollow: parseSort(Astro.url.searchParams.get("sort")) !== "NEWEST" });
 
 const sort = parseSort(Astro.url.searchParams.get("sort"));
 const firstReviews = info && sort !== "NEWEST" ? ((await fetchReviewsFirstPage(cfg, "salon", slug as string, sort, Astro.request.headers.get("cf-connecting-ip") ?? undefined)) ?? info.latestReviews) : (info?.latestReviews ?? []);
@@ -54,14 +54,14 @@ const jsonLd = info
         address: { locality: info.city, region: info.region, street: street || null },
         offers: info.serviceCategories.flatMap((g) => g.services.map((s) => ({ name: s.name }))),
         rating: info.avgRating !== null && info.reviewCount > 0 ? { value: Math.round(info.avgRating * 10) / 10, count: info.reviewCount } : null,
-        reviews: firstReviews.map((r) => ({ author: r.clientDisplayName, rating: r.rating, text: r.comment, published: r.createdAt })),
+        reviews: (info.reviewCount > 0 ? firstReviews : []).map((r) => ({ author: r.clientDisplayName, rating: r.rating, text: r.comment, published: r.createdAt })),
       }),
       breadcrumbList([{ name: t("book.master.crumbHome"), url: `${site}/` }, { name, url: canonical }]),
     ]
   : undefined;
 ---
 
-<Layout title={title} description={description} noindex={!info} image={info?.avatarUrl ?? info?.coverImageUrl ?? undefined} imageAlt={name || undefined} twitterCard="summary" ogType="website" jsonLd={jsonLd} hideHeader hideFooter>
+<Layout title={title} description={description} noindex={!info} image={info?.avatarUrl ?? info?.coverImageUrl ?? undefined} imageAlt={name || undefined} robots={sort !== "NEWEST" ? "noindex, follow" : undefined} twitterCard="summary" ogType="website" jsonLd={jsonLd} hideHeader hideFooter>
   {
     info ? (
       <main class="phone" id="main">

@@ -102,3 +102,11 @@ export function streetLine(street: string | null, building: string | null): stri
   const s = [street, building].filter(Boolean).join(", ");
   return s || null;
 }
+
+/** «5 зірок», «1 зірка», «2 зірки» (the bar labels of the rating distribution). */
+export function pluralStars(n: number): string {
+  const m100 = n % 100;
+  const m10 = n % 10;
+  const word = m100 >= 11 && m100 <= 14 ? "зірок" : m10 === 1 ? "зірка" : m10 >= 2 && m10 <= 4 ? "зірки" : "зірок";
+  return `${n} ${word}`;
+}

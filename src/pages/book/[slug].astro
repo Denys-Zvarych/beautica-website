@@ -38,7 +38,7 @@ function pick(k: "notFound" | "unbookable" | "unavailable") {
 if (notice) noticeResponse(Astro.response, notice.status, notice.retryAfter);
 const info = result.kind === "ok" && !notice ? result.data : null;
 if (info && result.kind === "ok") {
-  okResponse(Astro.response, cfg, result.ttl, imageOrigins([info.avatarUrl, ...info.portfolio]));
+  okResponse(Astro.response, cfg, result.ttl, imageOrigins([info.avatarUrl, ...info.portfolio]), { noindexFollow: parseSort(Astro.url.searchParams.get("sort")) !== "NEWEST" });
 }
 
 const sort = parseSort(Astro.url.searchParams.get("sort"));
@@ -63,7 +63,7 @@ const jsonLd = info
         address: { locality: info.city, region: info.region, street: streetLine(info.street, info.buildingNo) },
         offers: info.services.map((s) => ({ name: s.name, priceFrom: s.priceFrom })),
         rating: info.avgRating !== null && info.reviewCount > 0 ? { value: Math.round(info.avgRating * 10) / 10, count: info.reviewCount } : null,
-        reviews: firstReviews.map((r) => ({ author: r.clientDisplayName, rating: r.rating, text: r.comment, published: r.createdAt })),
+        reviews: (info.reviewCount > 0 ? firstReviews : []).map((r) => ({ author: r.clientDisplayName, rating: r.rating, text: r.comment, published: r.createdAt })),
       }),
       breadcrumbList([{ name: t("book.master.crumbHome"), url: `${site}/` }, { name, url: canonical }]),
     ]
@@ -72,7 +72,7 @@ const backHref = info?.salon?.bookingSlug ? `/book/s/${info.salon.bookingSlug}` 
 const canBook = !!info && info.services.length > 0;
 ---
 
-<Layout title={title} description={description} noindex={!info} image={info?.avatarUrl ?? undefined} imageAlt={name || undefined} twitterCard="summary" ogType="profile" jsonLd={jsonLd} hideHeader hideFooter>
+<Layout title={title} description={description} noindex={!info} image={info?.avatarUrl ?? undefined} imageAlt={name || undefined} robots={sort !== "NEWEST" ? "noindex, follow" : undefined} twitterCard="summary" ogType="profile" jsonLd={jsonLd} hideHeader hideFooter>
   {
     info ? (
       <main

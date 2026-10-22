@@ -614,7 +614,9 @@ describe("navigation, focus, privacy", () => {
 describe("no JavaScript", () => {
   test("the profile and services stay readable; the page says booking needs JavaScript or the app", async () => {
     await withPage("oksana-ab12", { js: false }, async ({ page }) => {
-      const body = await text(page.locator("body"));
+      await page.locator("[data-panel='1'] summary").first().click(); // the category accordions are native <details>: they open without script
+      const body = (await text(page.locator("body"))).replace(/\s+/g, " ");
+      assert.ok(await page.locator("[data-panel='1'] .stile").first().isVisible(), "a service is readable after opening its category");
       for (const s of ["Оксана Коваленко", "Манікюр класичний", "від 450 ₴", "Марина К."]) assert.ok(body.includes(s.replace(/ /g, " ")) || body.includes(s), s);
       assert.ok(body.includes("увімкніть JavaScript"));
       assert.equal(await page.locator("#book-cta").isVisible(), false);
@@ -710,16 +712,16 @@ describe("parity with the app: category accordions, comment, address (backend 38
     });
   });
 
-  test("confirm: optional «Коментар для майстра» (1000 max, counter), trimmed, sent as clientComment, shown in the summary", async () => {
+  test("confirm: optional «Коментар для майстра» (500 as in the app, counter), trimmed, sent as clientComment, shown in the summary", async () => {
     await withPage("oksana-ab12", {}, async ({ page }) => {
       await driveTo(page, "confirm", { contact: { name: "Коментар" } });
-      assert.equal(await page.getAttribute("#comment", "maxlength"), "1000");
+      assert.equal(await page.getAttribute("#comment", "maxlength"), "500", "the app's limit (booking_confirm_screen _maxComment)");
       assert.equal(await page.getAttribute("#comment", "placeholder"), "Необов'язково");
-      assert.equal(await text(page.locator("#counter")), "0 / 1000");
+      assert.equal(await text(page.locator("#counter")), "0 / 500");
       assert.ok((await text(page.locator("[data-screen=confirm]"))).includes("Коментар для майстра"));
       const typed = "  Прийду з дитиною\nдякую  ";
       await page.fill("#comment", typed);
-      assert.equal(await text(page.locator("#counter")), `${typed.length} / 1000`);
+      assert.equal(await text(page.locator("#counter")), `${typed.length} / 500`);
     });
   });
 

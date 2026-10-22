@@ -26,10 +26,11 @@ export function imageOrigins(urls: (string | null | undefined)[]): string[] {
 }
 
 /** A page the visitor can use: indexable, edge-cached for the upstream s-maxage (the backend bounds staleness at 30 s). */
-export function okResponse(res: Res, cfg: BookingConfig, ttl: number, imgOrigins: string[], opts: { noindex?: boolean } = {}): void {
+export function okResponse(res: Res, cfg: BookingConfig, ttl: number, imgOrigins: string[], opts: { noindex?: boolean; noindexFollow?: boolean } = {}): void {
   res.headers.set("Cache-Control", `public, max-age=0, s-maxage=${ttl}`);
   res.headers.set("Content-Security-Policy", bookingCsp({ apiOrigin: cfg.apiOrigin, imgOrigins, turnstile: cfg.turnstileSiteKey !== "" }));
   if (opts.noindex) res.headers.set("X-Robots-Tag", NOINDEX);
+  else if (opts.noindexFollow) res.headers.set("X-Robots-Tag", "noindex, follow");
 }
 
 /** Any non-profile state: never cached, never indexed. */

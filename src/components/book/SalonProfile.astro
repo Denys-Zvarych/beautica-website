@@ -25,7 +25,9 @@ const rest = info.masters.slice(FIRST);
 const avatarClass = (name: string) => `av-${(Array.from(name).reduce((a, c) => a + c.codePointAt(0)!, 0) % 6) + 1}`;
 const street = [info.street, info.buildingNo].filter(Boolean).join(", ");
 const address = [street, info.city].filter(Boolean).join(", ");
-const monogram = Array.from(info.name.replace(/^[^\p{L}\p{N}]+/u, ""))[0]?.toUpperCase() ?? "";
+// The logo initial skips the word «Салон» («Салон «Лаванда»» -> Л), like the app's monogram of the brand name.
+const monogram = Array.from(info.name.replace(/^салон\s+/iu, "").replace(/^[^\p{L}\p{N}]+/u, ""))[0]?.toUpperCase() ?? "";
+const firstName = (n: string) => n.trim().split(/\s+/)[0] ?? n;
 ---
 
 <div class="body">
@@ -86,7 +88,7 @@ const monogram = Array.from(info.name.replace(/^[^\p{L}\p{N}]+/u, ""))[0]?.toUpp
         info.portfolio.length > 0 && (
           <div class="sect">
             <h3 class="t-section sect-label">{t("book.salon.portfolio")}</h3>
-            <div class="rail">
+            <div class="rail" role="region" tabindex="0" aria-label={t("book.salon.portfolio")}>
               {info.portfolio.map((src, i) => (
                 <span class="ptile"><img src={src} alt={t("book.salon.photoAlt", { n: i + 1 })} width="72" height="72" loading="lazy" decoding="async" referrerpolicy="no-referrer" /></span>
               ))}
@@ -101,9 +103,9 @@ const monogram = Array.from(info.name.replace(/^[^\p{L}\p{N}]+/u, ""))[0]?.toUpp
       <div class="mgrid">
         {
           first.map((m) => (
-            <a class="mcard" href={`/book/${m.masterSlug}`}>
+            <a class="mcard" href={`/book/${m.masterSlug}`} aria-label={m.professionalTitle ? `${m.name}, ${m.professionalTitle}` : m.name}>
               <span class={`mav ${avatarClass(m.name)}`}>{m.avatarUrl ? <img src={m.avatarUrl} alt="" width="73" height="73" loading="lazy" decoding="async" referrerpolicy="no-referrer" /> : <Icon name="person" />}</span>
-              <span class="t-sub11 ellipsis">{m.name}</span>
+              <span class="t-sub11 ellipsis">{firstName(m.name)}</span>
               {m.professionalTitle && <span class="role t-fb muted">{m.professionalTitle}</span>}
             </a>
           ))
@@ -116,9 +118,9 @@ const monogram = Array.from(info.name.replace(/^[^\p{L}\p{N}]+/u, ""))[0]?.toUpp
             <button type="button" class="showall js-only" id="showall" hidden><span class="t-link">{t("book.salon.showAll")}</span><Icon name="keyboard-arrow-down" /></button>
             <div class="mgrid more" id="mrest" data-collapsible>
               {rest.map((m) => (
-                <a class="mcard" href={`/book/${m.masterSlug}`}>
+                <a class="mcard" href={`/book/${m.masterSlug}`} aria-label={m.professionalTitle ? `${m.name}, ${m.professionalTitle}` : m.name}>
                   <span class={`mav ${avatarClass(m.name)}`}>{m.avatarUrl ? <img src={m.avatarUrl} alt="" width="73" height="73" loading="lazy" decoding="async" referrerpolicy="no-referrer" /> : <Icon name="person" />}</span>
-                  <span class="t-sub11 ellipsis">{m.name}</span>
+                  <span class="t-sub11 ellipsis">{firstName(m.name)}</span>
                   {m.professionalTitle && <span class="role t-fb muted">{m.professionalTitle}</span>}
                 </a>
               ))}

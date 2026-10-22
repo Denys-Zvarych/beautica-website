@@ -7,7 +7,7 @@ import Icon from "../Icon.astro";
 import Stars from "./Stars.astro";
 import ReviewCard from "./ReviewCard.astro";
 import { t } from "../../i18n/t";
-import { formatRating, pluralReviews, REVIEW_SORTS, type ReviewSort } from "../../lib/booking/format";
+import { formatRating, pluralReviews, pluralStars, REVIEW_SORTS, type ReviewSort } from "../../lib/booking/format";
 import type { RatingBucket, ReviewItem } from "../../lib/booking/types";
 
 interface Props {
@@ -42,7 +42,7 @@ const now = new Date();
           <div class="drow">
             <span class="t-strong11">{b.rating}</span>
             <Icon name="star" />
-            <span class="track" role="img" aria-label={`${b.rating}: ${b.count}`}><span class="fillbar" style={`width: ${total > 0 ? ((b.count / total) * 100).toFixed(1) : "0.0"}%`}></span></span>
+            <span class="track" role="img" aria-label={`${pluralStars(b.rating)}: ${b.count}`}><span class="fillbar" style={`width: ${total > 0 ? ((b.count / total) * 100).toFixed(1) : "0.0"}%`}></span></span>
             <span class="cnt t-fb muted">{b.count}</span>
           </div>
         ))

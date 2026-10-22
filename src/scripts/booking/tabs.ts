@@ -9,6 +9,7 @@ export function initTabs(): void {
   const select = (i: number, animate: boolean) => {
     tabs.forEach((t, k) => {
       t.setAttribute("aria-selected", String(k === i));
+      t.tabIndex = k === i ? 0 : -1; // roving tabindex: one tab stop, arrows move between tabs (WAI-ARIA tabs pattern)
       t.setAttribute("aria-controls", `panel-${k}`);
       t.removeAttribute("aria-current");
     });
@@ -22,6 +23,13 @@ export function initTabs(): void {
     t.addEventListener("click", (e) => {
       e.preventDefault();
       select(i, true);
+    });
+    t.addEventListener("keydown", (e) => {
+      const to = e.key === "ArrowRight" ? (i + 1) % tabs.length : e.key === "ArrowLeft" ? (i + tabs.length - 1) % tabs.length : e.key === "Home" ? 0 : e.key === "End" ? tabs.length - 1 : -1;
+      if (to < 0) return;
+      e.preventDefault();
+      select(to, true);
+      tabs[to]!.focus();
     });
   });
   panels.forEach((p) => p.setAttribute("role", "tabpanel"));

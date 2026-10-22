@@ -80,6 +80,22 @@ function setup(root: HTMLElement): void {
     }
   }
 
+  // The sort popover: Escape and a click outside close it; near the bottom (under the sticky shelf) it opens upwards.
+  const close = () => menu?.removeAttribute("open");
+  menu?.addEventListener("toggle", () => {
+    const panel = menu.querySelector<HTMLElement>(".menu");
+    if (!menu.open || !panel) return;
+    panel.classList.remove("up");
+    const shelf = document.querySelector<HTMLElement>(".shelf");
+    const limit = shelf ? shelf.getBoundingClientRect().top : window.innerHeight;
+    if (panel.getBoundingClientRect().bottom > limit) panel.classList.add("up");
+  });
+  document.addEventListener("click", (e) => menu?.open && !menu.contains(e.target as Node) && close());
+  menu?.addEventListener("keydown", (e) => {
+    if (e.key !== "Escape" || !menu.open) return;
+    close();
+    menu.querySelector<HTMLElement>("summary")?.focus();
+  });
   more.addEventListener("click", () => void load(sort, page + 1, false));
   root.querySelectorAll<HTMLAnchorElement>("[data-sort-option]").forEach((a) =>
     a.addEventListener("click", (e) => {

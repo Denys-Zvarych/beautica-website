@@ -199,6 +199,9 @@
   --icon-size: var(--vt-app-icon-44-avatar);
   --icon-gap: 0;
 }
+.avatar-well:not(:has(img)) {
+  color: var(--vt-color-accent-latte); /* the placeholder glyph: the app's accent is 1.9:1 on the inset, latte keeps the hue and is plainly visible */
+}
 .avatar-well img {
   width: 100%;
   height: 100%;
@@ -1711,6 +1714,11 @@ a.tab {
   background: var(--vt-color-base-emphasis);
   box-shadow: var(--vt-shadow-extruded-card);
 }
+.sortmenu .menu.up {
+  bottom: 100%;
+  margin-top: 0;
+  margin-bottom: var(--vt-space-sm);
+}
 .sortmenu .menu a {
   display: flex;
   align-items: center;
@@ -1750,7 +1758,7 @@ a.tab {
 .addr-note {
   display: block;
   margin-top: var(--vt-space-xs);
-  padding-left: calc(var(--vt-app-icon-13) + var(--vt-space-xs));
+  padding-left: calc(var(--vt-app-icon-13) + var(--vt-space-xs) - var(--vt-app-hair));
 }
 .sect + .sect-tight {
   margin-top: var(--vt-space-md);

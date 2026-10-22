@@ -241,7 +241,7 @@ describe("salon page", async () => {
     assert.equal(links.length, 8);
     assert.equal(links[0], "/book/oksana-ab12");
     assert.ok(links.every((l) => /^\/book\/[a-z0-9-]+$/.test(l)));
-    assert.ok(strip(h).includes("Майстер Номер8"));
+    assert.ok(strip(h).includes("Майстер8"));
   });
   test("address, rating and review count are shown", () => {
     const text = strip(h);
@@ -474,12 +474,12 @@ describe("parity with the app (backend 383-385)", () => {
       await page.getByRole("tab", { name: "Послуги" }).click();
       const groups = await page.locator("[data-panel='1'] [data-cat-group]").evaluateAll((gs) => gs.map((g) => ({ name: g.querySelector(".lbl").textContent.trim(), badge: g.querySelector(".badge:not(.sel)").textContent.trim(), tiles: g.querySelectorAll(".stile").length, open: g.open })));
       assert.deepEqual(groups, [
-        { name: "Нігтьовий сервіс", badge: "2", tiles: 2, open: true },
-        { name: "Подологія", badge: "1", tiles: 1, open: true },
-        { name: "Оформлення брів", badge: "1", tiles: 1, open: true },
+        { name: "Нігтьовий сервіс", badge: "2", tiles: 2, open: false },
+        { name: "Подологія", badge: "1", tiles: 1, open: false },
+        { name: "Оформлення брів", badge: "1", tiles: 1, open: false },
       ]);
       await page.locator("[data-panel='1'] summary").first().click();
-      assert.equal(await page.locator("[data-panel='1'] [data-cat-group]").first().evaluate((g) => g.open), false, "an accordion closes");
+      assert.equal(await page.locator("[data-panel='1'] [data-cat-group]").first().evaluate((g) => g.open), true, "collapsed by default (as the design), opens on tap");
       assert.ok(await page.locator("[data-panel='1'] [data-cat-group] .ai").first().evaluate((e) => getComputedStyle(e).maskImage.includes("category_nail_service.svg")), "icon follows the category key");
     } finally {
       await env.context.close();
@@ -597,5 +597,125 @@ describe("parity with the app (backend 383-385)", () => {
     assert.equal(biz.aggregateRating.reviewCount, 312);
     assert.equal(biz.review.length, 5);
     assert.deepEqual(biz.makesOffer.map((o) => o.itemOffered.name), ["Манікюр класичний", "Манікюр+гель лак", "Корекція брів"]);
+  });
+});
+
+describe("audit cycle 3", () => {
+  test("portfolio rails are keyboard-reachable regions (master and salon)", async () => {
+    for (const [path, tab, label] of [["/book/oksana-ab12", null, "Портфоліо"], ["/book/s/lavanda-1111", null, "Портфоліо"]]) {
+      const env = await bookPage(browser, null, { path });
+      try {
+        const rail = env.page.locator(".rail");
+        assert.equal(await rail.getAttribute("tabindex"), "0", path);
+        assert.equal(await rail.getAttribute("role"), "region");
+        assert.equal(await rail.getAttribute("aria-label"), label);
+      } finally {
+        await env.context.close();
+      }
+    }
+  });
+
+  test("JSON-LD has no review (and no rating) on a sorted view of a master without reviews", async () => {
+    const [biz] = ldBlocks((await get("/book/sparse-0001?sort=LOWEST")).body);
+    assert.equal(biz.review, undefined);
+    assert.equal(biz.aggregateRating, undefined);
+  });
+
+  test("rating bars are labelled «5 зірок: 110» with Ukrainian plurals", async () => {
+    const h = (await get("/book/oksana-ab12")).body;
+    for (const l of ["5 зірок: 110", "4 зірки: 14", "3 зірки: 3", "2 зірки: 1", "1 зірка: 0"]) assert.ok(h.includes(`aria-label="${l}"`), l);
+  });
+
+  test("a sorted view is noindex, follow (meta + header) with the canonical kept; the default view stays index", async () => {
+    for (const path of ["/book/oksana-ab12", "/book/s/lavanda-1111"]) {
+      const sorted = await get(`${path}?sort=OLDEST`);
+      assert.equal(sorted.headers["x-robots-tag"], "noindex, follow", path);
+      assert.equal(meta(sorted.body, /<meta name="robots" content="([^"]*)"/), "noindex, follow");
+      assert.equal(meta(sorted.body, /<link rel="canonical" href="([^"]*)"/), `https://beautica.app${path}`);
+      const def = await get(path);
+      assert.equal(def.headers["x-robots-tag"], undefined);
+      assert.equal(meta(def.body, /<meta name="robots" content="([^"]*)"/), "index, follow");
+      const again = await get(`${path}?sort=OLDEST`);
+      assert.equal(again.headers["x-robots-tag"], "noindex, follow", "also on a cache hit");
+    }
+  });
+
+  test("salon: logo initial skips «Салон» (Л), master cards show the first name only, no invented rating", async () => {
+    const h = (await get("/book/s/lavanda-1111")).body;
+    assert.match(h, /class="slogo"[^>]*>Л</);
+    const names = [...h.matchAll(/<a class="mcard[^>]*>[\s\S]*?<span class="t-sub11 ellipsis">([^<]*)<\/span>/g)].map((m) => m[1]);
+    assert.equal(names[0], "Майстер1");
+    assert.equal(strip(h).includes("Майстер1 Тест"), false, "first name only, as in the design");
+    assert.equal(/class="mrate"/.test(h), false);
+  });
+
+  test("the location note is aligned under the address text (same left edge as the street line)", async () => {
+    const env = await bookPage(browser, "oksana-ab12");
+    try {
+      const x = await env.page.evaluate(() => {
+        const left = (el) => { const r = document.createRange(); r.selectNodeContents(el); return r.getBoundingClientRect().left; };
+        return [left(document.querySelector(".meta-line .t-fb")), left(document.querySelector(".addr-note"))];
+      });
+      assert.ok(Math.abs(x[0] - x[1]) <= 1.5, `street text at ${x[0]}, note at ${x[1]}`);
+    } finally {
+      await env.context.close();
+    }
+  });
+
+  test("tabs follow the WAI-ARIA pattern: roving tabindex, arrows / Home / End move and select", async () => {
+    for (const [path, names] of [["/book/oksana-ab12", ["Про майстра", "Послуги", "Відгуки"]], ["/book/s/lavanda-1111", ["Про салон", "Майстри", "Послуги", "Відгуки"]]]) {
+      const env = await bookPage(browser, null, { path });
+      try {
+        const { page } = env;
+        await page.waitForSelector("[role=tablist]");
+        const tabs = page.getByRole("tab");
+        assert.deepEqual(await tabs.evaluateAll((ts) => ts.map((t) => t.tabIndex)), names.map((_, i) => (i === 0 ? 0 : -1)));
+        await tabs.first().focus();
+        await page.keyboard.press("ArrowRight");
+        assert.equal(await page.evaluate(() => document.activeElement.textContent.trim()), names[1]);
+        assert.equal(await tabs.nth(1).getAttribute("aria-selected"), "true");
+        assert.equal(await tabs.nth(1).getAttribute("tabindex"), "0");
+        assert.equal(await tabs.first().getAttribute("tabindex"), "-1");
+        await page.keyboard.press("End");
+        assert.equal(await page.evaluate(() => document.activeElement.textContent.trim()), names.at(-1));
+        await page.keyboard.press("ArrowRight");
+        assert.equal(await page.evaluate(() => document.activeElement.textContent.trim()), names[0], "wraps around");
+        await page.keyboard.press("ArrowLeft");
+        assert.equal(await page.evaluate(() => document.activeElement.textContent.trim()), names.at(-1));
+        await page.keyboard.press("Home");
+        assert.equal(await page.evaluate(() => document.activeElement.textContent.trim()), names[0]);
+      } finally {
+        await env.context.close();
+      }
+    }
+  });
+
+  test("sort popover: Escape and an outside click close it; near the bottom it opens upwards, inside the visible area", async () => {
+    const env = await bookPage(browser, "oksana-ab12", { height: 520 });
+    try {
+      const { page } = env;
+      await page.getByRole("tab", { name: "Відгуки" }).click();
+      const menu = page.locator("[data-sortmenu]");
+      await menu.locator("summary").click();
+      assert.equal(await menu.evaluate((d) => d.open), true);
+      await page.keyboard.press("Escape");
+      assert.equal(await menu.evaluate((d) => d.open), false, "Escape closes");
+      assert.equal(await page.evaluate(() => document.activeElement?.tagName), "SUMMARY", "focus returns to the button");
+      await menu.locator("summary").click();
+      await page.locator("body").click({ position: { x: 2, y: 2 } });
+      assert.equal(await menu.evaluate((d) => d.open), false, "an outside click closes");
+      // Scroll so the sort row is close to the sticky shelf, then open: the menu must not end up under the shelf.
+      await page.evaluate(() => document.querySelector(".sortrow").scrollIntoView({ block: "end" }));
+      await menu.locator("summary").click();
+      const geo = await page.evaluate(() => {
+        const m = document.querySelector("[data-sortmenu] .menu").getBoundingClientRect();
+        const shelf = document.querySelector(".shelf").getBoundingClientRect();
+        return { top: m.top, bottom: m.bottom, shelfTop: shelf.top, up: document.querySelector("[data-sortmenu] .menu").classList.contains("up") };
+      });
+      assert.ok(geo.top >= 0 && (geo.bottom <= geo.shelfTop + 1), `menu ${geo.top}..${geo.bottom}, shelf at ${geo.shelfTop}`);
+      assert.equal(geo.up, true);
+    } finally {
+      await env.context.close();
+    }
   });
 });
