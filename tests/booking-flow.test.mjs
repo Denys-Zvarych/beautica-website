@@ -752,8 +752,8 @@ describe("parity with the app: category accordions, comment, address (backend 38
     }
   });
 
-  test("a comment the backend rejects (over 1000 chars or control characters, 400) shows the generic fix-it message, no double booking", async () => {
-    for (const bad of ["я".repeat(1001), "а\u0007б"]) {
+  test("a comment the backend rejects (over 1000 chars, 400) shows the generic fix-it message, no double booking", async () => {
+    for (const bad of ["я".repeat(1001)]) { // control characters never get this far any more: they are stripped as typed (see below)
       await withPage("oksana-ab12", {}, async ({ page }) => {
         await driveTo(page, "confirm", { contact: { name: "Поганий" } });
         await page.locator("#comment").evaluate((el, v) => { el.value = v; el.dispatchEvent(new Event("input", { bubbles: true })); }, bad); // bypasses maxlength like a pasted value
@@ -781,6 +781,48 @@ describe("parity with the app: category accordions, comment, address (backend 38
       await driveTo(page, "confirm", { contact: { name: "СалонАдреса" } });
       const recap = await text(page.locator("#confirm-card"));
       assert.ok(recap.includes("Салон «Лаванда»") && recap.includes("Місто Київ") && !recap.includes("Адреса"), recap);
+    });
+  });
+});
+
+describe("control characters in guest text", () => {
+  test("a pasted tab is cleaned in the field and a name of only control characters is rejected inline BEFORE the SMS code is requested", async () => {
+    await withPage("oksana-ab12", {}, async ({ page }) => {
+      await driveTo(page, "time");
+      await page.click("#cta-time");
+      await page.locator("#name").evaluate((el) => { el.value = "Мар\tина\u0007"; el.dispatchEvent(new Event("input", { bubbles: true })); });
+      assert.equal(await page.inputValue("#name"), "Мар ина ", "controls became one space (a trailing one stays while typing, it is trimmed when sent)");
+      await page.locator("#surname").evaluate((el) => { el.value = "\t\t"; el.dispatchEvent(new Event("input", { bubbles: true })); });
+      await page.type("#phone", "671119900");
+      await page.locator("#f-consent").click({ position: { x: 14, y: 14 } });
+      const before = (await mockLog((e) => e.path.includes("/otp/send") && e.body?.phone === "+380671119900")).length;
+      await page.click("#cta-contact");
+      assert.ok((await text(page.locator("#f-surname .ferr"))).includes("Це поле обов'язкове"), "the surname of only tabs is required");
+      assert.equal((await mockLog((e) => e.path.includes("/otp/send") && e.body?.phone === "+380671119900")).length, before, "no SMS was requested");
+    });
+  });
+
+  test("the booking sends the cleaned names and comment (no control characters, comment keeps its line break)", async () => {
+    await withPage("oksana-ab12", {}, async ({ page }) => {
+      await driveTo(page, "time");
+      await page.click("#cta-time");
+      await page.locator("#name").evaluate((el) => { el.value = "Ірина\u0009Марія"; el.dispatchEvent(new Event("input", { bubbles: true })); });
+      await page.locator("#surname").evaluate((el) => { el.value = "Ко\u001Fвальчук"; el.dispatchEvent(new Event("input", { bubbles: true })); });
+      await page.type("#phone", "671119901");
+      await page.locator("#f-consent").click({ position: { x: 14, y: 14 } });
+      await page.click("#cta-contact");
+      await page.waitForSelector("#otp", { state: "visible" });
+      for (const [i, d] of [..."123456"].entries()) await page.locator("#otp input").nth(i).fill(d);
+      await page.click("#cta-otp");
+      await page.waitForSelector("#confirm-card", { state: "visible" });
+      await page.locator("#comment").evaluate((el) => { el.value = "а\u0007б\nв"; el.dispatchEvent(new Event("input", { bubbles: true })); });
+      assert.equal(await page.inputValue("#comment"), "аб\nв");
+      await page.click("#cta-confirm");
+      await page.waitForSelector("#done-card", { state: "visible" });
+      const b = callsTo(await mockLog((e) => e.body?.name === "Ірина Марія"), "POST", "/booking").at(-1);
+      assert.equal(b.body.name, "Ірина Марія");
+      assert.equal(b.body.surname, "Ко вальчук");
+      assert.equal(b.body.clientComment, "аб\nв");
     });
   });
 });

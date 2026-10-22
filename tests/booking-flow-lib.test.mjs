@@ -5,6 +5,7 @@ import { addDays, inWindow, kyivToday, maxMonthOffset, monthView, partOfDay, wee
 import { failFor, cancelPath } from "../src/scripts/booking/api.ts";
 import { buildIcs } from "../src/scripts/booking/ics.ts";
 import { formatPhoneGrouped, nationalDigits } from "../src/lib/phone.ts";
+import { cleanName, cleanComment, typingName } from "../src/lib/booking/text.ts";
 
 describe("calendar (Europe/Kyiv)", () => {
   test("kyivToday uses Kyiv, not UTC: 22:30 UTC on 30 Oct is already 31 Oct in Kyiv (UTC+2, after DST ends 25 Oct)", () => {
@@ -90,5 +91,25 @@ describe(".ics escaping of ; , \\ and line breaks (RFC 5545 section 3.3.11)", ()
     assert.ok(ics.includes("SUMMARY:A\\;B\\,C\\\\D"), ics);
     assert.ok(ics.includes("DESCRIPTION:x\\;y\\,z\\\\w\\nline"), ics);
     assert.equal(/SUMMARY:A;B/.test(ics), false, "no bare semicolon");
+  });
+});
+
+describe("guest text is cleaned to the backend's rules (no control characters in names; comment keeps \\n and \\t)", () => {
+  test("names: tabs / control characters become one space, whitespace collapses, trimmed; a name of only controls is empty", () => {
+    assert.equal(cleanName("  Мар\tина\u0007  Іванівна\n"), "Мар ина Іванівна");
+    assert.equal(cleanName("\t\t \u0000"), "");
+    assert.equal(cleanName("Олена"), "Олена");
+    assert.equal(/[\u0000-\u001F\u007F]/.test(cleanName("a\u001Fb\u007Fc\td")), false);
+  });
+  test("while typing: the trailing space survives (a second word can follow), doubles collapse, leading space is dropped", () => {
+    assert.equal(typingName("Анна "), "Анна ");
+    assert.equal(typingName("Анна   Марія"), "Анна Марія");
+    assert.equal(typingName("  Анна"), "Анна");
+    assert.equal(typingName("А\tн"), "А н");
+  });
+  test("comment: line breaks and tabs stay, other control characters go, \\r\\n becomes \\n, trimmed", () => {
+    assert.equal(cleanComment("  рядок1\r\nрядок2\tкінець\u0007\u0000  "), "рядок1\nрядок2\tкінець");
+    assert.equal(cleanComment("\u000Bx\u000C\u001Fy\u007F"), "xy");
+    assert.equal(cleanComment("   "), "");
   });
 });

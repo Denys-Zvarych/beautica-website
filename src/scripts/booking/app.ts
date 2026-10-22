@@ -11,6 +11,7 @@ import { calendarAdd } from "../../lib/icons/strokePaths";
 import { closeRounded, errorOutline, eventAvailable, expandMoreRounded, schedule } from "../../lib/icons/materialPaths";
 import { track } from "../track";
 import { hydrateIcons } from "./icons";
+import { cleanComment, cleanName, typingName } from "../../lib/booking/text.ts";
 import "../../styles/book-flow.css"; // step styles ship with the island: the profile pages do not carry them
 
 type Step = "profile" | "services" | "date" | "time" | "contact" | "otp" | "confirm" | "done";
@@ -327,6 +328,8 @@ export function initBooking(root: HTMLElement): { open(): void } {
   const consent = $<HTMLInputElement>("#consent");
   const comment = $<HTMLTextAreaElement>("#comment");
   comment.addEventListener("input", () => {
+    const clean = comment.value.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, "");
+    if (clean !== comment.value) comment.value = clean;
     $("#counter").textContent = fmt(S.counter, { n: comment.value.length });
     if (st.step === "confirm") recap($("#confirm-card"), false); // the summary shows the note as it is typed
   });
@@ -353,8 +356,8 @@ export function initBooking(root: HTMLElement): { open(): void } {
     }
   }
   function validateContact(): boolean {
-    const nameBad = !name.value.trim();
-    const surBad = !surname.value.trim();
+    const nameBad = !cleanName(name.value);
+    const surBad = !cleanName(surname.value);
     const phoneBad = !phoneOk();
     const consentBad = !consent.checked;
     setError("name", nameBad ? S.required : null);
@@ -444,6 +447,8 @@ export function initBooking(root: HTMLElement): { open(): void } {
     e.preventDefault();
     void requestCode("contact");
   });
+  // A pasted tab / control character never reaches the backend: names are cleaned as they are typed (and again when sent).
+  for (const i of [name, surname]) i.addEventListener("input", () => { const v = typingName(i.value); if (v !== i.value) i.value = v; });
   for (const i of [name, surname, phone]) i.addEventListener("input", () => $(`#f-${i.id}`).classList.contains("invalid") && validateContact());
   consent.addEventListener("change", () => $("#f-consent").classList.contains("invalid") && validateContact());
 
@@ -538,7 +543,7 @@ export function initBooking(root: HTMLElement): { open(): void } {
     if (address) h += lrow(S.addressLabel, [city, address].filter(Boolean).join(", "), note) + sep;
     else if (city) h += lrow(S.cityLabel, city) + sep;
     h += lrow(S.dateLabel, dayLong(day)) + `<div class="g-sm"></div>` + lrow(S.timeLabel, `${kyivTime(st.slot!.startsAt)}–${kyivTime(endIso())}`) + sep;
-    const memo = comment.value.trim();
+    const memo = cleanComment(comment.value);
     if (!compact && memo) h += lrow(S.commentRow, memo) + sep;
     into.innerHTML = h;
     const head = el("div", "row");
@@ -559,7 +564,7 @@ export function initBooking(root: HTMLElement): { open(): void } {
     into.append(el("div", "recap-sum"), sum);
   }
   function renderConfirm(): void {
-    $("#c-name").textContent = `${name.value.trim()} ${surname.value.trim()}`;
+    $("#c-name").textContent = `${cleanName(name.value)} ${cleanName(surname.value)}`;
     $("#c-phone").textContent = formatPhoneGrouped(st.phone);
     recap($("#confirm-card"), false);
     view("#submit-error", false);
@@ -569,7 +574,7 @@ export function initBooking(root: HTMLElement): { open(): void } {
     const btn = $<HTMLButtonElement>("#cta-confirm");
     view("#submit-error", false);
     busy(btn, true);
-    const r = await createBooking(api, slug, st.guestToken, { serviceIds: chosen().map((s) => s.id), startsAt: st.slot.startsAt, name: name.value.trim(), surname: surname.value.trim(), policyVersion: policy, clientComment: comment.value.trim() });
+    const r = await createBooking(api, slug, st.guestToken, { serviceIds: chosen().map((s) => s.id), startsAt: st.slot.startsAt, name: cleanName(name.value), surname: cleanName(surname.value), policyVersion: policy, clientComment: cleanComment(comment.value) });
     busy(btn, false);
     if (!r.ok) return void bookingFailed(r.fail);
     st.done = true;
