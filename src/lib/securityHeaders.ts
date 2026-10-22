@@ -1,7 +1,8 @@
 // Security headers (README D8). Single source for the Worker middleware; `public/_headers` carries the same values for
 // static assets (Cloudflare applies _headers to assets only, never to Worker responses). Keep the two in sync.
 // No analytics origin yet: the zone injects no Cloudflare Web Analytics beacon (checked on the live site, 2026-10-19).
-// When Umami / CF Web Analytics / Turnstile ship, extend script-src, connect-src, frame-src here AND in public/_headers.
+// Turnstile + the runtime API origin are added per page by bookingCsp() below (the SSR link pages only). When Umami / CF Web Analytics
+// ship, extend script-src and connect-src here AND in public/_headers.
 export const CSP = [
   "default-src 'self'",
   "script-src 'self'",
