@@ -77,6 +77,8 @@ export function initBooking(root: HTMLElement): { open(): void } {
   let widget: Widget | null = null;
   let cooldown = 0;
   let cooldownTimer = 0;
+  let otpRearm = 0; // pending WebOTP re-arm timer
+  let otpAbort: AbortController | undefined; // WebOTP request of the current OTP step
   let conflictPending = false; // set when the booking answered 409: the time step re-opens with its message
 
   const chosen = (): Svc[] => services.filter((s) => st.picked.has(s.id));
@@ -91,6 +93,7 @@ export function initBooking(root: HTMLElement): { open(): void } {
   const screens = $$("[data-screen]", root);
   function show(step: Step): void {
     st.step = step;
+    if (step !== "otp") stopWebOtp();
     for (const s of screens) s.hidden = s.dataset.screen !== step;
     window.scrollTo(0, 0);
     const heading = $<HTMLElement>("[data-step-heading]", screens.find((s) => s.dataset.screen === step)!);
@@ -454,6 +457,7 @@ export function initBooking(root: HTMLElement): { open(): void } {
     if (st.busy) return;
     const btn = $<HTMLButtonElement>(from === "contact" ? "#cta-contact" : "#otp-resend-btn");
     if (from === "contact" && !validateContact()) return;
+    stopWebOtp();
     view("#turn-err", false);
     hideBanners();
     busy(btn, true);
@@ -473,6 +477,7 @@ export function initBooking(root: HTMLElement): { open(): void } {
       track("booking_error", { code: r.fail === "rate-limited" ? 429 : r.fail === "unavailable" ? 503 : "other" });
       if (from === "otp") {
         failBanner("otp", r.fail);
+        startWebOtp(); // the old request was aborted at the click; the guest still waits for the earlier SMS
         return;
       }
       if (r.fail === "validation") {
@@ -487,6 +492,7 @@ export function initBooking(root: HTMLElement): { open(): void } {
     track("otp_requested");
     startCooldown();
     if (from === "contact") go("otp");
+    startWebOtp();
   }
   $("#contact-form").addEventListener("submit", (e) => {
     e.preventDefault();
@@ -550,13 +556,49 @@ export function initBooking(root: HTMLElement): { open(): void } {
     $("#otp-resend-btn").hidden = waiting;
   }
   $("#otp-resend-btn").addEventListener("click", () => void requestCode("otp"));
-  $("#cta-otp").addEventListener("click", async () => {
+  // WebOTP (Chromium/Android): the SMS ends with `@beautica.app #<code>` (backend 389); one tap fills the code and submits through
+  // the same path as the button. Any rejection / unsupported browser is a silent no-op. Only ever started on the OTP step.
+  function stopWebOtp(): void {
+    window.clearTimeout(otpRearm);
+    otpAbort?.abort();
+    otpAbort = undefined;
+  }
+  function startWebOtp(): void {
+    stopWebOtp();
+    if (st.step !== "otp" || !("OTPCredential" in window) || !navigator.credentials?.get) return;
+    const ac = new AbortController();
+    otpAbort = ac;
+    try {
+      const get = navigator.credentials.get({ otp: { transport: ["sms"] }, signal: ac.signal } as CredentialRequestOptions);
+      void Promise.resolve(get)
+        .then((cred) => {
+          const d = String((cred as { code?: string } | null)?.code ?? "").replace(/\D/g, "");
+          if (ac.signal.aborted || otpAbort !== ac || st.step !== "otp" || d.length !== 6) return;
+          if (st.busy) return void (otpRearm = window.setTimeout(startWebOtp, 300)); // a request is in flight: keep the cells, listen again shortly
+          otpAbort = undefined;
+          cells.forEach((x, k) => (x.value = d[k] ?? ""));
+          $("#otp").classList.remove("invalid");
+          $("#otp-wrong").hidden = true;
+          syncOtpButton();
+          void submitOtp();
+        })
+        .catch(() => {});
+    } catch {
+      /* unsupported / blocked: manual entry stays */
+    }
+  }
+  $("#cta-otp").addEventListener("click", () => void submitOtp());
+  async function submitOtp(): Promise<void> {
     if (st.busy || code().length !== 6) return;
+    stopWebOtp();
     const btn = $<HTMLButtonElement>("#cta-otp");
     hideBanners();
     busy(btn, true);
-    const r = await verifyOtp(api, st.phone, code());
+    const phoneAtSend = st.phone;
+    const r = await verifyOtp(api, phoneAtSend, code());
     busy(btn, false);
+    // The guest left the step (Back) or changed the phone while the check was in flight: drop the answer, keep no token.
+    if (st.step !== "otp" || st.phone !== phoneAtSend) return;
     if (!r.ok) {
       track("otp_failed");
       if (r.fail === "unauthorized" || r.fail === "validation") {
@@ -564,12 +606,13 @@ export function initBooking(root: HTMLElement): { open(): void } {
         $("#otp-wrong").hidden = false;
       } else failBanner("otp", r.fail);
       syncOtpButton();
+      startWebOtp(); // wrong code: listen for the next SMS (still on the OTP step, checked above)
       return;
     }
     st.guestToken = r.data;
     track("otp_verified");
     go("confirm");
-  });
+  }
 
   // ------------------------------------------------------------------ confirm (BookingSummaryCards + BookingRecap)
   function lrow(label: string, value: string, detail = ""): string {

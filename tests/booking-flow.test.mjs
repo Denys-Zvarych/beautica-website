@@ -85,8 +85,9 @@ describe("happy path: one service", () => {
       const send = callsTo(log, "POST", "/otp/send").at(-1);
       assert.deepEqual(send.body, { phone: "+380501234567", privacyAccepted: true, privacyPolicyVersion: PRIVACY_POLICY_VERSION, turnstileToken: "TOKEN-1" });
       assert.deepEqual(callsTo(log, "POST", "/otp/verify").at(-1).body, { phone: "+380501234567", code: "123456" });
-      const avail = callsTo(log, "GET", "oksana-ab12/availability").at(-1);
-      assert.equal(avail.path, `/api/v1/book/oksana-ab12/availability?date=${day}&serviceId=${SVC_ID.gel}`);
+      // Shared mock log (other files run against the same API): match this test's own availability call by its exact path.
+      const availPath = `/api/v1/book/oksana-ab12/availability?date=${day}&serviceId=${SVC_ID.gel}`;
+      assert.ok(callsTo(log, "GET", "oksana-ab12/availability").some((e) => e.path === availPath), "availability asked for the chosen day + service");
       const booking = callsTo(log, "POST", "/oksana-ab12/booking").at(-1);
       assert.equal(booking.headers.authorization, "Bearer guest-token-ok");
       assert.deepEqual(booking.body, { serviceId: SVC_ID.gel, startsAt, name, surname: "Коваленко", privacyAccepted: true, privacyPolicyVersion: PRIVACY_POLICY_VERSION });
@@ -319,8 +320,11 @@ describe("multi-service visit", () => {
       const booking = callsTo(log, "POST", "/booking").at(-1);
       assert.deepEqual(booking.body.masterServiceIds.sort(), [SVC_ID.classic, SVC_ID.gel, SVC_ID.pedi].sort());
       assert.equal(booking.body.serviceId, undefined, "a visit sends masterServiceIds only");
-      const avail = callsTo(log, "GET", "oksana-ab12/availability").at(-1);
-      assert.equal(new URL(avail.path, "http://x").searchParams.getAll("serviceId").length, 3);
+      // The mock log is shared with other test files running against the same API: match this test's own request by its
+      // three service ids instead of taking whichever availability call came last.
+      const want = [SVC_ID.classic, SVC_ID.gel, SVC_ID.pedi].sort().join();
+      const avail = callsTo(log, "GET", "oksana-ab12/availability").filter((e) => new URL(e.path, "http://x").searchParams.getAll("serviceId").sort().join() === want);
+      assert.ok(avail.length >= 1, "the availability query carried all three service ids");
     });
   });
 
