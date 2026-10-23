@@ -69,7 +69,7 @@ Beautica — це сервіс, що з'єднує клієнтів з майс�
 
 Сайт **не використовує cookie** і поки що **не використовує жодної аналітики**: ми не збираємо статистику відвідувань, тому банера згоди немає. Шрифти сайту розміщені на нашому ж домені, тому ваш браузер не звертається до сторонніх сервісів шрифтів. Якщо ми підключимо статистику без cookie, ми оновимо цю Політику до її запуску.
 
-<!-- add when live: Cloudflare Web Analytics and Umami (cookieless; no names/phones/codes/booking ids; query strings stripped; no analytics script on token routes /invite, /bookings, /book/cancel). Also re-add 'Статистика сайту' in §5 and the processors in §6. -->
+<!-- add when live: Cloudflare Web Analytics and Umami (cookieless; no names/phones/codes/booking ids; only utm query params kept; no analytics script on token routes /invite, /bookings, /book/cancel). Also re-add 'Статистика сайту' in §5 and the processors in §6. -->
 
 ## 5. Цілі та правові підстави {#purposes}
 
