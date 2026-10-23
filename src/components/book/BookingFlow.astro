@@ -31,7 +31,7 @@ const js = {
 };
 const jsJson = safeJson(js);
 const groups = groupByCategory(info.services, info.categories, t("book.master.otherServices"));
-const strip = { name: info.masterName, subtitle: info.professionalTitle, avatarUrl: info.avatarUrl, rating: info.avgRating, reviewCount: info.reviewCount };
+const strip = { name: info.masterName, subtitle: info.professionalTitle, avatarUrl: info.avatarUrl, rating: info.avgRating, reviewCount: info.reviewCount, salonMaster: !!info.salon };
 ---
 
 <section class="screen" data-screen="services" hidden>

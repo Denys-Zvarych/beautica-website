@@ -3,8 +3,8 @@
 // written to storage, URLs, logs or analytics.
 import { formatDuration, formatPriceFrom, pluralServices } from "../../lib/booking/format";
 import { formatPhoneGrouped, nationalDigits } from "../../lib/phone";
-import { dayLong, dayShort, daysBetween, inWindow, kyivDay, kyivTime, kyivToday, maxMonthOffset, monthLabel, monthView, partOfDay, weekdayMon0, weekdayShort, type Part } from "./calendar";
-import { cancelPath, createBooking, getAvailability, sendOtp, verifyOtp, type Fail, type Slot } from "./api";
+import { WINDOW_DAYS, addDays, dayLong, dayShort, daysBetween, inWindow, kyivDay, kyivTime, kyivToday, maxMonthOffset, monthLabel, monthView, partOfDay, weekdayMon0, weekdayShort, type Part } from "./calendar";
+import { cancelPath, createBooking, getAvailability, getBookableDays, sendOtp, verifyOtp, type Fail, type Slot } from "./api";
 import { buildIcs, downloadIcs } from "./ics";
 import { mountTurnstile, type Widget } from "./turnstile";
 import { calendarAdd } from "../../lib/icons/strokePaths";
@@ -67,6 +67,8 @@ export function initBooking(root: HTMLElement): { open(): void } {
     day: null as string | null,
     slot: null as Slot | null,
     slots: [] as Slot[],
+    /** Bookable days per service selection (key = ordered ids): date -> working. Absent = unknown = enabled (fallback on any failure). */
+    workDays: new Map<string, Map<string, boolean>>(),
     guestToken: null as string | null,
     phone: "", // +380XXXXXXXXX
     busy: false,
@@ -115,6 +117,7 @@ export function initBooking(root: HTMLElement): { open(): void } {
     if (step === "date") {
       renderCalendar();
       renderShelf("date");
+      void loadWorkingDays();
     }
     if (step === "time") {
       void loadSlots(conflictPending);
@@ -215,7 +218,46 @@ export function initBooking(root: HTMLElement): { open(): void } {
 
   // ------------------------------------------------------------------ date (MonthCalendar)
   $("#wk").replaceChildren(...[0, 1, 2, 3, 4, 5, 6].map((d) => el("span", d >= 5 ? "we" : "", weekdayShort(d))));
+  const daysKey = () => chosen().map((s) => s.id).join(",");
+  /** One request per (services, month window) for the whole session: in flight, answered or failed (a failure is not retried; the UI stays all-enabled). */
+  const daysRequests = new Map<string, Promise<void>>();
+  /** Fetches the visible month's bookable days (window clamped to today ... today+60). Any failure leaves every date enabled. */
+  function loadWorkingDays(): Promise<void> {
+    const key = daysKey();
+    if (!key) return Promise.resolve();
+    const v = monthView(today, st.month);
+    const from = v.days[0] < today ? today : v.days[0];
+    const lastDay = v.days[v.days.length - 1];
+    const limit = addDays(today, WINDOW_DAYS);
+    const to = lastDay > limit ? limit : lastDay;
+    if (from > to) return Promise.resolve();
+    const id = `${key}|${from}|${to}`;
+    const pending = daysRequests.get(id);
+    if (pending) return pending;
+    const request = (async () => {
+      const r = await getBookableDays(api, slug, from, to, chosen().map((s) => s.id));
+      if (!r.ok) return;
+      // Cached whatever the visitor has done meanwhile; only the render below is skipped when the answer is stale.
+      const map = st.workDays.get(key) ?? new Map<string, boolean>();
+      for (const d of r.data) map.set(d.date, d.working);
+      st.workDays.set(key, map);
+      if (key !== daysKey()) return;
+      if (st.step === "date") {
+        renderCalendar();
+        renderShelf("date");
+      }
+    })();
+    daysRequests.set(id, request);
+    return request;
+  }
   function renderCalendar(): void {
+    const known = st.workDays.get(daysKey());
+    // A chosen day that has no free time for THESE services is dropped, whether the answer is fresh or cached; the shelf (Далі) follows at once.
+    const dropped = !!st.day && known?.get(st.day) === false;
+    if (dropped) {
+      st.day = null;
+      st.slot = null;
+    }
     const v = monthView(today, st.month);
     $("#month").textContent = monthLabel(v.first);
     $<HTMLButtonElement>("#prev").disabled = st.month === 0;
@@ -224,7 +266,7 @@ export function initBooking(root: HTMLElement): { open(): void } {
     grid.replaceChildren();
     for (let i = 0; i < v.lead; i++) grid.append(el("div", "cell"));
     for (const d of v.days) {
-      const ok = inWindow(d, today);
+      const ok = inWindow(d, today) && known?.get(d) !== false;
       const sel = d === st.day;
       const we = weekdayMon0(d) >= 5;
       const cell = el("div", `cell${sel ? " sel" : ""}`);
@@ -238,6 +280,7 @@ export function initBooking(root: HTMLElement): { open(): void } {
       cell.append(b);
       grid.append(cell);
     }
+    if (dropped) renderShelf("date");
   }
   $("#grid").addEventListener("click", (e) => {
     const b = (e.target as HTMLElement).closest<HTMLElement>("[data-day]");
@@ -250,10 +293,12 @@ export function initBooking(root: HTMLElement): { open(): void } {
   $("#prev").addEventListener("click", () => {
     if (st.month > 0) st.month--;
     renderCalendar();
+    void loadWorkingDays();
   });
   $("#next").addEventListener("click", () => {
     if (st.month < maxOffset) st.month++;
     renderCalendar();
+    void loadWorkingDays();
   });
   $("#cta-date").addEventListener("click", () => st.day && go("time"));
 

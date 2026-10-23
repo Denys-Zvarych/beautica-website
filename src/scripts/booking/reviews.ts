@@ -63,7 +63,7 @@ function setup(root: HTMLElement): void {
     show(root.dataset.loading ?? "");
     try {
       const q = new URLSearchParams({ sort: nextSort, page: String(nextPage), size: String(PAGE) });
-      const res = await fetch(`${api}/api/v1/book/${kind === "salon" ? "s/" : ""}${slug}/reviews?${q}`, { headers: { Accept: "application/json" }, credentials: "omit", referrerPolicy: "no-referrer", signal: AbortSignal.timeout(15000) });
+      const res = await fetch(`${api}/api/v1/book/${kind === "salon" ? "s/" : ""}${encodeURIComponent(slug)}/reviews?${q}`, { headers: { Accept: "application/json" }, credentials: "omit", referrerPolicy: "no-referrer", signal: AbortSignal.timeout(15000) });
       const data = res.ok ? parseReviewsPage(await res.json()) : null;
       if (!data) throw new Error("reviews");
       if (replace) list!.replaceChildren();

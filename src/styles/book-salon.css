@@ -29,33 +29,6 @@
   --icon-size: var(--vt-app-icon-44);
   --icon-gap: 0;
 }
-.cover .btns {
-  position: absolute;
-  z-index: 2;
-  inset-inline: var(--vt-space-lg);
-  top: var(--vt-space-sm);
-  display: flex;
-  justify-content: space-between;
-}
-.cib {
-  display: grid;
-  place-items: center;
-  width: var(--vt-touch-min);
-  height: var(--vt-touch-min);
-  border: 0;
-  cursor: pointer;
-  border-radius: var(--vt-radius-field);
-  background: var(--vt-app-color-cover-btn);
-  box-shadow: var(--vt-app-shadow-cover-btn);
-  color: var(--vt-color-text);
-  text-decoration: none;
-  --icon-size: var(--vt-app-icon-22);
-  --icon-gap: 0;
-  transition: transform var(--vt-dur-fast) var(--vt-ease);
-}
-.cib:active {
-  transform: scale(0.92);
-}
 .hero-wrap {
   position: relative;
   z-index: 1;

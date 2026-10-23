@@ -446,7 +446,29 @@ describe("rendering at 360 / 768 / 1280", () => {
       await sp.context.close();
     }
   });
-  test("a master card of the salon opens that master's page (and the master page links back to the salon)", async () => {
+  test("the salon page has no top-bar title and no back arrow over the cover (as the app)", async () => {
+    const env = await bookPage(browser, null, { path: "/book/s/lavanda-1111" });
+    try {
+      assert.equal(await env.page.locator("header.topbar").count(), 0);
+      assert.equal(await env.page.locator(".cover a, .cover button").count(), 0);
+      assert.equal(await env.page.getByRole("heading", { level: 1 }).count(), 1);
+    } finally {
+      await env.context.close();
+    }
+  });
+  test("the role chip is always there: the title, else «Незалежний майстер» / «Майстер салону»", async () => {
+    for (const [slug, chip] of [["sparse-0001", "Незалежний майстер"], ["salonmaster-5555", null], ["oksana-ab12", "Майстер манікюру та педикюру"]]) {
+      const env = await bookPage(browser, slug);
+      try {
+        const got = await text(env.page.locator(".rolechip"));
+        if (chip) assert.equal(got, chip);
+        else assert.ok(got.length > 0);
+      } finally {
+        await env.context.close();
+      }
+    }
+  });
+  test("a master card of the salon opens that master's page (the profile pages have no back arrow, only the title)", async () => {
     const env = await bookPage(browser, null, { path: "/book/s/lavanda-1111" });
     try {
       await env.page.getByRole("tab", { name: "Майстри" }).click();
@@ -458,7 +480,8 @@ describe("rendering at 360 / 768 / 1280", () => {
     }
     const sm = await bookPage(browser, null, { path: "/book/salonmaster-5555" });
     try {
-      assert.equal(await sm.page.locator("header.topbar a.nib").getAttribute("href"), "/book/s/lavanda-1111");
+      assert.equal(await sm.page.locator("header.topbar .nib, header.topbar a").count(), 0, "no back arrow on the profile page");
+      assert.equal(await text(sm.page.locator("header.topbar .title")), "Профіль майстра");
     } finally {
       await sm.context.close();
     }

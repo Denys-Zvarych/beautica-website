@@ -1,5 +1,6 @@
 ---
-// Mirrors MasterStrip: avatar disc, «Запис до майстра», name, subtitle and the rating. Repeated on every booking step.
+// Mirrors MasterStrip (showRole + showRating): avatar disc, «Запис до майстра», name, the title (else the role label) and the ★ rating —
+// «★ —» for a master with no reviews, the muted «(n)» only when n > 0. Repeated on every booking step.
 import Icon from "../Icon.astro";
 import { t } from "../../i18n/t";
 import { formatRating } from "../../lib/booking/format";
@@ -9,8 +10,12 @@ interface Props {
   avatarUrl: string | null;
   rating: number | null;
   reviewCount: number;
+  /** Role label fallback (masterRoleLabel): a salon master vs an independent one. */
+  salonMaster?: boolean;
 }
-const { name, subtitle, avatarUrl, rating, reviewCount } = Astro.props;
+const { name, subtitle, avatarUrl, rating, reviewCount, salonMaster = false } = Astro.props;
+const role = subtitle?.trim() || t(salonMaster ? "book.strip.roleSalonMaster" : "book.strip.roleIndependent");
+const shown = reviewCount > 0 ? rating : null;
 ---
 
 <div class="strip">
@@ -19,16 +24,12 @@ const { name, subtitle, avatarUrl, rating, reviewCount } = Astro.props;
     <p class="t-fb sec">{t("book.strip.label")}</p>
     <p class="t-sub13 ellipsis">{name}</p>
     <div class="sub">
-      <span class="t-fb muted ellipsis">{subtitle ?? ""}</span>
-      {
-        reviewCount > 0 && (
-          <span class="rate">
-            <Icon name="star" />
-            <span class="t-strong11">{formatRating(rating)}</span>
-            <span class="t-fb muted">({reviewCount})</span>
-          </span>
-        )
-      }
+      <span class="t-fb muted ellipsis">{role}</span>
+      <span class="rate">
+        <Icon name="star" />
+        <span class="t-strong11">{formatRating(shown)}</span>
+        {reviewCount > 0 && <span class="t-fb muted">({reviewCount})</span>}
+      </span>
     </div>
   </div>
 </div>

@@ -117,10 +117,11 @@
 }
 .cal-grid {
   display: grid;
-  grid-template-columns: repeat(7, 1fr);
+  grid-template-columns: repeat(7, minmax(0, 1fr));
   row-gap: calc(var(--vt-space-xs) / 2);
 }
 .cal-grid .cell {
+  min-width: 0;
   height: var(--vt-touch-min);
   display: grid;
   place-items: center;
@@ -139,6 +140,7 @@
   display: grid;
   place-items: center;
   width: 100%;
+  min-width: var(--vt-touch-min); /* ~3 px overlap at 320 px (7 × 48 px cannot fit; 48 px targets kept deliberately, no overlap from 360 px) */
   height: var(--vt-touch-min);
   border: 0;
   background: none;

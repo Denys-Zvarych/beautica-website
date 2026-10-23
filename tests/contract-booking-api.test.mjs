@@ -13,7 +13,7 @@ import { backendGate, javaInt } from "./helpers/backend.mjs";
 import { componentsOf, pathProblem, validate } from "./helpers/dto-schema.mjs";
 import { ROOT } from "./helpers/env.mjs";
 import { parseMasterInfo, parseSalonInfo, parseReviewsPage } from "../src/lib/booking/types.ts";
-import { getAvailability, sendOtp, verifyOtp, createBooking } from "../src/scripts/booking/api.ts";
+import { getAvailability, getBookableDays, sendOtp, verifyOtp, createBooking } from "../src/scripts/booking/api.ts";
 import { PRIVACY_POLICY_VERSION } from "../src/config/legal.mjs";
 
 const gate = backendGate();
@@ -36,6 +36,12 @@ describe("1. the mock backend only serves what the real DTOs allow", gate, () =>
     const slots = await get(`/api/v1/book/oksana-ab12/availability?date=2030-01-02&serviceId=${SVC[0].id}`);
     assert.ok(slots.length > 0);
     assert.deepEqual(validate(slots, "List<AvailableSlotResponse>"), []);
+  });
+  test("GET /bookable-days is a List<MasterWorkingDayResponse>", async () => {
+    const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Kyiv" }).format(new Date());
+    const days = await get(`/api/v1/book/oksana-ab12/bookable-days?from=${today}&to=${today}&serviceId=${SVC[0].id}`);
+    assert.equal(days.length, 1);
+    assert.deepEqual(validate(days, "List<MasterWorkingDayResponse>"), []);
   });
   test("POST /otp/verify is an ApiResponse<GuestTokenResponse>", async () => {
     const res = await fetch(`${mock.origin}/api/v1/book/otp/verify`, { method: "POST", body: JSON.stringify({ phone: "+380501234567", code: "123456" }) });
@@ -124,6 +130,49 @@ describe("2. every field the site reads exists in the real DTO", gate, () => {
       assert.ok(set.size >= 1, `${type}: nothing was read`);
       assert.deepEqual([...set].map((p) => pathProblem(p, type)).filter(Boolean), [], type);
     }
+  });
+  test("getBookableDays reads only MasterWorkingDayResponse fields", async () => {
+    const real = globalThis.fetch;
+    const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Kyiv" }).format(new Date());
+    const payload = await get(`/api/v1/book/oksana-ab12/bookable-days?from=${today}&to=${today}&serviceId=${SVC[0].id}`);
+    const reads = new Set();
+    try {
+      globalThis.fetch = async () => ({ ok: true, status: 200, json: async () => traced(payload, reads) });
+      const r = await getBookableDays("http://x", "oksana-ab12", today, today, [SVC[0].id]);
+      assert.equal(r.ok && r.data.length, 1);
+    } finally {
+      globalThis.fetch = real;
+    }
+    assert.ok(reads.size >= 1, "nothing was read");
+    assert.deepEqual([...reads].map((p) => pathProblem(p, "List<MasterWorkingDayResponse>")).filter(Boolean), []);
+  });
+  test("a slug is percent-encoded in every API URL (no path traversal or query injection)", async () => {
+    const real = globalThis.fetch;
+    const urls = [];
+    globalThis.fetch = async (u) => (urls.push(String(u)), { ok: true, status: 200, json: async () => [] });
+    try {
+      for (const slug of ["a/../b", "x?y=1#z"]) {
+        await getAvailability("http://x", slug, "2030-01-02", [SVC[0].id]);
+        await getBookableDays("http://x", slug, "2030-01-02", "2030-01-03", [SVC[0].id]);
+        await createBooking("http://x", slug, "tok", { serviceIds: [SVC[0].id], startsAt: "2030-01-02T10:00:00+02:00", name: "А", surname: "Б", policyVersion: PRIVACY_POLICY_VERSION });
+      }
+    } finally {
+      globalThis.fetch = real;
+    }
+    assert.equal(urls.length, 6);
+    for (const u of urls) {
+      const path = new URL(u).pathname;
+      assert.match(path, /^\/api\/v1\/book\/(a%2F\.\.%2Fb|x%3Fy%3D1%23z)\/(availability|bookable-days|booking)$/, u);
+    }
+  });
+  test("the server-side info loaders encode their slug", () => {
+    const src = readFileSync(join(ROOT, "src/lib/booking/info.ts"), "utf8");
+    assert.equal((src.match(/\$\{encodeURIComponent\(slug\)\}/g) ?? []).length, 3);
+    assert.equal(/\$\{slug\}/.test(src.replace(/parse\w+\(slug/g, "")), false, "no raw slug in a URL");
+  });
+  test("the reviews loader encodes its slug too", () => {
+    const src = readFileSync(join(ROOT, "src/scripts/booking/reviews.ts"), "utf8");
+    assert.match(src, /\$\{encodeURIComponent\(slug\)\}\/reviews\?/);
   });
   test("the recorder bites: a field the backend does not have is reported", () => {
     const reads = new Set();

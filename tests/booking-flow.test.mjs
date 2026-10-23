@@ -136,21 +136,155 @@ describe("happy path: one service", () => {
     });
   });
 
-  test("the day grid has no slot-less guesswork: every day of the window is selectable, days before today are not", async () => {
+  test("the day grid greys out days with no free time (bookable-days): Sundays and past days are disabled, the rest selectable; the request is asked for the chosen services", async () => {
     await withPage("oksana-ab12", {}, async ({ page }) => {
       await driveTo(page, "services");
       await page.click("#cta-services");
+      await page.waitForFunction(() => [...document.querySelectorAll(".dbtn")].some((b) => new Date(`${b.dataset.day}T12:00:00Z`).getUTCDay() === 0 && b.disabled && b.dataset.day >= document.querySelector(".dbtn.today").dataset.day));
       const states = await page.evaluate(() => {
         const t = document.querySelector(".dbtn.today").dataset.day;
-        return [...document.querySelectorAll(".dbtn")].map((b) => ({ d: b.dataset.day, off: b.disabled, t }));
+        return [...document.querySelectorAll(".dbtn")].map((b) => ({ d: b.dataset.day, off: b.disabled, t, sun: new Date(`${b.dataset.day}T12:00:00Z`).getUTCDay() === 0 }));
       });
       const today = states[0].t;
       assert.ok(states.filter((s) => s.d < today).every((s) => s.off));
-      assert.ok(states.filter((s) => s.d >= today).every((s) => !s.off));
+      assert.ok(states.filter((s) => s.d >= today && s.sun).every((s) => s.off), "Sundays have no free time");
+      assert.ok(states.filter((s) => s.d >= today && !s.sun).every((s) => !s.off));
+      assert.equal(await page.locator(".dbtn.off:not(.today)").first().evaluate((b) => getComputedStyle(b.querySelector(".n")).color !== getComputedStyle(document.querySelector(".dbtn.ok .n")).color), true, "disabled days read as greyed");
+      const calls = callsTo(await mockLog((e) => e.path.includes("oksana-ab12/bookable-days")), "GET", "bookable-days");
+      assert.ok(calls.length >= 1);
+      assert.match(calls.at(-1).path, new RegExp(`from=\\d{4}-\\d{2}-\\d{2}&to=\\d{4}-\\d{2}-\\d{2}&serviceId=${SVC_ID.classic}$`));
       assert.equal(await page.locator("#prev").isDisabled(), true);
       await page.click("#next");
       await page.click("#next");
       assert.equal(await page.locator("#next").isDisabled(), true, "three months cover today ... +60 days");
+      const last = await page.evaluate(() => [...document.querySelectorAll(".dbtn.ok")].map((b) => b.dataset.day).at(-1));
+      assert.ok(last, "the last month still has selectable days");
+    });
+  });
+
+  test("bookable-days failing leaves every day selectable (the old behaviour)", async () => {
+    await withPage("oksana-ab12", {}, async ({ page, context }) => {
+      await context.route(`${MOCK_API}/api/v1/book/oksana-ab12/bookable-days*`, (r) => r.fulfill({ status: 503, headers: { "access-control-allow-origin": "*" }, body: "" }));
+      await driveTo(page, "services");
+      await page.click("#cta-services");
+      await page.waitForTimeout(300);
+      const states = await page.evaluate(() => {
+        const t = document.querySelector(".dbtn.today").dataset.day;
+        return [...document.querySelectorAll(".dbtn")].map((b) => ({ d: b.dataset.day, off: b.disabled, t }));
+      });
+      assert.ok(states.filter((s) => s.d >= states[0].t).every((s) => !s.off));
+    });
+  });
+
+  // Request-count tests (the page's own requests, so parallel test files cannot disturb them).
+  const countDays = (page) => {
+    const urls = [];
+    page.on("request", (r) => r.url().includes("/bookable-days") && urls.push(new URL(r.url()).searchParams.get("from")));
+    return urls;
+  };
+  test("bookable-days: one request per month, however fast the visitor pages; answers that arrive late are still cached", async () => {
+    await withPage("oksana-ab12", {}, async ({ page, context }) => {
+      await context.route(`${MOCK_API}/api/v1/book/oksana-ab12/bookable-days*`, async (r) => {
+        await new Promise((res) => setTimeout(res, 400)); // slow answers: the visitor pages on before they arrive
+        await r.fallback();
+      });
+      const urls = countDays(page);
+      await driveTo(page, "services");
+      await page.click("#cta-services");
+      await page.click("#next");
+      await page.click("#next");
+      await page.click("#prev");
+      await page.click("#prev");
+      await page.click("#next");
+      await page.waitForTimeout(1500);
+      assert.equal(urls.length, 3, `months 0, 1 and 2 once each: ${urls}`);
+      assert.equal(new Set(urls).size, 3);
+      await page.click("#prev");
+      await page.click("#next");
+      await page.click("#next");
+      await page.waitForTimeout(300);
+      assert.equal(urls.length, 3, "paging over cached months asks nothing");
+      assert.equal(await page.locator(".dbtn.off:not(.today)").count() > 0, true);
+    });
+  });
+
+  test("bookable-days failing is not refetched while the visitor pages and re-enters the step", async () => {
+    await withPage("oksana-ab12", {}, async ({ page, context }) => {
+      await context.route(`${MOCK_API}/api/v1/book/oksana-ab12/bookable-days*`, (r) => r.fulfill({ status: 503, headers: { "access-control-allow-origin": "*" }, body: "" }));
+      const urls = countDays(page);
+      await driveTo(page, "services");
+      await page.click("#cta-services");
+      await page.click("#next");
+      await page.click("#prev");
+      await page.click("#next");
+      await page.waitForTimeout(300);
+      assert.equal(urls.length, 2, `one try per month: ${urls}`);
+      await page.click(`[data-day="${await pickableDay(page)}"]`);
+      await page.click("#cta-date");
+      await page.waitForSelector("#slots .slot");
+      await page.goBack();
+      await page.waitForTimeout(300);
+      assert.equal(urls.length, 2, "re-entering the date step does not retry");
+      assert.equal(await page.locator(".dbtn.off:not(.today)").evaluateAll((l) => l.every((b) => b.dataset.day < document.querySelector(".dbtn.today").dataset.day)), true, "failure: only past days are off");
+    });
+  });
+
+  test("bookable-days: re-entering the date step before the first answer does not send a duplicate", async () => {
+    await withPage("oksana-ab12", {}, async ({ page, context }) => {
+      await context.route(`${MOCK_API}/api/v1/book/oksana-ab12/bookable-days*`, async (r) => {
+        await new Promise((res) => setTimeout(res, 700));
+        await r.fallback();
+      });
+      const urls = countDays(page);
+      await driveTo(page, "services");
+      await page.click("#cta-services");
+      await page.goBack();
+      await page.click("#cta-services");
+      await page.waitForTimeout(1200);
+      assert.equal(urls.length, 1, `one request in flight is reused: ${urls}`);
+    });
+  });
+
+  test("a chosen day that is off for the re-chosen services is dropped even from the cache (no selected+disabled day, no enabled Далі)", async () => {
+    await withPage("oksana-ab12", {}, async ({ page }) => {
+      // The mock: with the pedicure service Saturdays are off. B = pedicure, A = classic manicure.
+      const sat = () => page.evaluate(() => [...document.querySelectorAll(".dbtn")].find((b) => new Date(`${b.dataset.day}T12:00:00Z`).getUTCDay() === 6 && b.dataset.day > document.querySelector(".dbtn.today").dataset.day)?.dataset.day);
+      await page.click("#book-cta");
+      await page.waitForSelector("[data-screen=services]:not([hidden])");
+      await page.click(`#svc-list [data-id="${SVC_ID.pedi}"]`);
+      await page.click("#cta-services");
+      await page.waitForFunction(() => document.querySelector(".dbtn.off:not(.today)[data-day]") && [...document.querySelectorAll(".dbtn.off")].some((b) => new Date(`${b.dataset.day}T12:00:00Z`).getUTCDay() === 6 && b.dataset.day > document.querySelector(".dbtn.today").dataset.day));
+      const d = await sat();
+      assert.equal(await page.locator(`[data-day="${d}"]`).isDisabled(), true, "Saturday is off for B");
+      await page.click("[data-screen=date] [data-back]");
+      await page.click(`#svc-list [data-id="${SVC_ID.pedi}"]`); // B off
+      await page.click(`#svc-list [data-id="${SVC_ID.classic}"]`); // A on
+      await page.click("#cta-services");
+      await page.waitForSelector(`[data-day="${d}"]:not([disabled])`);
+      await page.click(`[data-day="${d}"]`);
+      assert.equal(await page.locator("#cta-date").isDisabled(), false);
+      await page.click("[data-screen=date] [data-back]");
+      await page.click(`#svc-list [data-id="${SVC_ID.classic}"]`); // A off
+      await page.click(`#svc-list [data-id="${SVC_ID.pedi}"]`); // B on again: its answer is cached
+      await page.click("#cta-services");
+      assert.equal(await page.locator(`[data-day="${d}"]`).isDisabled(), true);
+      assert.equal(await page.locator(`[data-day="${d}"].sel`).count(), 0, "the off day is no longer selected");
+      assert.equal(await page.locator("#cta-date").isDisabled(), true, "Далі is disabled until a valid day is chosen");
+    });
+  });
+
+  test("the strip on every step shows the rating like the app: «★ 4.9 (128)», «★ —» for an unreviewed master, the role label without a title", async () => {
+    await withPage("oksana-ab12", {}, async ({ page }) => {
+      await driveTo(page, "date");
+      assert.match(await text(page.locator("[data-screen=date] .strip .rate")), /^4\.9 \(\d+\)$/);
+      assert.ok((await text(page.locator("[data-screen=date] .strip"))).includes("Запис до майстра"));
+    });
+    await withPage("sparse-0001", {}, async ({ page }) => {
+      await page.click("#book-cta");
+      await page.waitForSelector("[data-screen=services]:not([hidden])");
+      assert.equal(await text(page.locator("[data-screen=services] .strip .rate")), "—");
+      assert.ok((await text(page.locator("[data-screen=services] .strip"))).includes("Незалежний майстер"));
+      assert.equal((await page.locator("[data-screen=services] .strip .rate svg").boundingBox())?.width > 0, true, "the star renders");
     });
   });
 });
@@ -231,7 +365,9 @@ describe("salon master", () => {
 
 describe("time step", () => {
   test("a day without free time shows the empty state; «Змінити» returns to the calendar", async () => {
-    await withPage("oksana-ab12", {}, async ({ page }) => {
+    await withPage("oksana-ab12", {}, async ({ page, context }) => {
+      // The mock greys Sundays out; a failing bookable-days endpoint (fallback: all days selectable) lets the test reach the empty state.
+      await context.route(`${MOCK_API}/api/v1/book/oksana-ab12/bookable-days*`, (r) => r.fulfill({ status: 503, headers: { "access-control-allow-origin": "*" }, body: "" }));
       await page.click("#book-cta");
       await page.click(`#svc-list [data-id="${SVC_ID.classic}"]`);
       await page.click("#cta-services");
@@ -695,6 +831,7 @@ describe("parity with the app: category accordions, comment, address (backend 38
   test("services step: category accordions with the app's count badge and a live «selected» badge", async () => {
     await withPage("oksana-ab12", {}, async ({ page }) => {
       await page.click("#book-cta");
+      await page.waitForSelector("[data-screen=services]:not([hidden])"); // the island loads on the tap
       const names = await page.locator("#svc-list [data-cat-group] .lbl").allInnerTexts();
       assert.deepEqual(names, ["Нігтьовий сервіс", "Подологія", "Оформлення брів"]);
       assert.deepEqual(await page.locator("#svc-list [data-cat-group] .badge:not(.sel)").allInnerTexts(), ["2", "1", "1"]);

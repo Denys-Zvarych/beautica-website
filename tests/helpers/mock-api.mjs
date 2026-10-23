@@ -3,7 +3,8 @@
 // Behaviour is chosen by the slug or the phone number, never by shared mutable state, so test files can run in parallel:
 //   master slugs   oksana-ab12 (full)   sparse-0001 (no title/bio/photos/reviews)   closed-aaaa (bookable:false)   retired-bbbb (410)
 //                  down-cccc (503)   limited-dddd (429)   conflict-9999 (booking -> 409)   bookdown-7777 (booking -> 503)
-//                  expired-6666 (booking -> 401)   cache-4444 / headers-3333 / rail-8888 (a slug of their own for the cache / forwarded-header / 12-photo rail tests)   salonmaster-5555 (belongs to salon lavanda-1111)   anything else = 404
+//                  expired-6666 (booking -> 401)   cache-4444 / headers-3333 / rail-8888 (a slug of their own for the cache / forwarded-header / 12-photo rail tests)   salonmaster-5555 (belongs to salon lavanda-1111)   salonnotitle-5656 (salon master without a professionalTitle)   anything else = 404
+//   bookable-days  GET /book/{slug}/bookable-days?from&to&serviceId=...: Sundays are not working (and Saturdays when the pedicure service is among the ids); window outside today..today+60 -> 400; unknown service -> 404
 //   reviews        GET /book/{slug}/reviews and /book/s/{slug}/reviews: 12 fixed reviews, ?sort= (bad sort 400), page, size <= 20
 //   booking        clientComment > 1000 chars or with control characters -> 400
 //   salon slugs    lavanda-1111 (8 masters)   salonhdr-4444 (same, for the forwarded-header test)   shut-2222 (bookable:false)   anything else = 404
@@ -106,6 +107,7 @@ const MASTERS = {
   "cache-4444": () => masterInfo(),
   "rail-8888": () => masterInfo({ portfolio: Array.from({ length: 12 }, (_, i) => ({ id: uid("a", i), entityType: "MASTER", entityId: MASTER_ID, mediaType: "PORTFOLIO", url: `${MEDIA}/p${i}.jpg`, createdAt: "2026-10-01T10:00:00Z" })) }),
   "headers-3333": () => masterInfo(),
+  "salonnotitle-5656": () => masterInfo({ masterName: "Дарина Мельник", professionalTitle: null, street: null, buildingNo: null, locationNote: null, salon: { name: "Салон «Лаванда»", bookingSlug: "lavanda-1111" } }),
   "salonmaster-5555": () => masterInfo({ masterName: "Дарина Мельник", street: null, buildingNo: null, locationNote: null, salon: { name: "Салон «Лаванда»", bookingSlug: "lavanda-1111" } }),
 };
 
@@ -214,6 +216,22 @@ export async function startMockApi() {
       if (!/^\d{4}-\d{2}-\d{2}$/.test(date ?? "") || ids.length === 0) return err(res, 400, "Bad request");
       const minutes = ids.reduce((a, id) => a + (SVC.find((s) => s.id === id)?.durationMinutes ?? 0), 0);
       return json(res, 200, slotsFor(date, minutes));
+    }
+    if ((m = /^\/api\/v1\/book\/([a-z0-9-]+)\/bookable-days$/.exec(path))) {
+      // Backend 387: [{date, working}] per day of [from, to]; window inside [today, today+60] (Kyiv) else 400. Sundays are the non-working days (as slotsFor).
+      if (!MASTERS[m[1]]) return err(res, 404, "Not found");
+      const from = url.searchParams.get("from") ?? "";
+      const to = url.searchParams.get("to") ?? "";
+      const ids = url.searchParams.getAll("serviceId");
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to) || ids.length === 0 || ids.length > 10 || from > to) return err(res, 400, "Bad request");
+      const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Kyiv" }).format(new Date());
+      const iso = (d) => d.toISOString().slice(0, 10);
+      const max = iso(new Date(new Date(`${today}T12:00:00Z`).getTime() + 60 * 86400000));
+      if (from < today || to > max) return err(res, 400, "Window out of range");
+      if (ids.some((id) => !SVC.some((s) => s.id === id))) return err(res, 404, "Not found");
+      const out = [];
+      for (let d = new Date(`${from}T12:00:00Z`); iso(d) <= to; d = new Date(d.getTime() + 86400000)) out.push({ date: iso(d), working: d.getUTCDay() !== 0 && !(ids.includes(SVC[2].id) && d.getUTCDay() === 6) });
+      return json(res, 200, out);
     }
     if (path === "/api/v1/book/otp/send" && req.method === "POST") {
       const b = body ?? {};

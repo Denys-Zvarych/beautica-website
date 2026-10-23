@@ -74,7 +74,6 @@ const jsonLd = info
       breadcrumbList([{ name: t("book.master.crumbHome"), url: `${site}/` }, { name, url: canonical }]),
     ]
   : undefined;
-const backHref = info?.salon?.bookingSlug ? `/book/s/${info.salon.bookingSlug}` : "/";
 const canBook = !!info && info.services.length > 0;
 ---
 
@@ -97,7 +96,7 @@ const canBook = !!info && info.services.length > 0;
         data-address={streetLine(info.street, info.buildingNo) ?? ""}
         data-note={info.locationNote ?? ""}
       >
-        <MasterProfile info={info} backHref={backHref} apiOrigin={cfg.apiOrigin} sort={sort} reviews={firstReviews} />
+        <MasterProfile info={info} apiOrigin={cfg.apiOrigin} sort={sort} reviews={firstReviews} />
         {/* The steps are inert until the visitor opens the flow: a <template> costs no DOM nodes, style or layout at load. */}
         {canBook && <template id="book-steps"><BookingFlow info={info} /></template>}
       </main>

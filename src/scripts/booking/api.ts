@@ -7,6 +7,11 @@ export interface Slot {
   startsAt: string;
   endsAt: string;
 }
+export interface BookableDay {
+  date: string;
+  /** false = no free time that day for the chosen services (the calendar greys it out). */
+  working: boolean;
+}
 export interface BookingCreated {
   startsAt: string;
   masterName: string;
@@ -64,8 +69,17 @@ const post = (body: unknown, token?: string): RequestInit => ({
 export function getAvailability(api: string, slug: string, day: string, serviceIds: string[]): Promise<Result<Slot[]>> {
   const q = new URLSearchParams({ date: day });
   for (const id of serviceIds) q.append("serviceId", id);
-  return call(`${api}/api/v1/book/${slug}/availability?${q}`, { headers: { Accept: "application/json" } }, (j) =>
+  return call(`${api}/api/v1/book/${encodeURIComponent(slug)}/availability?${q}`, { headers: { Accept: "application/json" } }, (j) =>
     Array.isArray(j) ? j.flatMap((s) => (typeof obj(s).startsAt === "string" && typeof obj(s).endsAt === "string" ? [{ startsAt: obj(s).startsAt as string, endsAt: obj(s).endsAt as string }] : [])) : null,
+  );
+}
+
+/** GET /book/{slug}/bookable-days (backend 387): per day of [from, to] (inside today ... today+60, Kyiv), whether the chosen services fit. */
+export function getBookableDays(api: string, slug: string, from: string, to: string, serviceIds: string[]): Promise<Result<BookableDay[]>> {
+  const q = new URLSearchParams({ from, to });
+  for (const id of serviceIds) q.append("serviceId", id);
+  return call(`${api}/api/v1/book/${encodeURIComponent(slug)}/bookable-days?${q}`, { headers: { Accept: "application/json" } }, (j) =>
+    Array.isArray(j) ? j.flatMap((d) => (typeof obj(d).date === "string" && typeof obj(d).working === "boolean" ? [{ date: obj(d).date as string, working: obj(d).working as boolean }] : [])) : null,
   );
 }
 
@@ -83,7 +97,7 @@ export function verifyOtp(api: string, phone: string, code: string): Promise<Res
 export function createBooking(api: string, slug: string, guestToken: string, b: BookingRequest): Promise<Result<BookingCreated>> {
   const ids = b.serviceIds.length === 1 ? { serviceId: b.serviceIds[0] } : { masterServiceIds: b.serviceIds };
   const body = { ...ids, startsAt: b.startsAt, name: b.name, surname: b.surname, privacyAccepted: true, privacyPolicyVersion: b.policyVersion, ...(b.clientComment ? { clientComment: b.clientComment } : {}) };
-  return call(`${api}/api/v1/book/${slug}/booking`, post(body, guestToken), (j) => {
+  return call(`${api}/api/v1/book/${encodeURIComponent(slug)}/booking`, post(body, guestToken), (j) => {
     const o = obj(j);
     return typeof o.startsAt === "string"
       ? { startsAt: o.startsAt, masterName: String(o.masterName ?? ""), serviceName: String(o.serviceName ?? ""), durationMinutes: Number(o.durationMinutes ?? 0), cancelUrl: typeof o.cancelUrl === "string" ? o.cancelUrl : null }

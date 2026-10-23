@@ -39,13 +39,13 @@ async function get<T>(cfg: BookingConfig, path: string, ip: string | undefined, 
 }
 
 export const fetchMasterInfo = (cfg: BookingConfig, slug: string, ip?: string): Promise<InfoResult<MasterInfo>> =>
-  get(cfg, `/api/v1/book/${slug}/info`, ip, (raw) => parseMasterInfo(slug, raw));
+  get(cfg, `/api/v1/book/${encodeURIComponent(slug)}/info`, ip, (raw) => parseMasterInfo(slug, raw));
 
 export const fetchSalonInfo = (cfg: BookingConfig, slug: string, ip?: string): Promise<InfoResult<SalonInfo>> =>
-  get(cfg, `/api/v1/book/s/${slug}/info`, ip, (raw) => parseSalonInfo(slug, raw));
+  get(cfg, `/api/v1/book/s/${encodeURIComponent(slug)}/info`, ip, (raw) => parseSalonInfo(slug, raw));
 
 /** Page 0 (5 reviews) of GET /book/{slug}/reviews or /book/s/{slug}/reviews: the first view of a non-default sort (the ?sort= link without script). */
 export async function fetchReviewsFirstPage(cfg: BookingConfig, kind: "master" | "salon", slug: string, sort: string, ip?: string): Promise<ReviewItem[] | null> {
-  const r = await get(cfg, `/api/v1/book/${kind === "salon" ? "s/" : ""}${slug}/reviews?sort=${encodeURIComponent(sort)}&page=0&size=5`, ip, parseReviewsPage);
+  const r = await get(cfg, `/api/v1/book/${kind === "salon" ? "s/" : ""}${encodeURIComponent(slug)}/reviews?sort=${encodeURIComponent(sort)}&page=0&size=5`, ip, parseReviewsPage);
   return r.kind === "ok" ? r.data.items : null;
 }

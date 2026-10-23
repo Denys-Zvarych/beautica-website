@@ -33,9 +33,6 @@ const firstName = (n: string) => n.trim().split(/\s+/)[0] ?? n;
 <div class="body">
   <div class="cover">
     {info.coverImageUrl ? <img src={info.coverImageUrl} alt="" width="420" height="232" decoding="async" fetchpriority="high" referrerpolicy="no-referrer" /> : <span class="cam"><Icon name="photo-camera-back" /></span>}
-    <div class="btns">
-      <a class="cib" href="/" aria-label={t("book.back")}><Icon name="arrow-back-ios" /></a>
-    </div>
   </div>
   <div class="hero-wrap">
     <NeuCard emphasis pad="md-plus">
