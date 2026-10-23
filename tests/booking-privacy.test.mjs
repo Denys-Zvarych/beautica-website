@@ -18,7 +18,10 @@ let browser;
 before(async () => (browser = await launch()));
 after(async () => browser?.close());
 
+// Every event also carries the link context {kind, source} (phase 013: master|salon, copy|share|none), added by track.ts.
+const CTX = ["kind", "source"];
 const EVENTS = {
+  link_open: ["referrer_host"],
   profile_view: ["slug"],
   service_selected: ["count"],
   slot_selected: ["days_ahead"],
@@ -126,13 +129,13 @@ describe("analytics funnel: documented events, counts and codes only", () => {
       await page.click("#cta-confirm");
       await page.waitForSelector("#done-card", { state: "visible" });
       const events = await page.evaluate(() => window.__events);
-      assert.deepEqual(events.map((x) => x.e), ["profile_view", "service_selected", "slot_selected", "otp_requested", "otp_verified", "booking_confirmed"]);
+      assert.deepEqual(events.map((x) => x.e), ["link_open", "profile_view", "service_selected", "slot_selected", "otp_requested", "otp_verified", "booking_confirmed"]);
       for (const { e, p } of events) {
-        assert.deepEqual(Object.keys(p ?? {}).sort(), [...EVENTS[e]].sort(), `${e}: props`);
+        assert.deepEqual(Object.keys(p ?? {}).sort(), [...EVENTS[e], ...CTX].sort(), `${e}: props`);
         for (const v of Object.values(p ?? {})) assert.ok(typeof v === "number" || (typeof v === "string" && v.length <= 60), `${e}: ${v}`);
       }
-      assert.deepEqual(events.find((x) => x.e === "profile_view").p, { slug: "oksana-ab12" });
-      assert.deepEqual(events.find((x) => x.e === "booking_confirmed").p, { services_count: 1 });
+      assert.deepEqual(events.find((x) => x.e === "profile_view").p, { slug: "oksana-ab12", kind: "master", source: "none" });
+      assert.deepEqual(events.find((x) => x.e === "booking_confirmed").p, { services_count: 1, kind: "master", source: "none" });
       const text = JSON.stringify(events);
       for (const pii of ["Аналітика", "Анонімна", "671230006", "380671230006", "коментар", "guest-token", "TOKEN-", "123456", "b0b0b0b0", "123e4567"]) assert.equal(text.includes(pii), false, `analytics carries ${pii}`);
     });
@@ -150,7 +153,7 @@ describe("analytics funnel: documented events, counts and codes only", () => {
       await page.click("#cta-confirm");
       await page.waitForSelector("#time-conflict", { state: "visible" });
       const err = (await page.evaluate(() => window.__events)).find((x) => x.e === "booking_error");
-      assert.deepEqual(err.p, { code: 409 });
+      assert.deepEqual(err.p, { code: 409, kind: "master", source: "none" });
     });
   });
 

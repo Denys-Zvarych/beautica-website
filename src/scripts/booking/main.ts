@@ -2,6 +2,9 @@
 // (calendar, slots, OTP ... about 13 KB gz, 25 KB raw) is fetched when the visitor shows intent (touch / hover / focus on the button) or taps it.
 import { track } from "../track";
 import { hydrateIcons } from "./icons";
+import { initChannel } from "./channel";
+
+initChannel();
 
 if (document.readyState === "complete") hydrateIcons();
 else window.addEventListener("load", () => setTimeout(() => hydrateIcons(), 0), { once: true });

@@ -16,8 +16,9 @@ export async function mockLog(filter = () => true) {
 export const callsTo = (log, method, pathPart) => log.filter((e) => e.method === method && e.path.includes(pathPart));
 
 /** A Playwright page on a booking-link page, with the media origin and Turnstile faked (nothing leaves the machine). */
-export async function bookPage(browser, slug, { width = 360, height = 800, turnstile = "ok", js = true, path } = {}) {
+export async function bookPage(browser, slug, { width = 360, height = 800, turnstile = "ok", js = true, path, init } = {}) {
   const env = await open(browser, { width, height, javaScriptEnabled: js });
+  if (init) await env.context.addInitScript(init);
   const turnstileRequests = [];
   await env.context.route("https://media.beautica.test/**", (r) => r.fulfill({ status: 200, contentType: "image/png", body: PNG }));
   await env.context.route("https://challenges.cloudflare.com/**", (r) => {

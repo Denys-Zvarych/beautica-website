@@ -105,6 +105,7 @@ const MASTERS = {
   "expired-6666": () => masterInfo(),
   "evil-0666": () => masterInfo({ bio: EVIL.bio, professionalTitle: EVIL.title, latestReviews: [{ ...review(1, "Автор", 5, EVIL.comment, "Послуга", 1), clientDisplayName: EVIL.author }] }),
   "cache-4444": () => masterInfo(),
+  "chan-6001": () => masterInfo(),
   "rail-8888": () => masterInfo({ portfolio: Array.from({ length: 12 }, (_, i) => ({ id: uid("a", i), entityType: "MASTER", entityId: MASTER_ID, mediaType: "PORTFOLIO", url: `${MEDIA}/p${i}.jpg`, createdAt: "2026-10-01T10:00:00Z" })) }),
   "headers-3333": () => masterInfo(),
   "salonnotitle-5656": () => masterInfo({ masterName: "Дарина Мельник", professionalTitle: null, street: null, buildingNo: null, locationNote: null, salon: { name: "Салон «Лаванда»", bookingSlug: "lavanda-1111" } }),
@@ -136,7 +137,7 @@ const salonInfo = (over = {}) => ({
   latestReviews: ALL_REVIEWS.slice(0, 5).map((r) => ({ ...r, masterFirstName: "Оксана", masterLastName: "Коваленко" })),
   ...over,
 });
-const SALONS = { "evilsalon-0666": () => salonInfo({ description: EVIL.salon }), "lavanda-1111": () => salonInfo(), "salonhdr-4444": () => salonInfo(), "shut-2222": () => salonInfo({ bookable: false, masters: [] }) };
+const SALONS = { "evilsalon-0666": () => salonInfo({ description: EVIL.salon }), "lavanda-1111": () => salonInfo(), "salonhdr-4444": () => salonInfo(), "chans-6002": () => salonInfo(), "shut-2222": () => salonInfo({ bookable: false, masters: [] }) };
 
 /** UTC offset of Europe/Kyiv on a calendar date, "+02:00" / "+03:00". */
 function kyivOffset(date) {
