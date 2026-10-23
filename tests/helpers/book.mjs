@@ -29,12 +29,15 @@ export async function bookPage(browser, slug, { width = 360, height = 800, turns
   return { ...env, res, turnstileRequests };
 }
 
-/** First day in the booking window that has slots in the mock (not a Sunday, not today): "YYYY-MM-DD". */
+/** First day in the booking window that has slots in the mock (not a Sunday, not a Saturday, not today: the bookable-days answer arrives after the grid renders and may grey a Saturday out, so tests never race it): "YYYY-MM-DD". */
+// Saturdays are skipped on purpose: the mock greys them out for the pedicure service once the async bookable-days answer lands, so a click can race it.
+// A test that needs a Saturday must go through the pedicure path and wait for that answer explicitly.
 export async function pickableDay(page, { sunday = false, nth = 0 } = {}) {
   return page.evaluate(([sun, n]) => {
     const days = [...document.querySelectorAll(".dbtn.ok")].map((b) => b.dataset.day);
     const today = document.querySelector(".dbtn.today")?.dataset.day;
-    const ok = days.filter((d) => d !== today && (new Date(`${d}T12:00:00Z`).getUTCDay() === 0) === sun);
+    const dow = (d) => new Date(`${d}T12:00:00Z`).getUTCDay();
+    const ok = days.filter((d) => d !== today && (dow(d) === 0) === sun && dow(d) !== 6);
     return ok[n];
   }, [sunday, nth]);
 }

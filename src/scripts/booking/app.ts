@@ -701,12 +701,27 @@ export function initBooking(root: HTMLElement): { open(): void } {
     btn.innerHTML = `${icon(calendarAdd, true)}<span class="t-strong115"></span>`;
     $("span", btn).textContent = S.calendar;
     const minutes = totals().minutes || b.durationMinutes;
-    btn.addEventListener("click", () =>
-      downloadIcs(buildIcs({ uid: crypto.randomUUID(), startsAt: b.startsAt, minutes, summary: fmt(S.icsSummary, { master: masterName }), description: fmt(S.icsDescription, { services: chosen().map((s) => s.name).join(", ") }), location: [salon, city].filter(Boolean).join(", ") }), "beautica-booking.ics"),
-    );
+    // The cancel link is a bearer token: it goes only into the file the guest downloads, never to analytics, logs or the page URL.
+    const cPath = cancelPath(b.cancelUrl);
+    const cancelAbs = cPath ? location.origin + cPath : null;
+    btn.addEventListener("click", () => {
+      const base = fmt(S.icsDescription, { services: chosen().map((s) => s.name).join(", ") });
+      downloadIcs(
+        buildIcs({
+          uid: crypto.randomUUID(),
+          startsAt: b.startsAt,
+          minutes,
+          summary: fmt(S.icsSummary, { master: masterName }),
+          description: cancelAbs ? `${base}\n${fmt(S.icsCancel, { url: cancelAbs })}` : base,
+          location: [salon, city].filter(Boolean).join(", "),
+          ...(cancelAbs ? { url: cancelAbs } : {}),
+        }),
+        "beautica-booking.ics",
+      );
+    });
     wrap.append(btn);
     card.append(el("div", "rule dense"), wrap);
-    const path = cancelPath(b.cancelUrl);
+    const path = cPath;
     const cancel = $<HTMLAnchorElement>("#done-cancel");
     if (path) {
       cancel.href = path;

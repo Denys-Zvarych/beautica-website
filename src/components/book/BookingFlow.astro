@@ -27,7 +27,7 @@ const js = {
   wait: t("book.otp.wait", { sec: "{sec}" }),
   salonLabel: t("book.confirm.salon"), cityLabel: t("book.confirm.city"), dateLabel: t("book.confirm.date"), timeLabel: t("book.confirm.time"), servicesLabel: t("book.confirm.services"), totalLabel: t("book.confirm.total"),
   invalid: t("book.confirm.invalid"), limit: t("book.confirm.limit"), unavailable: t("book.confirm.unavailable", { email: "{email}" }), error: t("book.confirm.error"), supportEmail: t("site.supportEmail"),
-  calendar: t("book.done.calendar"), counter: t("book.confirm.counter", { n: "{n}", max: 500 }), addressLabel: t("book.confirm.address"), commentRow: t("book.confirm.commentRow"), icsSummary: t("book.ics.summary", { master: "{master}" }), icsDescription: t("book.ics.description", { services: "{services}" }),
+  calendar: t("book.done.calendar"), counter: t("book.confirm.counter", { n: "{n}", max: 500 }), addressLabel: t("book.confirm.address"), commentRow: t("book.confirm.commentRow"), icsSummary: t("book.ics.summary", { master: "{master}" }), icsDescription: t("book.ics.description", { services: "{services}" }), icsCancel: t("book.ics.cancel", { url: "{url}" }),
 };
 const jsJson = safeJson(js);
 const groups = groupByCategory(info.services, info.categories, t("book.master.otherServices"));

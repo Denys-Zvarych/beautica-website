@@ -110,7 +110,7 @@ export function cancelPath(cancelUrl: string | null): string | null {
   if (!cancelUrl) return null;
   try {
     const p = new URL(cancelUrl, "https://beautica.app").pathname;
-    return /^\/book\/cancel\/[0-9a-f-]{36}$/i.test(p) ? p : null;
+    return /^\/book\/cancel\/[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(p) ? p : null;
   } catch {
     return null;
   }

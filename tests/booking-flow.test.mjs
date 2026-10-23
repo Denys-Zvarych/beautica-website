@@ -59,19 +59,19 @@ describe("happy path: one service", () => {
       assert.equal(await visibleScreen(page), "contact");
       await page.fill("#name", name);
       await page.fill("#surname", "Коваленко");
-      await page.type("#phone", "501234567");
-      assert.equal(await page.inputValue("#phone"), "+380 50 123 45 67");
+      await page.type("#phone", "671290015"); // unique to this test: the shared mock log is read by phone below
+      assert.equal(await page.inputValue("#phone"), "+380 67 129 00 15");
       await toggleConsent(page);
       await page.click("#cta-contact");
       await page.waitForSelector("#otp", { state: "visible" });
-      assert.equal(await text(page.locator("#otp-phone")), "+380 50 123 45 67");
+      assert.equal(await text(page.locator("#otp-phone")), "+380 67 129 00 15");
       assert.match(await text(page.locator("#otp-resend")), /Надіслати знову \(\d+ с\)/, "resend cooldown is running");
       assert.equal(await page.locator("#cta-otp").isDisabled(), true);
       for (const [i, d] of [..."123456"].entries()) await page.locator("#otp input").nth(i).fill(d);
       await page.click("#cta-otp");
       await page.waitForSelector("#confirm-card", { state: "visible" });
       assert.equal(await text(page.locator("#c-name")), `${name} Коваленко`);
-      assert.equal(await text(page.locator("#c-phone")), "+380 50 123 45 67");
+      assert.equal(await text(page.locator("#c-phone")), "+380 67 129 00 15");
       const recap = await text(page.locator("#confirm-card"));
       for (const s of ["Київ", "Манікюр+гель лак", "1 год 30 хв", "від 650 ₴", "12:00–13:30", "Разом"]) assert.ok(recap.includes(s.replace(/ /g, " ")) || recap.includes(s), `confirm lacks ${s}: ${recap}`);
       await page.click("#cta-confirm");
@@ -81,10 +81,10 @@ describe("happy path: one service", () => {
       assert.ok((await text(page.locator("[data-screen=done]"))).includes("Ваш запис підтверджено"));
       assert.equal((await text(page.locator("[data-screen=done]"))).includes("підтвердить"), false, "the app's stale «майстер підтвердить» wording is not used");
 
-      const log = await mockLog((e) => e.body?.name === name || e.path.includes("oksana-ab12/availability") || (e.path.includes("/otp/") && e.body?.phone === "+380501234567"));
+      const log = await mockLog((e) => e.body?.name === name || e.path.includes("oksana-ab12/availability") || (e.path.includes("/otp/") && e.body?.phone === "+380671290015"));
       const send = callsTo(log, "POST", "/otp/send").at(-1);
-      assert.deepEqual(send.body, { phone: "+380501234567", privacyAccepted: true, privacyPolicyVersion: PRIVACY_POLICY_VERSION, turnstileToken: "TOKEN-1" });
-      assert.deepEqual(callsTo(log, "POST", "/otp/verify").at(-1).body, { phone: "+380501234567", code: "123456" });
+      assert.deepEqual(send.body, { phone: "+380671290015", privacyAccepted: true, privacyPolicyVersion: PRIVACY_POLICY_VERSION, turnstileToken: "TOKEN-1" });
+      assert.deepEqual(callsTo(log, "POST", "/otp/verify").at(-1).body, { phone: "+380671290015", code: "123456" });
       // Shared mock log (other files run against the same API): match this test's own availability call by its exact path.
       const availPath = `/api/v1/book/oksana-ab12/availability?date=${day}&serviceId=${SVC_ID.gel}`;
       assert.ok(callsTo(log, "GET", "oksana-ab12/availability").some((e) => e.path === availPath), "availability asked for the chosen day + service");
@@ -137,8 +137,40 @@ describe("happy path: one service", () => {
     });
   });
 
+  test("phase 015: the downloaded .ics carries the cancel link (DESCRIPTION + URL, this site's origin); none without a cancel link", async () => {
+    const make = async (slug, name) => {
+      let ics = null;
+      let origin = "";
+      await withPage(slug, {}, async ({ page }) => {
+        await page.addInitScript(() => {
+          window.__icsBlobs = [];
+          window.__umami = [];
+          const create = URL.createObjectURL.bind(URL);
+          URL.createObjectURL = (b) => (window.__icsBlobs.push(b), create(b));
+        });
+        await page.reload();
+        await driveTo(page, "confirm", { contact: { name } });
+        await page.click("#cta-confirm");
+        await page.waitForSelector("#done-card", { state: "visible" });
+        await page.getByRole("button", { name: "Додати в календар" }).click();
+        ics = await page.evaluate(() => window.__icsBlobs.at(-1).text());
+        origin = new URL(page.url()).origin;
+      });
+      return { ics, origin };
+    };
+    const withLink = await make("oksana-ab12", "Календар");
+    const flat = withLink.ics.replace(/\r\n /g, "");
+    const cancel = `${withLink.origin}/book/cancel/123e4567-e89b-42d3-a456-426614174000`;
+    assert.ok(flat.includes(`\r\nURL:${cancel}\r\n`), flat);
+    assert.ok(flat.includes(`Скасувати запис: ${cancel}\r\n`), flat);
+    assert.ok(withLink.ics.split("\r\n").every((l) => Buffer.byteLength(l) <= 75));
+    const without = await make("nocancel-8888", "БезСкасування");
+    assert.equal(/URL:|book\/cancel|Скасувати/.test(without.ics), false, without.ics);
+    assert.match(without.ics, /DESCRIPTION:Запис через Beautica/);
+  });
+
   test("the day grid greys out days with no free time (bookable-days): Sundays and past days are disabled, the rest selectable; the request is asked for the chosen services", async () => {
-    await withPage("oksana-ab12", {}, async ({ page }) => {
+    await withPage("bookdays-5151", {}, async ({ page }) => {
       await driveTo(page, "services");
       await page.click("#cta-services");
       await page.waitForFunction(() => [...document.querySelectorAll(".dbtn")].some((b) => new Date(`${b.dataset.day}T12:00:00Z`).getUTCDay() === 0 && b.disabled && b.dataset.day >= document.querySelector(".dbtn.today").dataset.day));
@@ -151,7 +183,7 @@ describe("happy path: one service", () => {
       assert.ok(states.filter((s) => s.d >= today && s.sun).every((s) => s.off), "Sundays have no free time");
       assert.ok(states.filter((s) => s.d >= today && !s.sun).every((s) => !s.off));
       assert.equal(await page.locator(".dbtn.off:not(.today)").first().evaluate((b) => getComputedStyle(b.querySelector(".n")).color !== getComputedStyle(document.querySelector(".dbtn.ok .n")).color), true, "disabled days read as greyed");
-      const calls = callsTo(await mockLog((e) => e.path.includes("oksana-ab12/bookable-days")), "GET", "bookable-days");
+      const calls = callsTo(await mockLog((e) => e.path.includes("bookdays-5151/bookable-days")), "GET", "bookable-days"); // slug unique to this test: the mock log is shared across files
       assert.ok(calls.length >= 1);
       assert.match(calls.at(-1).path, new RegExp(`from=\\d{4}-\\d{2}-\\d{2}&to=\\d{4}-\\d{2}-\\d{2}&serviceId=${SVC_ID.classic}$`));
       assert.equal(await page.locator("#prev").isDisabled(), true);
@@ -398,6 +430,7 @@ describe("time step", () => {
     });
   });
 
+  // The conflict-9999 slug MUST stay unique to this test: the re-fetch count below is read from the shared mock log.
   test("409 at the end: back to the time step, message, refreshed slots, the chosen time cleared", async () => {
     await withPage("conflict-9999", {}, async ({ page }) => {
       await driveTo(page, "confirm", { contact: { name: "Конфлікт" } });
@@ -419,18 +452,20 @@ describe("time step", () => {
 describe("contact step", () => {
   test("validation: empty fields are flagged inline, linked to the field, and nothing is sent", async () => {
     await withPage("oksana-ab12", {}, async ({ page }) => {
-      await driveTo(page, "contact", { contact: { name: "", surname: "", phone: "5" } });
+      await driveTo(page, "contact", { contact: { name: "", surname: "", phone: "671290021" } }); // a VALID phone unique to this test: a skipped validation would send it
       await page.fill("#name", "");
       await toggleConsent(page); // untick the consent
-      const before = (await mockLog((e) => e.path.includes("/otp/send"))).length;
       await page.click("#cta-contact");
       assert.equal(await page.locator("#f-name .ferr").isVisible(), true);
       assert.ok((await text(page.locator("#f-name .ferr"))).includes("Це поле обов'язкове"));
-      assert.ok((await text(page.locator("#f-phone .ferr"))).includes("Невірний номер телефону"));
       assert.ok((await text(page.locator("#consent-err"))).includes("Без згоди ми не можемо записати вас."));
       assert.equal(await page.getAttribute("#name", "aria-describedby"), "e-name", "the error is linked to its field");
       assert.equal(await page.evaluate(() => document.activeElement?.id), "name", "focus goes to the first invalid field");
-      assert.equal((await mockLog((e) => e.path.includes("/otp/send"))).length, before);
+      assert.deepEqual(await mockLog((e) => e.path.includes("/otp/send") && e.body?.phone === "+380671290021"), [], "nothing sent for this test's phone");
+      await page.fill("#phone", "");
+      await page.type("#phone", "5");
+      await page.click("#cta-contact");
+      assert.ok((await text(page.locator("#f-phone .ferr"))).includes("Невірний номер телефону"));
       await fillContact(page, { name: "Поправила", surname: "Іваненко", phone: "671112233" });
       await page.fill("#phone", "");
       await page.type("#phone", "671112233");

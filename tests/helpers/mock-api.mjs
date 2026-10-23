@@ -2,7 +2,7 @@
 // The Worker fetches the link-page data from it (API_ORIGIN) and the browser calls it for availability / OTP / booking.
 // Behaviour is chosen by the slug or the phone number, never by shared mutable state, so test files can run in parallel:
 //   master slugs   oksana-ab12 (full)   sparse-0001 (no title/bio/photos/reviews)   closed-aaaa (bookable:false)   retired-bbbb (410)
-//                  down-cccc (503)   limited-dddd (429)   conflict-9999 (booking -> 409)   bookdown-7777 (booking -> 503)
+//                  down-cccc (503)   limited-dddd (429)   conflict-9999 (booking -> 409)   bookdown-7777 (booking -> 503)   nocancel-8888 (booking -> cancelUrl null)   foreigncancel-4242 (booking -> cancelUrl on a foreign host)   bookdays-5151 (unique to the bookable-days request test)
 //                  expired-6666 (booking -> 401)   cache-4444 / headers-3333 / rail-8888 (a slug of their own for the cache / forwarded-header / 12-photo rail tests)   salonmaster-5555 (belongs to salon lavanda-1111)   salonnotitle-5656 (salon master without a professionalTitle)   anything else = 404
 //   bookable-days  GET /book/{slug}/bookable-days?from&to&serviceId=...: Sundays are not working (and Saturdays when the pedicure service is among the ids); window outside today..today+60 -> 400; unknown service -> 404
 //   reviews        GET /book/{slug}/reviews and /book/s/{slug}/reviews: 12 fixed reviews, ?sort= (bad sort 400), page, size <= 20
@@ -44,6 +44,8 @@ function reviewsPage(all, sort, page, size) {
   const s = Math.min(size, 20);
   return { success: true, data: sorted.slice(page * s, page * s + s), message: null, page, size: s, totalElements: all.length, totalPages: Math.ceil(all.length / s) };
 }
+// A backend-host cancel link (foreigncancel-4242): the site must rebuild it on its OWN origin, never echo this host.
+export const FOREIGN_CANCEL_URL = "https://api.evil-backend.example:8443/book/cancel/aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee?utm=x#frag";
 export const CANCEL_URL = "https://beautica.app/book/cancel/123e4567-e89b-42d3-a456-426614174000";
 export const MEDIA = "https://media.beautica.test";
 export const GUEST_TOKEN = "guest-token-ok";
@@ -102,6 +104,9 @@ const MASTERS = {
   "closed-aaaa": () => masterInfo({ bookable: false }),
   "conflict-9999": () => masterInfo(),
   "bookdown-7777": () => masterInfo(),
+  "nocancel-8888": () => masterInfo(),
+  "foreigncancel-4242": () => masterInfo(),
+  "bookdays-5151": () => masterInfo(),
   "expired-6666": () => masterInfo(),
   "evil-0666": () => masterInfo({ bio: EVIL.bio, professionalTitle: EVIL.title, latestReviews: [{ ...review(1, "Автор", 5, EVIL.comment, "Послуга", 1), clientDisplayName: EVIL.author }] }),
   "cache-4444": () => masterInfo(),
@@ -262,7 +267,7 @@ export async function startMockApi() {
       if (slug === "bookdown-7777") return err(res, 503, "Service unavailable");
       const names = ids.map((id) => SVC.find((s) => s.id === id)?.name).filter(Boolean);
       const minutes = ids.reduce((a, id) => a + (SVC.find((s) => s.id === id)?.durationMinutes ?? 0), 0);
-      return json(res, 201, { bookingId: "b0b0b0b0-1111-4222-8333-944455556666", appointmentId: ids.length > 1 ? "a0a0a0a0-1111-4222-8333-944455556666" : null, startsAt: b.startsAt, masterName: "Оксана Коваленко", serviceName: names.join(", "), durationMinutes: minutes, cancelUrl: CANCEL_URL });
+      return json(res, 201, { bookingId: "b0b0b0b0-1111-4222-8333-944455556666", appointmentId: ids.length > 1 ? "a0a0a0a0-1111-4222-8333-944455556666" : null, startsAt: b.startsAt, masterName: "Оксана Коваленко", serviceName: names.join(", "), durationMinutes: minutes, cancelUrl: slug === "nocancel-8888" ? null : slug === "foreigncancel-4242" ? FOREIGN_CANCEL_URL : CANCEL_URL });
     }
     return err(res, 404, "Not found");
   });

@@ -326,7 +326,8 @@
     },
     "ics": {
       "summary": "Запис до {master}",
-      "description": "Запис через Beautica. Послуги: {services}."
+      "description": "Запис через Beautica. Послуги: {services}.",
+      "cancel": "Скасувати запис: {url}"
     },
     "reviews": {
       "sortLabel": "Сортування",
