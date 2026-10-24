@@ -1,7 +1,7 @@
 /*
  * Self-hosted variable WOFF2 (@fontsource-variable 5.3.0, OFL; same designs Google serves). Hand-written on purpose:
- * Fontsource CSS would declare every subset. Per family: cyrillic + latin (Google unicode-ranges) and a cyrillic-ext
- * face narrowed to U+20B4 (the hryvnia sign lives only there), so browsers fetch it only on pages that render it.
+ * Fontsource CSS would declare every subset. Per family: cyrillic + latin (Google unicode-ranges; the link pages add a small "latin core" in book.css) and a face for U+20B4 only
+ * (the hryvnia sign lives only in Google's cyrillic-ext file; src/fonts/*-hryvnia-* is a pyftsubset of it made by scripts/subset-fonts.mjs, about 1.3 KB instead of 15-29 KB), so browsers fetch it only on pages that render it.
  * The app's static weights (Comfortaa 600/700, Nunito 400/600/700/800) are instances of the wght axis.
  * "<Family> Fallback" faces carry size-adjust/ascent/descent overrides measured against Arial (Liberation Sans / Arimo are metric-identical, listed for Linux, where Chrome does not alias Arial) so the swap does not shift layout.
  */
@@ -26,7 +26,7 @@
   font-style: normal;
   font-display: swap;
   font-weight: 200 1000;
-  src: url("../../node_modules/@fontsource-variable/nunito/files/nunito-cyrillic-ext-wght-normal.woff2") format("woff2-variations");
+  src: url("../fonts/nunito-hryvnia-wght-normal.woff2") format("woff2-variations");
   unicode-range: U+20B4;
 }
 @font-face {
@@ -91,7 +91,7 @@
   font-style: normal;
   font-display: swap;
   font-weight: 300 700;
-  src: url("../../node_modules/@fontsource-variable/comfortaa/files/comfortaa-cyrillic-ext-wght-normal.woff2") format("woff2-variations");
+  src: url("../fonts/comfortaa-hryvnia-wght-normal.woff2") format("woff2-variations");
   unicode-range: U+20B4;
 }
 @font-face {

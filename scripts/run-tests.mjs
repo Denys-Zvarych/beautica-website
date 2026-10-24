@@ -4,11 +4,16 @@
 //
 //   npm run build && npm test                  # everything
 //   node scripts/run-tests.mjs tests/contract-delete-request.test.mjs   # one file
+//   node scripts/run-tests.mjs --sequential tests/a.test.mjs tests/b.test.mjs   # one file at a time (a loaded machine, or files that compete for CPU)
+//   node scripts/run-tests.mjs --concurrency 1|2|...  (default 2; env TEST_CONCURRENCY)   # how many files run at once
+//   node scripts/run-tests.mjs --grep "font bytes" tests/booking-pages.test.mjs          # only tests whose name matches (node --test-name-pattern)
+// The browser specs are slow (real flows, axe): run each on its own, as CI does (.github/workflows/ci.yml), and never put all of them in one
+// call under a hard timeout; several files in one call share the same mock backend and wrangler, so each file must use slugs/phones of its own.
 //
 // Env for the tests: TEST_BASE_URL (wrangler origin), TEST_WRANGLER_LOG (its stdout/stderr, for "no PII in logs" checks).
 // Browser: CHROMIUM_PATH, or a Chromium / Chrome found in the usual places (see tests/helpers/browser.mjs).
 import { spawn } from "node:child_process";
-import { createWriteStream, existsSync, mkdtempSync, readdirSync, readFileSync } from "node:fs";
+import { createWriteStream, existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -29,11 +34,57 @@ const freePort = () =>
     });
   });
 
+// A harness that was SIGKILLed (`timeout --signal=KILL`, a killed shell) cannot clean up: its wrangler + workerd process group keeps running on a
+// random port. Every run therefore records its pid in its state dir (/tmp/beautica-wrangler-*/owner.pid) and, at startup, reaps the servers of
+// runs whose owner is gone. Only dirs with this exact prefix under the temp dir are touched; a run whose owner is alive is never disturbed.
+function reapStaleServers() {
+  const alive = (pid) => {
+    try {
+      process.kill(pid, 0);
+      return true;
+    } catch (e) {
+      return e.code === "EPERM";
+    }
+  };
+  for (const name of readdirSync(tmpdir())) {
+    if (!name.startsWith("beautica-wrangler-")) continue;
+    const dir = join(tmpdir(), name);
+    let owner = NaN;
+    try {
+      owner = Number(readFileSync(join(dir, "owner.pid"), "utf8"));
+    } catch {
+      // Left by a harness from before owner.pid existed: only when it is clearly old (1 h), never a run that is starting right now.
+      try {
+        if (Date.now() - statSync(dir).mtimeMs < 3600_000) continue;
+      } catch {
+        continue;
+      }
+    }
+    if (Number.isFinite(owner) && alive(owner)) continue;
+    // The wrangler of that run carries its state dir on its command line; its group (workerd included) goes with it.
+    for (const pid of readdirSync("/proc").filter((p) => /^\d+$/.test(p))) {
+      try {
+        const cmd = readFileSync(`/proc/${pid}/cmdline`, "utf8");
+        if (cmd.includes(dir) && cmd.includes("wrangler")) process.kill(-Number(pid), "SIGKILL");
+      } catch {
+        /* gone, or not ours */
+      }
+    }
+    try {
+      rmSync(dir, { recursive: true, force: true });
+    } catch {
+      /* best effort */
+    }
+  }
+}
+reapStaleServers();
+
 // Stand-in backend for the booking-link pages: the Worker fetches its data from it (API_ORIGIN) and the browser calls it.
 const mockApi = await startMockApi();
 const port = await freePort();
 const base = `http://127.0.0.1:${port}`;
 const logPath = join(mkdtempSync(join(tmpdir(), "beautica-wrangler-")), "wrangler.log");
+writeFileSync(join(dirname(logPath), "owner.pid"), String(process.pid));
 const log = createWriteStream(logPath);
 
 const wrangler = spawn("npx", [
@@ -63,8 +114,10 @@ const stop = () => {
     /* already gone */
   }
 };
+// Every way out that can be trapped (SIGKILL cannot: the next run's reapStaleServers() cleans that case).
 process.on("exit", stop);
-for (const sig of ["SIGINT", "SIGTERM"]) process.on(sig, () => (stop(), process.exit(130)));
+for (const sig of ["SIGINT", "SIGTERM", "SIGHUP"]) process.on(sig, () => (stop(), process.exit(130)));
+for (const ev of ["uncaughtException", "unhandledRejection"]) process.on(ev, (err) => (console.error("run-tests:", err), stop(), process.exit(1)));
 
 async function waitReady() {
   const deadline = Date.now() + 90_000;
@@ -83,9 +136,21 @@ async function waitReady() {
 let code = 1;
 try {
   await waitReady();
-  const files = process.argv.slice(2);
+  // Flags first, then the files. `--flag value` pairs: --concurrency N, --grep PATTERN; `--sequential` = `--concurrency 1`.
+  const args = process.argv.slice(2);
+  const files = [];
+  let concurrency = Number(process.env.TEST_CONCURRENCY ?? 2);
+  let grep = "";
+  for (let i = 0; i < args.length; i++) {
+    if (args[i] === "--sequential") concurrency = 1;
+    else if (args[i] === "--concurrency") concurrency = Number(args[++i]);
+    else if (args[i] === "--grep") grep = args[++i] ?? "";
+    else if (args[i].startsWith("--")) throw new Error(`unknown option ${args[i]}`);
+    else files.push(args[i]);
+  }
+  if (!Number.isInteger(concurrency) || concurrency < 1) throw new Error("--concurrency must be a whole number >= 1");
   const targets = files.length ? files : readdirSync("tests").filter((f) => f.endsWith(".test.mjs") && !(process.env.TEST_EXCLUDE ?? "").split(",").filter(Boolean).some((x) => f.includes(x))).map((f) => join("tests", f));
-  const run = spawn(process.execPath, ["--test", "--test-concurrency=2", "--test-reporter=spec", ...targets], {
+  const run = spawn(process.execPath, ["--test", `--test-concurrency=${concurrency}`, "--test-reporter=spec", ...(grep ? [`--test-name-pattern=${grep}`] : []), ...targets], {
     stdio: "inherit",
     env: { ...process.env, TEST_BASE_URL: base, TEST_WRANGLER_LOG: logPath, TEST_API_ORIGIN: mockApi.origin },
   });

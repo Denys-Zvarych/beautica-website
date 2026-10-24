@@ -4,7 +4,7 @@ import { test, describe, before, after } from "node:test";
 import assert from "node:assert/strict";
 import { rawRequest, requireBase, freshIp, BASE, MOCK_API } from "./helpers/env.mjs";
 import { launch } from "./helpers/browser.mjs";
-import { bookPage, mockLog, callsTo, shot } from "./helpers/book.mjs";
+import { bookPage, mockLog, logMark, callsTo, shot } from "./helpers/book.mjs";
 import { EVIL } from "./helpers/mock-api.mjs";
 import { visibleBox } from "./helpers/browser.mjs";
 const text = (loc) => loc.innerText().then((s) => s.replace(/\s+/g, " ").trim());
@@ -123,7 +123,7 @@ describe("master page without optional data", async () => {
 describe("states that are not a profile", () => {
   const cases = [
     { slug: "closed-aaaa", status: 200, h1: "Ця сторінка більше не працює", cache: "no-store" },
-    { slug: "retired-bbbb", status: 410, h1: "Ця сторінка більше не працює", cache: "no-store" },
+    { slug: "retired-bbbb", status: 410, h1: "Посилання більше не дійсне", cache: "no-store" },
     { slug: "nobody-0000", status: 404, h1: "Сторінку не знайдено", cache: "no-store" },
     { slug: "down-cccc", status: 503, h1: "Сторінка тимчасово недоступна", cache: "no-store", retryAfter: "7" },
     { slug: "limited-dddd", status: 429, h1: "Сторінка тимчасово недоступна", cache: "no-store", retryAfter: "12" },
@@ -147,13 +147,13 @@ describe("states that are not a profile", () => {
     });
   }
   test("a malformed slug is a 404 and never reaches the backend", async () => {
-    await fetch(`${MOCK_API}/__mock/reset`, { method: "POST" });
+    const mark = await logMark();
     for (const bad of ["BAD_slug", "a", "-x-", "%20", "UPPER-1234", "x".repeat(70)]) {
       const res = await get(`/book/${bad}`);
       assert.equal(res.status, 404, bad);
       assert.equal(res.headers["x-robots-tag"], "noindex, nofollow");
     }
-    const seen = await mockLog((e) => e.path.includes("/info"));
+    const seen = await mockLog((e) => e.path.includes("/info"), mark);
     assert.deepEqual(seen.filter((e) => /BAD_slug|UPPER|xxxxxxxx|%20/.test(e.path)), []);
   });
   test("unbookable / retired: one full-width card, no extra button (as the design's 410 state)", async () => {
@@ -542,9 +542,9 @@ describe("parity with the app (backend 383-385)", () => {
     assert.equal(again.headers["x-beautica-cache"], "HIT");
     assert.equal(strip(again.body), text1);
     assert.equal(strip((await get("/book/oksana-ab12")).body).includes("Марина К."), true, "the default entry is untouched");
-    await fetch(`${MOCK_API}/__mock/reset`, { method: "POST" });
+    const mark = await logMark();
     await get("/book/sparse-0001?sort=BOGUS");
-    assert.deepEqual(await mockLog((e) => e.path.includes("BOGUS")), [], "an unknown sort never reaches the backend");
+    assert.deepEqual(await mockLog((e) => e.path.includes("BOGUS"), mark), [], "an unknown sort never reaches the backend");
   });
 
   test("reviews with JS: re-sort replaces the list from /reviews, «Показати ще» appends the next page, errors are shown", async () => {
@@ -598,8 +598,9 @@ describe("parity with the app (backend 383-385)", () => {
       await page.waitForSelector("[data-tabs][role=tablist]");
       assert.deepEqual(await page.getByRole("tab").allInnerTexts(), ["Про салон", "Майстри", "Послуги", "Відгуки"]);
       assert.equal(await page.locator("[data-panel='1']").isVisible(), false);
-      await page.locator(".shelf a.cta").click();
-      assert.equal(await page.locator("[data-panel='1']").isVisible(), true, "«Записатись на послугу» opens the masters tab");
+      // With script the CTA is the wizard button (phase 016, tests/book-salon-wizard.test.mjs); the anchor stays as the no-JS fallback and still opens the masters tab.
+      await page.locator(".shelf a.cta").evaluate((a) => a.click());
+      assert.equal(await page.locator("[data-panel='1']").isVisible(), true, "the fallback anchor opens the masters tab");
       await page.getByRole("tab", { name: "Послуги" }).click();
       const open = await page.locator("[data-panel='2'] [data-cat-group]").evaluateAll((gs) => gs.map((g) => [g.querySelector(".lbl").textContent.trim(), g.querySelector(".badge:not(.sel)").textContent.trim(), g.open]));
       assert.deepEqual(open, [["Нігтьовий сервіс", "2", true], ["Оформлення брів", "1", false]], "first group open, the rest collapsed, backend counts");
@@ -669,7 +670,8 @@ describe("audit cycle 3", () => {
     assert.match(h, /class="slogo"[^>]*>Л</);
     const names = [...h.matchAll(/<a class="mcard[^>]*>[\s\S]*?<span class="t-sub11 ellipsis">([^<]*)<\/span>/g)].map((m) => m[1]);
     assert.equal(names[0], "Майстер1");
-    assert.equal(strip(h).includes("Майстер1 Тест"), false, "first name only, as in the design");
+    // The inert wizard template (phase 016) carries the full names for its own steps; the visible cards are what the design shows.
+    assert.equal(strip(h.replace(/<template id="book-steps">[\s\S]*<\/template>/, "")).includes("Майстер1 Тест"), false, "first name only, as in the design");
     const rates = [...h.matchAll(/<a class="mcard[^>]*>[\s\S]*?<\/a>/g)].map((m) => (m[0].match(/class="t-strong11">([^<]*)</) ?? [])[1] ?? null);
     assert.deepEqual(rates, ["4.9", "4.8", null, "4.7", "5.0", "4.6", "4.9", "4.5"], "★ rating per master as the app's card; no line while unreviewed");
   });
@@ -794,4 +796,60 @@ describe("user text never becomes markup (stored HTML injection)", () => {
     assert.equal(/<script>alert\(3\)/.test(h), false);
     assert.equal(ldBlocks(h)[0].description, EVIL.salon);
   });
+});
+
+describe("audit cycle 2: the booking API origin is warmed up on the link pages", () => {
+  const tag = `<link rel="preconnect" href="${MOCK_API}" crossorigin>`;
+  for (const path of ["/book/oksana-ab12", "/book/s/lavanda-1111"])
+    test(`${path}: one non-blocking preconnect to the API origin`, async () => {
+      const body = (await get(path)).body;
+      assert.equal(body.split(tag).length - 1, 1, "exactly one preconnect");
+      assert.equal(/rel="preconnect"[^>]*(?:blocking|onload)/.test(body), false);
+    });
+  test("pages that cannot book (notice, 404) do not open a connection they will not use", async () => {
+    for (const path of ["/book/closed-aaaa", "/book/nobody-0000", "/book/retired-bbbb"]) assert.equal((await get(path)).body.includes('rel="preconnect"'), false, path);
+  });
+});
+
+describe("audit cycle 3: font bytes ahead of the first paint cannot silently grow on the link pages", () => {
+  for (const path of ["/book/oksana-ab12", "/book/s/lavanda-1111"])
+    test(`${path}: no Latin letters, so only the Cyrillic and the Latin-core fonts load (the big Latin files are never requested), <= 80 KB`, async () => {
+      const env = await bookPage(browser, null, { path });
+      try {
+        const fonts = [];
+        const failed = [];
+        env.page.on("response", async (r) => {
+          if (!/\.woff2(\?|$)/.test(r.url())) return;
+          if (r.status() !== 200) failed.push(`${r.status()} ${r.url()}`);
+          else fonts.push({ file: new URL(r.url()).pathname.split("/").pop(), bytes: (await r.body().catch(() => Buffer.alloc(0))).length });
+        });
+        env.page.on("requestfailed", (r) => /\.woff2(\?|$)/.test(r.url()) && failed.push(`failed ${r.url()}`));
+        await env.page.reload({ waitUntil: "networkidle" });
+        // A well-defined settle instead of a sleep: every face the page asked for has finished loading (or failed), then the network is quiet again.
+        await env.page.evaluate(() => document.fonts.ready);
+        await env.page.waitForLoadState("networkidle");
+        // The cause of a full-Latin request is either a Latin letter on the page or a core font that did not arrive (the browser then falls back to the
+        // earlier, full face for the same characters): say which, instead of a bare "unexpected font".
+        assert.deepEqual(failed, [], "a font request failed: the browser falls back to the full Latin face for the characters of the core face");
+        const latin = await env.page.evaluate(() => {
+          const out = [];
+          const w = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+          while (w.nextNode()) {
+            const n = w.currentNode;
+            if (n.parentElement?.closest("template,script,style,noscript")) continue;
+            if (/[A-Za-z\u00C0-\u00FF]/.test(n.textContent)) out.push(n.textContent.trim().slice(0, 40));
+          }
+          return out;
+        });
+        assert.deepEqual(latin, [], "the page text has Latin letters (that is what pulls the full Latin face)");
+        const names = fonts.map((f) => f.file.replace(/\.[A-Za-z0-9_-]{8}\.woff2$/, ""));
+        assert.ok(names.length >= 3, `fonts requested: ${names}`);
+        for (const n of names) assert.match(n, /^(nunito|comfortaa)-(cyrillic|latin-core|hryvnia)-wght-normal$/, `unexpected font ${n}: a Latin letter, or a lost latin-core, pulled the whole Latin face`);
+        assert.ok(names.some((n) => n.includes("latin-core")), "the Latin core is used for spaces and digits");
+        const total = fonts.reduce((a, f) => a + f.bytes, 0);
+        assert.ok(total <= 80 * 1024, `fonts are ${total} B (the budget is 80 KB; today about 76 KB)`);
+      } finally {
+        await env.context.close();
+      }
+    });
 });

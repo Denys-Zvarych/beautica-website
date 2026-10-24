@@ -91,15 +91,27 @@
   text-align: center;
   border-radius: var(--vt-radius-card);
   background: var(--vt-color-base);
-  box-shadow: var(--vt-shadow-extruded-card);
   text-decoration: none;
-  transition:
-    transform var(--vt-dur-fast) var(--vt-ease),
-    box-shadow var(--vt-dur-fast) var(--vt-ease);
+  position: relative;
+  isolation: isolate;
+  transition: transform var(--vt-dur-fast) var(--vt-ease);
+}
+/* The shadow is a pseudo-element: pressing fades it out (opacity); nothing animates box-shadow. */
+.mcard::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  box-shadow: var(--vt-shadow-extruded-card);
+  pointer-events: none;
+  transition: opacity var(--vt-dur-fast) var(--vt-ease);
 }
 .mcard:active {
   transform: scale(0.97);
-  box-shadow: none;
+}
+.mcard:active::before {
+  opacity: 0;
 }
 @media (hover: hover) {
   .mcard:hover {
@@ -166,4 +178,74 @@
   color: var(--vt-color-accent-deep);
   --icon-size: var(--vt-app-icon-13);
   --icon-gap: 0;
+}
+
+/* ---------- services-tab filter (phase 017): the active-service chip on «Майстри», a tappable service tile, a master without a link ---------- */
+.mcard.plain {
+  cursor: default;
+}
+.mcard.plain:active {
+  transform: none;
+}
+.mcard.plain:active::before {
+  opacity: 1;
+}
+@media (hover: hover) {
+  .mcard.plain:hover {
+    transform: none;
+  }
+}
+.fchip-row {
+  margin-bottom: var(--vt-space-md);
+}
+.fchip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--vt-space-xs);
+  max-width: 100%;
+  padding: calc(var(--vt-space-xs) + var(--vt-space-xs) / 2) calc(var(--vt-space-xs) + var(--vt-space-xs) / 2) calc(var(--vt-space-xs) + var(--vt-space-xs) / 2) var(--vt-space-md);
+  border-radius: var(--vt-radius-pill);
+  background: color-mix(in srgb, var(--vt-color-accent) 16%, var(--vt-color-base));
+  box-shadow: var(--vt-shadow-extruded-small);
+  color: var(--vt-color-accent-deep);
+  --icon-size: var(--vt-space-md);
+  --icon-gap: 0;
+}
+.fchip .t-strong11 {
+  color: var(--vt-color-accent-deep);
+  min-width: 0;
+}
+.fclear {
+  position: relative;
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: var(--vt-space-lg);
+  height: var(--vt-space-lg);
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: var(--vt-color-base);
+  box-shadow: var(--vt-shadow-extruded-small);
+  color: var(--vt-color-accent-deep);
+  cursor: pointer;
+  --icon-size: var(--vt-app-icon-15);
+  --icon-gap: 0;
+}
+/* 48 px hit area around the 24 px disc */
+.fclear::after {
+  content: "";
+  position: absolute;
+  inset: calc((var(--vt-touch-min) - var(--vt-space-lg)) / -2);
+}
+.fclear:focus-visible {
+  outline: medium solid var(--vt-color-accent-deep);
+  outline-offset: var(--vt-app-line-2);
+}
+[data-filter-id][role="button"] {
+  cursor: pointer;
+}
+[data-filter-id][role="button"]:focus-visible {
+  outline: medium solid var(--vt-color-accent-deep);
+  outline-offset: var(--vt-app-line-2);
 }

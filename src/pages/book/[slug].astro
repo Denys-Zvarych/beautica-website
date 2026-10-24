@@ -4,8 +4,8 @@
 // States: ok | unbookable (200, noindex) | gone 410 | unknown 404 | backend down 503. Booking steps never change the URL.
 export const prerender = false;
 
-import "../../styles/book.css";
 import Layout from "../../components/Layout.astro";
+import "../../styles/book.css"; // after Layout: its @font-face latin core must come after the full faces of fonts.css (the later rule wins)
 import BookNotice from "../../components/book/BookNotice.astro";
 import MasterProfile from "../../components/book/MasterProfile.astro";
 import BookingFlow from "../../components/book/BookingFlow.astro";
@@ -31,12 +31,12 @@ const home = { href: "/", label: t("book.notice.home") };
 type Notice = { title: string; text: string; metaTitle: string; status: number; cta?: { href: string; label: string }; retryAfter?: number };
 let notice: Notice | null = null;
 if (result.kind === "not-found") notice = { ...pick("notFound"), status: 404, cta: home };
-else if (result.kind === "gone") notice = { ...pick("unbookable"), status: 410 };
+else if (result.kind === "gone") notice = { ...pick("retired"), status: 410, cta: home }; // BOOKING_LINK_RETIRED: the link was replaced
 else if (result.kind === "rate-limited") notice = { ...pick("unavailable"), status: 429, retryAfter: result.retryAfter, cta: { href: Astro.url.pathname, label: t("book.notice.unavailable.cta") } };
 else if (result.kind === "unavailable") notice = { ...pick("unavailable"), status: 503, retryAfter: result.retryAfter, cta: { href: Astro.url.pathname, label: t("book.notice.unavailable.cta") } };
 else if (!result.data.bookable) notice = { ...pick("unbookable"), status: 200 };
 
-function pick(k: "notFound" | "unbookable" | "unavailable") {
+function pick(k: "notFound" | "unbookable" | "unavailable" | "retired") {
   return { title: t(`book.notice.${k}.title`), text: t(`book.notice.${k}.text`), metaTitle: t(`book.notice.${k}.metaTitle`) };
 }
 
@@ -78,7 +78,7 @@ const canBook = !!info && info.services.length > 0;
 ---
 
 {/* preloadLatin stays false: better FCP, no LCP gain from preloading the Latin fonts, and the salon page gets worse. */}
-<Layout title={title} description={description} noindex={!info} image={info?.avatarUrl ?? undefined} imageAlt={name || undefined} robots={info && sort !== "NEWEST" ? "noindex, follow" : undefined} twitterCard="summary" ogType="profile" jsonLd={jsonLd} hideHeader hideFooter preloadLatin={false}>
+<Layout title={title} description={description} noindex={!info} image={info?.avatarUrl ?? undefined} imageAlt={name || undefined} robots={info && sort !== "NEWEST" ? "noindex, follow" : undefined} twitterCard="summary" ogType="profile" jsonLd={jsonLd} hideHeader hideFooter preloadLatin={false} preconnect={info ? cfg.apiOrigin : undefined}>
   {
     info ? (
       <main
@@ -86,6 +86,8 @@ const canBook = !!info && info.services.length > 0;
         id="main"
         data-book-root
         data-booking={canBook ? "" : undefined}
+        data-unsure={canBook ? t("book.unsure.notice", { label: "{label}" }) : undefined}
+        data-unsure-ok={canBook ? t("book.unsure.dismiss") : undefined}
         data-api={cfg.apiOrigin}
         data-site-key={cfg.turnstileSiteKey}
         data-policy={cfg.policyVersion}

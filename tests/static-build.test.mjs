@@ -10,20 +10,35 @@ import { ROOT } from "./helpers/env.mjs";
 const DIST = join(ROOT, "dist", "client");
 assert.ok(existsSync(DIST), "dist/client is missing: run `npm run build` first");
 
-const htmlFiles = [];
+const allHtml = [];
 (function walk(d) {
   for (const n of readdirSync(d)) {
     const p = join(d, n);
     if (statSync(p).isDirectory()) walk(p);
-    else if (n.endsWith(".html")) htmlFiles.push(p);
+    else if (n.endsWith(".html")) allHtml.push(p);
   }
 })(DIST);
+// /book-steps/* are HTML fragments the booking island fetches (phase 016), not pages: no head, no fonts, one JSON data block. Checked on their own below.
+const FRAGMENT = "/book-steps/salon.html";
+const htmlFiles = allHtml.filter((f) => !f.endsWith(FRAGMENT));
 const name = (p) => "/" + relative(DIST, p);
 const gz = (buf) => gzipSync(buf, { level: 9 }).length;
 const KB = 1024;
 
 test("the build produced the 10 expected pages", () => {
   assert.deepEqual(htmlFiles.map(name).sort(), ["/404.html", "/delete-account.html", "/index.html", "/l/booking.html", "/l/cancel.html", "/l/invite.html", "/l/review.html", "/privacy.html", "/support.html", "/terms.html"]);
+});
+
+describe("the salon wizard fragment (phase 016)", () => {
+  const frag = readFileSync(join(DIST, FRAGMENT), "utf8");
+  test("exists, and its only script is the JSON data block (nothing executable, no handlers, no external sub-resources)", () => {
+    const scripts = [...frag.matchAll(/<script\b([^>]*)>/g)].map((m) => m[1].trim());
+    assert.deepEqual(scripts, ['type="application/json" id="book-i18n"']);
+    assert.equal(/\s on[a-z]+\s*=\s*["']/i.test(frag.replace(/<style[\s\S]*?<\/style>/g, "")), false);
+    assert.equal(/javascript:/i.test(frag), false);
+    assert.equal(/\ssrc="(?:https?:)?\/\//.test(frag), false);
+  });
+  test("is not a page: no <html>, no <title>, no canonical", () => assert.equal(/<html|<title|rel="canonical"/.test(frag), false));
 });
 
 describe("CSP-safe markup (script-src 'self', no inline code)", () => {

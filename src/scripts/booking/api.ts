@@ -1,7 +1,8 @@
 // Typed calls to the public booking API (PublicBookingController + PhoneOtpController). Credential-less fetches with a timeout;
 // every outcome is mapped to a small union, so the UI never inspects status codes. No PII is ever logged.
 export type Fail = "validation" | "unauthorized" | "conflict" | "rate-limited" | "unavailable" | "not-found" | "network" | "error";
-export type Result<T> = { ok: true; data: T } | { ok: false; fail: Fail };
+/** `status`: the HTTP status of a failed answer (absent for network / unreadable-body failures). */
+export type Result<T> = { ok: true; data: T } | { ok: false; fail: Fail; status?: number };
 
 export interface Slot {
   startsAt: string;
@@ -48,7 +49,7 @@ async function call<T>(url: string, init: RequestInit, read: (json: unknown) => 
   } catch {
     return { ok: false, fail: "network" };
   }
-  if (!res.ok) return { ok: false, fail: failFor(res.status) };
+  if (!res.ok) return { ok: false, fail: failFor(res.status), status: res.status };
   let json: unknown = null;
   try {
     json = await res.json();
@@ -66,19 +67,23 @@ const post = (body: unknown, token?: string): RequestInit => ({
   body: JSON.stringify(body),
 });
 
-export function getAvailability(api: string, slug: string, day: string, serviceIds: string[]): Promise<Result<Slot[]>> {
+/** `/book/{slug}` for a master link; `/book/s/{slug}/masters/{masterId}` for one master of a salon link (backend 392/393: salon masters have no link of their own). */
+const scope = (api: string, slug: string, masterId?: string): string =>
+  masterId ? `${api}/api/v1/book/s/${encodeURIComponent(slug)}/masters/${encodeURIComponent(masterId)}` : `${api}/api/v1/book/${encodeURIComponent(slug)}`;
+
+export function getAvailability(api: string, slug: string, day: string, serviceIds: string[], masterId?: string): Promise<Result<Slot[]>> {
   const q = new URLSearchParams({ date: day });
   for (const id of serviceIds) q.append("serviceId", id);
-  return call(`${api}/api/v1/book/${encodeURIComponent(slug)}/availability?${q}`, { headers: { Accept: "application/json" } }, (j) =>
+  return call(`${scope(api, slug, masterId)}/availability?${q}`, { headers: { Accept: "application/json" } }, (j) =>
     Array.isArray(j) ? j.flatMap((s) => (typeof obj(s).startsAt === "string" && typeof obj(s).endsAt === "string" ? [{ startsAt: obj(s).startsAt as string, endsAt: obj(s).endsAt as string }] : [])) : null,
   );
 }
 
 /** GET /book/{slug}/bookable-days (backend 387): per day of [from, to] (inside today ... today+60, Kyiv), whether the chosen services fit. */
-export function getBookableDays(api: string, slug: string, from: string, to: string, serviceIds: string[]): Promise<Result<BookableDay[]>> {
+export function getBookableDays(api: string, slug: string, from: string, to: string, serviceIds: string[], masterId?: string): Promise<Result<BookableDay[]>> {
   const q = new URLSearchParams({ from, to });
   for (const id of serviceIds) q.append("serviceId", id);
-  return call(`${api}/api/v1/book/${encodeURIComponent(slug)}/bookable-days?${q}`, { headers: { Accept: "application/json" } }, (j) =>
+  return call(`${scope(api, slug, masterId)}/bookable-days?${q}`, { headers: { Accept: "application/json" } }, (j) =>
     Array.isArray(j) ? j.flatMap((d) => (typeof obj(d).date === "string" && typeof obj(d).working === "boolean" ? [{ date: obj(d).date as string, working: obj(d).working as boolean }] : [])) : null,
   );
 }
@@ -94,10 +99,11 @@ export function verifyOtp(api: string, phone: string, code: string): Promise<Res
   });
 }
 
-export function createBooking(api: string, slug: string, guestToken: string, b: BookingRequest): Promise<Result<BookingCreated>> {
-  const ids = b.serviceIds.length === 1 ? { serviceId: b.serviceIds[0] } : { masterServiceIds: b.serviceIds };
+export function createBooking(api: string, slug: string, guestToken: string, b: BookingRequest, masterId?: string): Promise<Result<BookingCreated>> {
+  // The salon route takes `masterServiceIds` always (1-10); the master link keeps `serviceId` for a single service.
+  const ids = b.serviceIds.length === 1 && !masterId ? { serviceId: b.serviceIds[0] } : { masterServiceIds: b.serviceIds };
   const body = { ...ids, startsAt: b.startsAt, name: b.name, surname: b.surname, privacyAccepted: true, privacyPolicyVersion: b.policyVersion, ...(b.clientComment ? { clientComment: b.clientComment } : {}) };
-  return call(`${api}/api/v1/book/${encodeURIComponent(slug)}/booking`, post(body, guestToken), (j) => {
+  return call(`${scope(api, slug, masterId)}/booking`, post(body, guestToken), (j) => {
     const o = obj(j);
     return typeof o.startsAt === "string"
       ? { startsAt: o.startsAt, masterName: String(o.masterName ?? ""), serviceName: String(o.serviceName ?? ""), durationMinutes: Number(o.durationMinutes ?? 0), cancelUrl: typeof o.cancelUrl === "string" ? o.cancelUrl : null }

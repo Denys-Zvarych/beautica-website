@@ -56,7 +56,9 @@ describe("every spec runs on pull requests", () => {
 describe("every route is under Lighthouse", () => {
   const routes = (dir, base = "") => readdirSync(join(ROOT, "src/pages", dir), { withFileTypes: true }).flatMap((e) =>
     e.isDirectory() ? (e.name === "api" ? [] : routes(join(dir, e.name), `${base}/${e.name}`)) : [`${base}/${e.name.replace(/\.(astro|ts)$/, "")}`]);
-  const staticRoutes = routes("").filter((r) => !r.includes("[")).map((r) => (r === "/index" ? "/index" : r));
+  // The one deliberate exclusion: /book-steps/* are noindex HTML fragments the booking island fetches (phase 016), not pages; Lighthouse
+  // measures the pages that load them. static-build.test.mjs checks the fragment itself (CSP-safe, no <html>/<title>).
+  const staticRoutes = routes("").filter((r) => !r.includes("[") && !r.startsWith("/book-steps/")).map((r) => (r === "/index" ? "/index" : r));
   const dynamicRoutes = routes("").filter((r) => r.includes("["));
   const lhciUrls = lhci.ci.collect.url.map((u) => new URL(u).pathname.replace(/\.html$/, ""));
   for (const r of staticRoutes)
@@ -77,4 +79,11 @@ describe("every route is under Lighthouse", () => {
     assert.ok(existsSync(join(ROOT, "tests/helpers/mock-api.mjs")));
   });
   test("the guest-cancel token route is measured through its static shell /l/cancel", () => assert.ok(lhciUrls.includes("/l/cancel")));
+});
+
+describe("the shared mock backend", () => {
+  test("no test clears its request log (POST /__mock/reset): files run concurrently against one mock, a reset deletes the other files' requests (use logMark() + mockLog(filter, mark))", () => {
+    const offenders = readdirSync(join(ROOT, "tests")).filter((f) => f.endsWith(".test.mjs") && f !== "ci-wiring.test.mjs" && /__mock\/reset/.test(readFileSync(join(ROOT, "tests", f), "utf8")));
+    assert.deepEqual(offenders, []);
+  });
 });

@@ -241,7 +241,7 @@ describe("happy path: one service", () => {
     });
   });
 
-  test("bookable-days failing is not refetched while the visitor pages and re-enters the step", async () => {
+  test("bookable-days failing: one try per visit to a month (no loop), and a later visit asks again", async () => {
     await withPage("oksana-ab12", {}, async ({ page, context }) => {
       await context.route(`${MOCK_API}/api/v1/book/oksana-ab12/bookable-days*`, (r) => r.fulfill({ status: 503, headers: { "access-control-allow-origin": "*" }, body: "" }));
       const urls = countDays(page);
@@ -251,13 +251,14 @@ describe("happy path: one service", () => {
       await page.click("#prev");
       await page.click("#next");
       await page.waitForTimeout(300);
-      assert.equal(urls.length, 2, `one try per month: ${urls}`);
+      // Audit cycle 2: a failed request is forgotten, so each visit to a month is one try (never a loop); the calendar stays all-enabled meanwhile.
+      assert.equal(urls.length, 4, `one try per visit: ${urls}`);
       await page.click(`[data-day="${await pickableDay(page)}"]`);
       await page.click("#cta-date");
       await page.waitForSelector("#slots .slot");
       await page.goBack();
       await page.waitForTimeout(300);
-      assert.equal(urls.length, 2, "re-entering the date step does not retry");
+      assert.ok(urls.length > 4, "re-entering the date step asks again for the month that failed");
       assert.equal(await page.locator(".dbtn.off:not(.today)").evaluateAll((l) => l.every((b) => b.dataset.day < document.querySelector(".dbtn.today").dataset.day)), true, "failure: only past days are off");
     });
   });
@@ -1000,5 +1001,263 @@ describe("control characters in guest text", () => {
       assert.equal(b.body.surname, "Ко вальчук");
       assert.equal(b.body.clientComment, "аб\nв");
     });
+  });
+});
+
+describe("audit cycle 2: a booking of unknown outcome, and the caches (master link)", () => {
+  const MSG = /Не вдалося підтвердити запис до Оксана Коваленко\. Перевірте SMS або посилання для скасування, перш ніж записуватися ще раз\./;
+  const okProblems = (env) => assert.deepEqual(env.problems.filter((p) => !/status of (409|401|429|503|400|504|500)|net::ERR_FAILED/.test(p)), [], "no console / page errors");
+  /** The backend books, then the answer is lost (`how` = "drop") or turned into a gateway timeout ("504"), once. */
+  async function lostAnswer(env, slug, how) {
+    let done = false;
+    await env.context.route(`${MOCK_API}/api/v1/book/${slug}/booking`, async (route) => {
+      if (done) return route.fallback();
+      done = true;
+      await route.fetch();
+      return how === "drop" ? route.abort("failed") : route.fulfill({ status: 504, contentType: "text/plain", body: "gateway timeout" });
+    });
+  }
+  for (const [how, slug] of [["drop", "ambig-0001"], ["504", "ambig-504a"]])
+    test(`${how === "drop" ? "the answer is dropped" : "a gateway timeout (504)"} after the backend booked: only the SAME slot can be sent again, no date/time step is reachable, the fields freeze`, async () => {
+      const env = await bookPage(browser, slug);
+      try {
+        const { page } = env;
+        await lostAnswer(env, slug, how);
+        await driveTo(page, "confirm");
+        await page.click("#cta-confirm");
+        await page.locator("#submit-error:not([hidden])").waitFor();
+        assert.match(await text(page.locator("#submit-error")), MSG);
+        assert.equal(await page.locator("[data-screen=confirm] [data-back]").isHidden(), true, "no back arrow");
+        assert.equal(await page.locator("#phone").evaluate((e) => e.readOnly), true);
+        assert.equal(await page.locator("#comment").evaluate((e) => e.readOnly), true);
+        assert.equal(await text(page.locator("#cta-confirm")), "Спробувати знову");
+        await page.goBack();
+        assert.equal(await visibleScreen(page), "confirm", "Back cannot reach the time or date step");
+        await page.click("#cta-confirm"); // the same slot again: taken (by the lost request) -> «probably booked by you»
+        await page.waitForFunction(() => !document.querySelector("#cta-confirm").disabled);
+        assert.match(await text(page.locator("#submit-error")), MSG);
+        assert.equal(await visibleScreen(page), "confirm", "a 409 after an uncertain attempt does not send the guest to pick another time");
+        const posts = callsTo(await mockLog(), "POST", `/book/${slug}/booking`);
+        assert.equal(posts.length, 2);
+        assert.equal(posts[0].body.startsAt, posts[1].body.startsAt, "never another time");
+        okProblems(env);
+      } finally {
+        await env.context.close();
+      }
+    });
+  test("a free-times list is refetched once its minute is over, and the fresh answer replaces the old one", async () => {
+    const env = await bookPage(browser, "slotc-0001", { init: () => { window.__skew = 0; const now = Date.now.bind(Date); Date.now = () => now() + window.__skew; } });
+    try {
+      const { page } = env;
+      await driveTo(page, "time");
+      const count = async () => callsTo(await mockLog(), "GET", "/book/slotc-0001/availability").length;
+      assert.equal(await count(), 1);
+      await page.goBack();
+      await page.click("#cta-date");
+      await page.waitForSelector("#slots .slot");
+      assert.equal(await count(), 1, "within the minute: from the cache");
+      await page.evaluate(() => (window.__skew = 61000));
+      await page.goBack();
+      await page.click("#cta-date");
+      await page.waitForSelector("#slots .slot");
+      assert.equal(await count(), 2, "expired: refetched");
+      await page.goBack();
+      await page.click("#cta-date");
+      await page.waitForSelector("#slots .slot");
+      assert.equal(await count(), 2, "the refetched answer is cached again (an expired entry is replaced, not kept)");
+      okProblems(env);
+    } finally {
+      await env.context.close();
+    }
+  });
+  test("a failed bookable-days request is not remembered: coming back to the month asks again", async () => {
+    const env = await bookPage(browser, "daysr-0001");
+    try {
+      const { page } = env;
+      let n = 0;
+      await env.context.route(`${MOCK_API}/api/v1/book/daysr-0001/bookable-days*`, (route) => (++n === 1 ? route.fulfill({ status: 500, body: "boom" }) : route.fallback()));
+      await driveTo(page, "services");
+      await page.click("#cta-services");
+      await page.waitForSelector(".dbtn");
+      await page.waitForTimeout(300);
+      await page.goBack();
+      await page.click("#cta-services");
+      await page.waitForFunction(() => [...document.querySelectorAll(".dbtn")].some((b) => b.disabled && new Date(`${b.dataset.day}T12:00:00Z`).getUTCDay() === 0 && b.dataset.day > document.querySelector(".dbtn.today").dataset.day));
+      assert.equal(n, 2, "asked again after the failure");
+      okProblems(env);
+    } finally {
+      await env.context.close();
+    }
+  });
+});
+
+describe("audit cycle 3: a booking of unknown outcome survives a reload (sessionStorage marker, no personal data)", () => {
+  const KEY = (slug) => `bk-unsure:master:${slug}`;
+  const NOTICE = /Можливо, ви вже записані на .+\. Перевірте SMS перед новим записом\./;
+  const okProblems = (env) => assert.deepEqual(env.problems.filter((p) => !/status of (409|401|429|503|400|504)|net::ERR_FAILED/.test(p)), [], "no console / page errors");
+  const stored = (page, slug) => page.evaluate((k) => sessionStorage.getItem(k), KEY(slug));
+  /** The backend books and the answer becomes a 504 (once). `commit: false`: the request never reaches the backend (a dropped connection). */
+  async function lose(env, slug, { commit = true } = {}) {
+    let done = false;
+    await env.context.route(`${MOCK_API}/api/v1/book/${slug}/booking`, async (route) => {
+      if (done) return route.fallback();
+      done = true;
+      if (commit) {
+        await route.fetch();
+        return route.fulfill({ status: 504, contentType: "text/plain", body: "gateway timeout" });
+      }
+      return route.abort("failed");
+    });
+  }
+  test("after a 504 the marker holds the slot, a time label and a timestamp, nothing personal; a reload shows the notice, «Зрозуміло» clears it", async () => {
+    const slug = "ambig-5041";
+    const env = await bookPage(browser, slug);
+    try {
+      const { page } = env;
+      await lose(env, slug);
+      await driveTo(page, "confirm", { contact: { name: "Іванна", surname: "Тестова" }, code: "654321" });
+      await page.fill("#comment", "Секретна нотатка");
+      await page.click("#cta-confirm");
+      await page.locator("#submit-error:not([hidden])").waitFor();
+      const raw = await stored(page, slug);
+      const m = JSON.parse(raw);
+      assert.deepEqual(Object.keys(m).sort(), ["at", "label", "slotStartIso"]);
+      assert.ok(Math.abs(Date.now() - m.at) < 60_000 && /T\d\d:\d\d/.test(m.slotStartIso));
+      for (const secret of ["501234567", "+380", "Іванна", "Тестова", "Секретна", "guest-token", "123456", "654321"]) assert.equal(raw.includes(secret), false, `the marker must not contain «${secret}»`);
+      await page.reload({ waitUntil: "load" });
+      await page.locator("#unsure-note").waitFor();
+      assert.match(await text(page.locator("#unsure-note")), NOTICE);
+      assert.equal(await page.locator("#unsure-note [role=button], #unsure-note button").count(), 1);
+      await page.getByRole("button", { name: "Зрозуміло" }).click();
+      assert.equal(await page.locator("#unsure-note").count(), 0);
+      assert.equal(await stored(page, slug), null, "dismissing clears the marker");
+      await page.reload({ waitUntil: "load" });
+      await page.waitForTimeout(300);
+      assert.equal(await page.locator("#unsure-note").count(), 0);
+      okProblems(env);
+    } finally {
+      await env.context.close();
+    }
+  });
+  test("a confirmed booking clears the marker (a dropped request, then the same slot goes through)", async () => {
+    const slug = "ambig-5042";
+    const env = await bookPage(browser, slug);
+    try {
+      const { page } = env;
+      await lose(env, slug, { commit: false });
+      await driveTo(page, "confirm");
+      await page.click("#cta-confirm");
+      await page.locator("#submit-error:not([hidden])").waitFor();
+      assert.ok(await stored(page, slug), "the marker is there after the lost request");
+      await page.waitForFunction(() => !document.querySelector("#cta-confirm").disabled);
+      await page.click("#cta-confirm");
+      await page.waitForSelector("#done-card", { state: "visible" });
+      assert.equal(await stored(page, slug), null, "success removes the marker");
+      okProblems(env);
+    } finally {
+      await env.context.close();
+    }
+  });
+  test("a marker older than 15 minutes shows nothing and is removed; a fresh one shows the notice (so the first check bites)", async () => {
+    const slug = "ambig-5043";
+    for (const [age, shown] of [[16 * 60_000, false], [60_000, true]]) {
+      const env = await bookPage(browser, slug, { init: `try { if (!sessionStorage.getItem("seeded")) { sessionStorage.setItem("seeded", "1"); sessionStorage.setItem(${JSON.stringify(KEY(slug))}, JSON.stringify({ slotStartIso: "2030-01-02T10:00:00+02:00", label: "вівторок, 2 січня, 10:00", at: Date.now() - ${age} })); } } catch {}` });
+      try {
+        const { page } = env;
+        await page.reload({ waitUntil: "load" }); // the marker was written by the init script of the first load
+        await page.waitForTimeout(300);
+        assert.equal(await page.locator("#unsure-note").count(), shown ? 1 : 0, `age ${age / 60000} min`);
+        if (!shown) assert.equal(await stored(page, slug), null, "an expired marker is removed");
+        okProblems(env);
+      } finally {
+        await env.context.close();
+      }
+    }
+  });
+  test("with storage blocked the page and the booking button still work", async () => {
+    const env = await bookPage(browser, "store-0001", { init: `Object.defineProperty(window, "sessionStorage", { get() { throw new Error("blocked"); } });` });
+    try {
+      const { page } = env;
+      await page.click("#book-cta");
+      await page.waitForSelector("[data-screen=services]:not([hidden])");
+      assert.equal(await page.locator("#unsure-note").count(), 0);
+      okProblems(env);
+    } finally {
+      await env.context.close();
+    }
+  });
+  const seed = (slug, extra = "") => `try { if (!sessionStorage.getItem("seeded")) { sessionStorage.setItem("seeded", "1"); sessionStorage.setItem(${JSON.stringify(KEY(slug))}, JSON.stringify({ slotStartIso: "2030-01-02T10:00:00+02:00", label: "вівторок, 2 січня, 10:00", at: Date.now() - 60000${extra} })); } } catch {}`;
+  const CLS = `window.__cls = 0; new PerformanceObserver((l) => { for (const e of l.getEntries()) if (!e.hadRecentInput) window.__cls += e.value; }).observe({ type: "layout-shift", buffered: true });`;
+  test("the notice is laid over the page: it adds no layout shift at 360, 768 and 1280 px (budget 0.005)", async () => {
+    for (const width of [360, 768, 1280]) {
+      const env = await bookPage(browser, "ambig-5043", { width, init: CLS + seed("ambig-5043") });
+      try {
+        const { page } = env;
+        await page.locator("#unsure-note").waitFor();
+        await page.evaluate(() => document.fonts.ready);
+        await page.waitForLoadState("networkidle");
+        await page.waitForTimeout(300);
+        const cls = await page.evaluate(() => window.__cls);
+        const box = await page.locator("#unsure-note").boundingBox();
+        assert.ok(cls <= 0.005, `CLS ${cls} at ${width}px`);
+        assert.equal(await page.locator("#unsure-note").evaluate((e) => getComputedStyle(e).position), "fixed");
+        assert.ok(box.width > 0 && box.height > 0 && box.height <= 80 && box.x >= 0 && box.x + box.width <= width, `the toast is ${box.width}x${box.height} at x=${box.x} (${width}px)`);
+        okProblems(env);
+      } finally {
+        await env.context.close();
+      }
+    }
+  });
+  test("the salon page too: the notice adds no layout shift at 360, 768 and 1280 px (budget 0.005)", async () => {
+    const slug = "lavanda-1111";
+    const salonSeed = `try { if (!sessionStorage.getItem("seeded")) { sessionStorage.setItem("seeded", "1"); sessionStorage.setItem("bk-unsure:salon:${slug}", JSON.stringify({ masterId: "e0000101-1111-4222-8333-944455556666", slotStartIso: "2030-01-02T10:00:00+02:00", label: "вівторок, 2 січня, 10:00, Майстер2 Тест", at: Date.now() - 60000 })); } } catch {}`;
+    for (const width of [360, 768, 1280]) {
+      const env = await bookPage(browser, null, { path: `/book/s/${slug}`, width, init: CLS + salonSeed });
+      try {
+        const { page } = env;
+        await page.locator("#unsure-note").waitFor();
+        await page.evaluate(() => document.fonts.ready);
+        await page.waitForLoadState("networkidle");
+        await page.waitForTimeout(300);
+        const cls = await page.evaluate(() => window.__cls);
+        assert.ok(cls <= 0.005, `salon CLS ${cls} at ${width}px`);
+        assert.equal(await page.locator("#unsure-note").evaluate((e) => getComputedStyle(e).position), "fixed");
+        okProblems(env);
+      } finally {
+        await env.context.close();
+      }
+    }
+  });
+  test("«Зрозуміло» moves the focus to the page heading (never to <body>)", async () => {
+    const env = await bookPage(browser, "ambig-5043", { init: seed("ambig-5043") });
+    try {
+      const { page } = env;
+      await page.locator("#unsure-note").waitFor();
+      await page.getByRole("button", { name: "Зрозуміло" }).focus();
+      await page.keyboard.press("Enter");
+      assert.equal(await page.locator("#unsure-note").count(), 0);
+      assert.equal(await page.evaluate(() => document.activeElement?.tagName), "H1");
+      okProblems(env);
+    } finally {
+      await env.context.close();
+    }
+  });
+  test("a marker that is not ours (a 10 KB label, or a field over its cap) shows nothing and its key is removed", async () => {
+    const slug = "ambig-5043";
+    for (const extra of [`, label2: "x"`, ""]) {
+      const label = extra ? "а".repeat(10_000) : "вівторок, 2 січня, 10:00";
+      const env = await bookPage(browser, slug, {
+        init: `try { if (!sessionStorage.getItem("seeded")) { sessionStorage.setItem("seeded", "1"); sessionStorage.setItem(${JSON.stringify(KEY(slug))}, JSON.stringify({ slotStartIso: ${extra ? '"2030-01-02T10:00:00+02:00"' : JSON.stringify("1".repeat(65))}, label: ${JSON.stringify(label)}, at: Date.now() - 1000 })); } } catch {}`,
+      });
+      try {
+        const { page } = env;
+        await page.waitForTimeout(300);
+        assert.equal(await page.locator("#unsure-note").count(), 0, extra ? "10 KB label" : "65-character slot");
+        assert.equal(await stored(page, slug), null, "the key is removed");
+        okProblems(env);
+      } finally {
+        await env.context.close();
+      }
+    }
   });
 });

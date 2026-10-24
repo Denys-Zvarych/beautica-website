@@ -1,12 +1,14 @@
 ---
-// Salon link page /book/s/{slug} (phase 008): on-demand render of GET /api/v1/book/s/{slug}/info, edge-cached for the upstream
-// s-maxage (src/middleware.ts). No booking island: a master card opens that master's own link page, where the flow runs.
-// States: ok | no bookable master (200, noindex) | gone 410 | unknown 404 | backend down 503.
+// Salon link page /book/s/{slug} (phases 008 + 016): on-demand render of GET /api/v1/book/s/{slug}/info, edge-cached for the upstream
+// s-maxage (src/middleware.ts), plus the salon booking wizard (services -> masters -> time per master -> contact/OTP -> confirm per master)
+// as the same progressively enhanced island as /book/{slug}, in salon mode (data-mode="salon"). The steps are NOT in this HTML: the island fetches
+// the static fragment /book-steps/salon and GET /book/s/{slug}/info when the visitor opens the wizard. Booking steps never change the URL.
+// States: ok | no bookable master (200, noindex) | gone 410 (retired link) | unknown 404 | backend down 503.
 export const prerender = false;
 
-import "../../../styles/book.css";
-import "../../../styles/book-salon.css";
 import Layout from "../../../components/Layout.astro";
+import "../../../styles/book.css"; // after Layout: its @font-face latin core must come after the full faces of fonts.css (the later rule wins)
+import "../../../styles/book-salon.css";
 import BookNotice from "../../../components/book/BookNotice.astro";
 import SalonProfile from "../../../components/book/SalonProfile.astro";
 import { t } from "../../../i18n/t";
@@ -30,10 +32,10 @@ const home = { href: "/", label: t("book.notice.home") };
 const retry = { href: Astro.url.pathname, label: t("book.notice.unavailable.cta") };
 
 type Notice = { title: string; text: string; metaTitle: string; status: number; cta?: { href: string; label: string }; retryAfter?: number };
-const pick = (k: "notFound" | "salonUnbookable" | "unavailable") => ({ title: t(`book.notice.${k}.title`), text: t(`book.notice.${k}.text`), metaTitle: t(`book.notice.${k}.metaTitle`) });
+const pick = (k: "notFound" | "salonUnbookable" | "unavailable" | "retired") => ({ title: t(`book.notice.${k}.title`), text: t(`book.notice.${k}.text`), metaTitle: t(`book.notice.${k}.metaTitle`) });
 let notice: Notice | null = null;
 if (result.kind === "not-found") notice = { ...pick("notFound"), status: 404, cta: home };
-else if (result.kind === "gone") notice = { ...pick("salonUnbookable"), status: 410 };
+else if (result.kind === "gone") notice = { ...pick("retired"), status: 410, cta: home }; // BOOKING_LINK_RETIRED: the link was replaced
 else if (result.kind === "rate-limited") notice = { ...pick("unavailable"), status: 429, retryAfter: result.retryAfter, cta: retry };
 else if (result.kind === "unavailable") notice = { ...pick("unavailable"), status: 503, retryAfter: result.retryAfter, cta: retry };
 else if (!result.data.bookable || result.data.masters.length === 0) notice = { ...pick("salonUnbookable"), status: 200 };
@@ -50,6 +52,7 @@ const name = info?.name ?? "";
 const title = info ? fitTitle(60, ...(info.city ? [`${name} · ${info.city} — ${t("book.salon.metaTitleSuffix")}`] : []), `${name} — ${t("book.salon.metaTitleSuffix")}`, name) : (notice?.metaTitle ?? "");
 const description = info ? fitDescription(t("book.salon.metaDescription", { name }), 155) : t("book.notice.metaDescription");
 const street = info ? [info.street, info.buildingNo].filter(Boolean).join(", ") : "";
+const canBook = !!info && info.masters.length > 0 && info.serviceCategories.length > 0 && info.serviceCoverage.some((c) => c.masters.length > 0);
 const jsonLd = info
   ? [
       // Rating and reviews are in the JSON-LD only because the reviews tab renders them (first 5).
@@ -69,10 +72,26 @@ const jsonLd = info
 ---
 
 {/* preloadLatin stays false: better FCP, no LCP gain from preloading the Latin fonts, and the salon page gets worse. */}
-<Layout title={title} description={description} noindex={!info} image={info?.avatarUrl ?? info?.coverImageUrl ?? undefined} imageAlt={name || undefined} robots={info && sort !== "NEWEST" ? "noindex, follow" : undefined} twitterCard="summary" ogType="website" jsonLd={jsonLd} hideHeader hideFooter preloadLatin={false}>
+<Layout title={title} description={description} noindex={!info} image={info?.avatarUrl ?? info?.coverImageUrl ?? undefined} imageAlt={name || undefined} robots={info && sort !== "NEWEST" ? "noindex, follow" : undefined} twitterCard="summary" ogType="website" jsonLd={jsonLd} hideHeader hideFooter preloadLatin={false} preconnect={info ? cfg.apiOrigin : undefined}>
   {
     info ? (
-      <main class="phone" id="main">
+      <main
+        class="phone"
+        id="main"
+        data-book-root
+        data-mode="salon"
+        data-booking={canBook ? "" : undefined}
+        data-unsure={canBook ? t("book.unsure.notice", { label: "{label}" }) : undefined}
+        data-unsure-ok={canBook ? t("book.unsure.dismiss") : undefined}
+        data-api={cfg.apiOrigin}
+        data-site-key={cfg.turnstileSiteKey}
+        data-policy={cfg.policyVersion}
+        data-slug={slug}
+        data-salon={info.name}
+        data-city={info.city ?? info.region ?? ""}
+        data-address={street}
+        data-note={info.locationNote ?? ""}
+      >
         <SalonProfile info={info} apiOrigin={cfg.apiOrigin} sort={sort} reviews={firstReviews} />
       </main>
     ) : (

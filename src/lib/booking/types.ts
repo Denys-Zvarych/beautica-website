@@ -48,7 +48,10 @@ export interface MasterInfo {
   updatedAt: string | null;
 }
 export interface SalonMasterItem {
-  masterSlug: string;
+  /** The master's personal link; null for a salon master without one (booked through the salon routes by `masterId`, backend 391). */
+  masterSlug: string | null;
+  /** Public master id: the {masterId} of /book/s/{slug}/masters/{masterId}/* and the key of `serviceCoverage` (backend 391). */
+  masterId: string;
   name: string;
   avatarUrl: string | null;
   professionalTitle: string | null;
@@ -61,6 +64,13 @@ export interface SalonService {
   name: string;
   durationMinutes: number;
   priceLabel: string;
+  /** Salon-wide floor price (`priceMin`), used only for the per-master subtotal; 0 when the API sent none. */
+  priceMin: number;
+}
+/** Which bookable masters perform one salon service (backend 391): `masterServiceId` is what the salon guest routes take as `serviceId`. */
+export interface SalonServiceCoverage {
+  serviceId: string;
+  masters: { masterId: string; masterServiceId: string }[];
 }
 export interface SalonServiceGroup {
   category: string;
@@ -89,6 +99,7 @@ export interface SalonInfo {
   serviceCategories: SalonServiceGroup[];
   ratingDistribution: RatingBucket[];
   latestReviews: ReviewItem[];
+  serviceCoverage: SalonServiceCoverage[];
 }
 
 type Json = Record<string, unknown>;
@@ -208,8 +219,9 @@ export function parseSalonInfo(slug: string, raw: unknown): SalonInfo | null {
     masters: arr(raw.masters).flatMap((m) => {
       if (!isObj(m)) return [];
       const masterSlug = str(m.masterSlug);
+      const masterId = str(m.masterId);
       const n = str(m.name);
-      return masterSlug && n ? [{ masterSlug, name: n, avatarUrl: safeImageUrl(m.avatarUrl), professionalTitle: str(m.professionalTitle), avgRating: num(m.avgRating), reviewCount: Math.max(0, num(m.reviewCount) ?? 0) }] : [];
+      return masterId && n ? [{ masterSlug, masterId, name: n, avatarUrl: safeImageUrl(m.avatarUrl), professionalTitle: str(m.professionalTitle), avgRating: num(m.avgRating), reviewCount: Math.max(0, num(m.reviewCount) ?? 0) }] : [];
     }),
     updatedAt: str(raw.updatedAt),
     description: str(raw.description),
@@ -225,11 +237,21 @@ export function parseSalonInfo(slug: string, raw: unknown): SalonInfo | null {
         const id = str(sv.id);
         const n = str(sv.name);
         const d = num(sv.baseDurationMinutes);
-        return id && n && d !== null ? [{ id, name: n, durationMinutes: d, priceLabel: str(sv.priceDisplay) ?? "" }] : [];
+        return id && n && d !== null ? [{ id, name: n, durationMinutes: d, priceLabel: str(sv.priceDisplay) ?? "", priceMin: Math.max(0, num(sv.priceMin) ?? 0) }] : [];
       });
       return services.length === 0 ? [] : [{ category: str(g.category) as string, displayName: str(g.displayName) ?? (str(g.category) as string), count: Math.max(num(g.count) ?? 0, 0) || services.length, services }];
     }),
     ratingDistribution: parseBuckets(raw.ratingDistribution),
     latestReviews: parseReviews(raw.latestReviews),
+    serviceCoverage: arr(raw.serviceCoverage).flatMap((c) => {
+      const serviceId = isObj(c) ? str(c.serviceId) : null;
+      if (!isObj(c) || !serviceId) return [];
+      const masters = arr(c.masters).flatMap((m) => {
+        const masterId = isObj(m) ? str(m.masterId) : null;
+        const masterServiceId = isObj(m) ? str(m.masterServiceId) : null;
+        return masterId && masterServiceId ? [{ masterId, masterServiceId }] : [];
+      });
+      return [{ serviceId, masters }];
+    }),
   };
 }

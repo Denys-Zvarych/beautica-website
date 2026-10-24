@@ -4,7 +4,7 @@
 import { formatDuration, formatPriceFrom, pluralServices } from "../../lib/booking/format";
 import { formatPhoneGrouped, nationalDigits } from "../../lib/phone";
 import { WINDOW_DAYS, addDays, dayLong, dayShort, daysBetween, inWindow, kyivDay, kyivTime, kyivToday, maxMonthOffset, monthLabel, monthView, partOfDay, weekdayMon0, weekdayShort, type Part } from "./calendar";
-import { cancelPath, createBooking, getAvailability, getBookableDays, sendOtp, verifyOtp, type Fail, type Slot } from "./api";
+import { cancelPath, createBooking, getAvailability, getBookableDays, sendOtp, verifyOtp, type Fail, type Result, type Slot } from "./api";
 import { buildIcs, downloadIcs } from "./ics";
 import { mountTurnstile, type Widget } from "./turnstile";
 import { calendarAdd } from "../../lib/icons/strokePaths";
@@ -12,15 +12,12 @@ import { closeRounded, errorOutline, eventAvailable, expandMoreRounded, schedule
 import { track } from "../track";
 import { hydrateIcons } from "./icons";
 import { cleanComment, cleanName, typingName } from "../../lib/booking/text.ts";
+import type { Core, RecapView, SalonFlow, Svc } from "./salon";
+import { clearMarker, createLedger, mayExist, saveMarker } from "./uncertain";
+import type { SalonInfo } from "../../lib/booking/types";
 import "../../styles/book-flow.css"; // step styles ship with the island: the profile pages do not carry them
 
-type Step = "profile" | "services" | "date" | "time" | "contact" | "otp" | "confirm" | "done";
-interface Svc {
-  id: string;
-  name: string;
-  minutes: number;
-  price: number;
-}
+type Step = "profile" | "services" | "masters" | "date" | "time" | "contact" | "otp" | "confirm" | "done";
 type Strings = Record<string, string>;
 
 const $ = <T extends HTMLElement = HTMLElement>(sel: string, root: ParentNode = document): T => root.querySelector<T>(sel) as T;
@@ -37,25 +34,45 @@ function el<K extends keyof HTMLElementTagNameMap>(tag: K, cls = "", text = ""):
   return e;
 }
 
-/** Adopts the server-rendered steps (a <template>, so they cost no DOM until the visitor opens the flow), then wires them. */
-export function initBooking(root: HTMLElement): { open(): void } {
-  const tpl = document.getElementById("book-steps") as HTMLTemplateElement | null;
-  if (tpl) {
-    root.append(tpl.content);
-    tpl.remove();
-    hydrateIcons(root);
-  }
+/**
+ * Adopts the steps, then wires them. Master link: the server-rendered steps sit in a <template> (no DOM until the visitor opens the flow).
+ * Salon link: the page carries none of it; the steps are the static fragment /book-steps/salon and the catalogue / masters come from the
+ * salon info, both fetched here (in parallel with the wizard module). Rejects when they cannot be loaded.
+ */
+export async function initBooking(root: HTMLElement): Promise<{ open(): void }> {
   const api = root.dataset.api ?? "";
   const slug = root.dataset.slug ?? "";
+  const salonMode = root.dataset.mode === "salon";
+  let salonInfo: SalonInfo | null = null;
+  let salonMod: typeof import("./salon") | null = null;
+  if (salonMode) {
+    const si = await import("./salon-info");
+    const [html, info, mod] = await Promise.all([si.loadSteps(), si.loadSalonInfo(api, slug), import("./salon")]);
+    if (!html || !info) throw new Error("salon wizard: steps or info unavailable");
+    const tmp = document.createElement("template");
+    tmp.innerHTML = html; // our own static asset (same origin), never user data
+    root.append(tmp.content);
+    salonInfo = info;
+    salonMod = mod;
+    mod.buildCatalogue(root, info);
+    hydrateIcons(root);
+  } else {
+    const tpl = document.getElementById("book-steps") as HTMLTemplateElement | null;
+    if (tpl) {
+      root.append(tpl.content);
+      tpl.remove();
+      hydrateIcons(root);
+    }
+  }
   const siteKey = root.dataset.siteKey ?? "";
   const policy = root.dataset.policy ?? "";
-  const salon = root.dataset.salon ?? "";
+  const salonName = root.dataset.salon ?? "";
   const city = root.dataset.city ?? "";
   const masterName = root.dataset.master ?? "";
   const address = root.dataset.address ?? "";
   const note = root.dataset.note ?? "";
   const S: Strings = JSON.parse($("#book-i18n").textContent ?? "{}");
-  const services: Svc[] = $$("#svc-list [data-id]").map((b) => ({ id: b.dataset.id!, name: b.dataset.name!, minutes: Number(b.dataset.min), price: Number(b.dataset.price) }));
+  const services: Svc[] = $$("#svc-list [data-id]").map((b) => ({ id: b.dataset.id!, name: b.dataset.name!, minutes: Number(b.dataset.min), price: Number(b.dataset.price), ...(salonMode ? { label: b.dataset.label } : {}) }));
   const today = kyivToday();
   const maxOffset = maxMonthOffset(today);
 
@@ -73,7 +90,12 @@ export function initBooking(root: HTMLElement): { open(): void } {
     phone: "", // +380XXXXXXXXX
     busy: false,
     done: false,
+    /** Salon: at least one master is booked already (the rest can still be retried; the earlier ones are never repeated). */
+    partial: false,
+    /** Master link: a booking request of unknown outcome exists. Only the confirm step stays reachable and its slot is frozen (see uncertain.ts). */
+    frozen: false,
   };
+  const unsure = createLedger(); // master link: key ""
   let widget: Widget | null = null;
   let cooldown = 0;
   let cooldownTimer = 0;
@@ -81,11 +103,14 @@ export function initBooking(root: HTMLElement): { open(): void } {
   let otpAbort: AbortController | undefined; // WebOTP request of the current OTP step
   let conflictPending = false; // set when the booking answered 409: the time step re-opens with its message
 
-  const chosen = (): Svc[] => services.filter((s) => st.picked.has(s.id));
-  const totals = () => {
-    const c = chosen();
-    return { n: c.length, minutes: c.reduce((a, s) => a + s.minutes, 0), price: c.reduce((a, s) => a + s.price, 0) };
-  };
+  /** Salon mode (phase 016): the wizard module, loaded only on the salon link page. */
+  let salon: SalonFlow | null = null;
+  const picked = (): Svc[] => services.filter((s) => st.picked.has(s.id));
+  /** The services of the page being filled in: the master's own (master link) or the services assigned to the current master (salon). */
+  const chosen = (): Svc[] => (salon ? salon.services() : picked());
+  const apiIds = (): string[] => (salon ? salon.apiIds() : chosen().map((s) => s.id));
+  const totals = (list: Svc[] = chosen()) => ({ n: list.length, minutes: list.reduce((a, s) => a + s.minutes, 0), price: list.reduce((a, s) => a + s.price, 0) });
+  const priceText = (s: Svc) => s.label || formatPriceFrom(s.price);
   const endIso = () => st.slot?.endsAt ?? "";
   const shortWindow = () => (st.day && st.slot ? `${dayShort(st.day)} · ${kyivTime(st.slot.startsAt)}–${kyivTime(endIso())}` : "");
 
@@ -100,14 +125,20 @@ export function initBooking(root: HTMLElement): { open(): void } {
     // Moved to the step heading so a screen reader announces the new step (the heading has tabindex -1).
     if (step !== "profile" && heading) heading.focus({ preventScroll: true });
   }
+  // The salon wizard repeats date / time once per master: the master index travels in the history state with the step.
+  const mIndex = () => salon?.index() ?? 0;
   function go(step: Step, push = true): void {
-    if (push && history.state?.bk !== step) history.pushState({ bk: step }, "", location.href);
+    if (push && (history.state?.bk !== step || (history.state?.mi ?? 0) !== mIndex())) history.pushState({ bk: step, mi: mIndex() }, "", location.href);
     show(step);
     onEnter(step);
   }
   window.addEventListener("popstate", (e) => {
     if (st.done) return void go("done", false); // a finished booking never returns to a step that could submit again
-    const step = (e.state?.bk as Step | undefined) ?? "profile";
+    let step = (e.state?.bk as Step | undefined) ?? "profile";
+    // Some masters are booked already: only their still-open time pages and the confirm step stay reachable (nothing is booked twice).
+    if (st.partial && !["confirm", "date", "time"].includes(step)) step = "confirm";
+    if (st.frozen) step = "confirm"; // a request of unknown outcome: no other time can be picked, nothing else to go back to
+    if (salon && typeof e.state?.mi === "number") salon.setMaster(e.state.mi);
     show(step);
     onEnter(step);
   });
@@ -117,12 +148,18 @@ export function initBooking(root: HTMLElement): { open(): void } {
 
   function onEnter(step: Step): void {
     if (step === "services") renderShelf("services");
+    if (step === "masters") salon?.renderMasters();
     if (step === "date") {
+      salon?.strips();
       renderCalendar();
       renderShelf("date");
       void loadWorkingDays();
+      // Salon: the next master's days are fetched now, so their calendar is already grey where it should be when it opens.
+      const nx = salon?.next();
+      if (nx) void fetchDays(nx.masterId, nx.ids, nx.month);
     }
     if (step === "time") {
+      salon?.strips();
       void loadSlots(conflictPending);
       conflictPending = false;
     }
@@ -145,7 +182,8 @@ export function initBooking(root: HTMLElement): { open(): void } {
     const bar = $(`[data-sb="${step}"]`, root);
     const box = $("[data-sb-summary]", bar);
     const cta = $<HTMLButtonElement>(`#cta-${step}`);
-    const t = totals();
+    const list = step === "services" ? picked() : chosen();
+    const t = totals(list);
     box.replaceChildren();
     if (!t.n) {
       box.append(el("p", "t-fb muted centered prompt", S.chooseAtLeast));
@@ -160,11 +198,11 @@ export function initBooking(root: HTMLElement): { open(): void } {
       });
       box.append(row);
       if (st.expanded) {
-        const list = el("div", "sel-list");
-        for (const s of chosen()) {
+        const selList = el("div", "sel-list");
+        for (const s of list) {
           const entry = el("div", "sel-entry");
           const top = el("div", "top");
-          top.append(el("span", "t-strong ellipsis", s.name), el("span", "t-accent-12", formatPriceFrom(s.price)));
+          top.append(el("span", "t-strong ellipsis", s.name), el("span", "t-accent-12", priceText(s)));
           if (step === "services") {
             const x = el("button", "xbtn");
             x.type = "button";
@@ -176,13 +214,15 @@ export function initBooking(root: HTMLElement): { open(): void } {
           const dur = el("span", "dur t-fb muted");
           dur.innerHTML = `${icon(schedule)}${formatDuration(s.minutes)}`;
           entry.append(top, dur);
-          list.append(entry);
+          selList.append(entry);
         }
-        box.append(list);
+        box.append(selList);
       }
       const rule = el("div", "rule");
       const total = el("div", "total");
-      total.append(el("span", "t-strong", S.total), el("span", "t-fb muted", formatDuration(t.minutes)), el("span", "sp"), el("span", "t-price-md", formatPriceFrom(t.price)));
+      // Salon, services step: the prices are salon-wide ranges, so there is no sum; the master pages show their own subtotal.
+      const noSum = salon && step === "services";
+      total.append(el("span", "t-strong", S.total), el("span", "t-fb muted", formatDuration(t.minutes)), el("span", "sp"), ...(noSum ? [] : [el("span", "t-price-md", formatPriceFrom(t.price))]));
       box.append(rule, total);
       if (step === "time" && st.slot && st.day) {
         const w = el("div", "chosen");
@@ -192,11 +232,19 @@ export function initBooking(root: HTMLElement): { open(): void } {
       }
     }
     cta.disabled = step === "services" ? !t.n : step === "date" ? !st.day : !st.slot;
+    if (step === "time") salon?.ctaLabel();
   }
 
   // ------------------------------------------------------------------ services
   function toggle(id: string, on: boolean): void {
-    if (on && st.picked.size >= 10) return;
+    const note = $("#cap-note");
+    note.hidden = true;
+    if (on && st.picked.size >= 10) {
+      // The app's cap (phase 420): at most 10 services per visit; the note stays until the next change.
+      note.textContent = fmt(S.cap, { count: 10 });
+      note.hidden = false;
+      return;
+    }
     if (on) st.picked.add(id);
     else st.picked.delete(id);
     const tile = $(`#svc-list [data-id="${CSS.escape(id)}"]`);
@@ -217,18 +265,25 @@ export function initBooking(root: HTMLElement): { open(): void } {
     });
   }
   for (const tile of $$("#svc-list [data-id]")) tile.addEventListener("click", () => toggle(tile.dataset.id!, tile.getAttribute("aria-pressed") !== "true"));
-  $("#cta-services").addEventListener("click", () => totals().n && go("date"));
+  $("#cta-services").addEventListener("click", () => picked().length && go(salonMode ? "masters" : "date"));
+  $("#cta-masters")?.addEventListener("click", () => salon?.commit() && go("date"));
 
   // ------------------------------------------------------------------ date (MonthCalendar)
   $("#wk").replaceChildren(...[0, 1, 2, 3, 4, 5, 6].map((d) => el("span", d >= 5 ? "we" : "", weekdayShort(d))));
-  const daysKey = () => chosen().map((s) => s.id).join(",");
-  /** One request per (services, month window) for the whole session: in flight, answered or failed (a failure is not retried; the UI stays all-enabled). */
+  const daysKey = () => `${salon?.masterId() ?? ""}|${apiIds().join(",")}`;
+  /** One request per (services, month window) for the whole session: in flight, answered or failed (a failure is forgotten so the next visit to the month asks again; meanwhile the UI stays all-enabled). */
   const daysRequests = new Map<string, Promise<void>>();
   /** Fetches the visible month's bookable days (window clamped to today ... today+60). Any failure leaves every date enabled. */
-  function loadWorkingDays(): Promise<void> {
-    const key = daysKey();
-    if (!key) return Promise.resolve();
-    const v = monthView(today, st.month);
+  /** Forget every cached answer about free times (after any booking attempt, a 409 says they were wrong). */
+  function invalidateAvailability(): void {
+    slotCache.clear();
+    st.workDays.clear();
+    daysRequests.clear();
+  }
+  /** Fetches one master's (or the master link's) bookable days for a month; the same request is never sent twice. */
+  function fetchDays(masterId: string | undefined, ids: string[], month: number): Promise<void> {
+    const key = `${masterId ?? ""}|${ids.join(",")}`;
+    const v = monthView(today, month);
     const from = v.days[0] < today ? today : v.days[0];
     const lastDay = v.days[v.days.length - 1];
     const limit = addDays(today, WINDOW_DAYS);
@@ -238,8 +293,11 @@ export function initBooking(root: HTMLElement): { open(): void } {
     const pending = daysRequests.get(id);
     if (pending) return pending;
     const request = (async () => {
-      const r = await getBookableDays(api, slug, from, to, chosen().map((s) => s.id));
-      if (!r.ok) return;
+      const r = await getBookableDays(api, slug, from, to, ids, masterId);
+      if (!r.ok) {
+        daysRequests.delete(id); // a failed request is not remembered: the next visit to this month asks again
+        return;
+      }
       // Cached whatever the visitor has done meanwhile; only the render below is skipped when the answer is stale.
       const map = st.workDays.get(key) ?? new Map<string, boolean>();
       for (const d of r.data) map.set(d.date, d.working);
@@ -252,6 +310,11 @@ export function initBooking(root: HTMLElement): { open(): void } {
     })();
     daysRequests.set(id, request);
     return request;
+  }
+  /** Fetches the visible month's bookable days (window clamped to today ... today+60). Any failure leaves every date enabled. */
+  function loadWorkingDays(): Promise<void> {
+    if (!chosen().length) return Promise.resolve();
+    return fetchDays(salon?.masterId(), apiIds(), st.month);
   }
   function renderCalendar(): void {
     const known = st.workDays.get(daysKey());
@@ -307,7 +370,10 @@ export function initBooking(root: HTMLElement): { open(): void } {
 
   // ------------------------------------------------------------------ time (SlotChip groups)
   const view = (id: string, on: boolean) => ($(id).hidden = !on);
+  const slotCache = new Map<string, { at: number; slots: Slot[] }>();
+  const SLOT_TTL_MS = 60_000;
   async function loadSlots(conflict = false): Promise<void> {
+    if (conflict) invalidateAvailability(); // a 409 says the cached lists were wrong
     if (!st.day) return go("date", false);
     view("#time-conflict", conflict);
     view("#time-error", false);
@@ -315,7 +381,12 @@ export function initBooking(root: HTMLElement): { open(): void } {
     view("#time-loading", true);
     $("#slots").replaceChildren();
     renderShelf("time");
-    const r = await getAvailability(api, slug, st.day, chosen().map((s) => s.id));
+    // The free times of a day are kept for a minute per (master, services, day): paging between masters or back to the date does not refetch.
+    const cacheKey = `${daysKey()}|${st.day}`;
+    const hit = slotCache.get(cacheKey);
+    const fresh = !!hit && Date.now() - hit.at < SLOT_TTL_MS; // an expired entry is refetched and then replaced
+    const r: Result<Slot[]> = fresh ? { ok: true, data: hit!.slots } : await getAvailability(api, slug, st.day, apiIds(), salon?.masterId());
+    if (r.ok && !fresh) slotCache.set(cacheKey, { at: Date.now(), slots: r.data });
     if (st.step !== "time") return;
     view("#time-loading", false);
     if (!r.ok) {
@@ -367,15 +438,16 @@ export function initBooking(root: HTMLElement): { open(): void } {
     if (st.slot && st.day) track("slot_selected", { days_ahead: daysBetween(today, kyivDay(st.slot.startsAt)) });
   });
   $("#time-change").addEventListener("click", () => go("date"));
-  $("#cta-time").addEventListener("click", () => st.slot && go("contact"));
+  $("#cta-time").addEventListener("click", () => st.slot && (salon ? salon.afterTime() : go("contact")));
 
   // ------------------------------------------------------------------ contact (name, surname, phone, consent, Turnstile)
   const name = $<HTMLInputElement>("#name");
   const surname = $<HTMLInputElement>("#surname");
   const phone = $<HTMLInputElement>("#phone");
   const consent = $<HTMLInputElement>("#consent");
-  const comment = $<HTMLTextAreaElement>("#comment");
-  comment.addEventListener("input", () => {
+  // The master link has one note field; the salon wizard has one per master card (built by salon.ts), so there is none here.
+  const comment = document.querySelector<HTMLTextAreaElement>("#comment");
+  comment?.addEventListener("input", () => {
     const clean = comment.value.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, "");
     if (clean !== comment.value) comment.value = clean;
     $("#counter").textContent = fmt(S.counter, { n: comment.value.length });
@@ -621,27 +693,29 @@ export function initBooking(root: HTMLElement): { open(): void } {
     if (detail) d.append(el("span", "det t-fb muted w600", detail));
     return d.outerHTML;
   }
-  function recap(into: HTMLElement, compact: boolean): void {
-    const t = totals();
+  /** The master link's own view of the booking (the picked services, the live day and time, the one note). */
+  const masterView = (): RecapView => ({ services: chosen(), day: st.day!, slot: st.slot!, head: true, comment: comment ? cleanComment(comment.value) : "" });
+  function recap(into: HTMLElement, compact: boolean, v: RecapView = masterView()): void {
+    const t = totals(v.services);
     const sep = `<div class="rule${compact ? " dense" : ""}"></div>`;
-    const day = st.day!;
     let h = "";
-    if (salon) h += lrow(S.salonLabel, salon) + sep;
-    // Independent masters have a street address (and a note): the app's «Адреса» row; otherwise just the city.
-    if (address) h += lrow(S.addressLabel, [city, address].filter(Boolean).join(", "), note) + sep;
-    else if (city) h += lrow(S.cityLabel, city) + sep;
-    h += lrow(S.dateLabel, dayLong(day)) + `<div class="g-sm"></div>` + lrow(S.timeLabel, `${kyivTime(st.slot!.startsAt)}–${kyivTime(endIso())}`) + sep;
-    const memo = cleanComment(comment.value);
-    if (!compact && memo) h += lrow(S.commentRow, memo) + sep;
+    if (v.head) {
+      if (salonName) h += lrow(S.salonLabel, salonName) + sep;
+      // Independent masters have a street address (and a note): the app's «Адреса» row; otherwise just the city.
+      if (address) h += lrow(S.addressLabel, [city, address].filter(Boolean).join(", "), note) + sep;
+      else if (city) h += lrow(S.cityLabel, city) + sep;
+    }
+    h += lrow(S.dateLabel, dayLong(v.day)) + `<div class="g-sm"></div>` + lrow(S.timeLabel, `${kyivTime(v.slot.startsAt)}–${kyivTime(v.slot.endsAt)}`) + sep;
+    if (!compact && v.comment) h += lrow(S.commentRow, v.comment) + sep;
     into.innerHTML = h;
     const head = el("div", "row");
     head.append(el("span", "t-label", S.servicesLabel), el("span", "sp"), el("span", "t-fb muted", pluralServices(t.n)));
     into.append(head, el("div", "g-xs"));
-    chosen().forEach((s, i, all) => {
+    v.services.forEach((s, i, all) => {
       const row = el("div", `recap-row${compact ? " dense" : ""}`);
       const grow = el("div", "grow");
       grow.append(el("div", compact ? "t-strong11" : "t-strong115", s.name), el("div", "t-fb muted", formatDuration(s.minutes)));
-      row.append(grow, el("span", compact ? "t-accent-11" : "t-accent-12", formatPriceFrom(s.price)));
+      row.append(grow, el("span", compact ? "t-accent-11" : "t-accent-12", priceText(s)));
       into.append(row);
       if (i < all.length - 1) into.append(el("div", "recap-div"));
     });
@@ -654,17 +728,25 @@ export function initBooking(root: HTMLElement): { open(): void } {
   function renderConfirm(): void {
     $("#c-name").textContent = `${cleanName(name.value)} ${cleanName(surname.value)}`;
     $("#c-phone").textContent = formatPhoneGrouped(st.phone);
-    recap($("#confirm-card"), false);
+    if (salon) salon.renderConfirm();
+    else recap($("#confirm-card"), false);
     view("#submit-error", false);
+    if (unsure.has("")) showUncertain();
   }
   $("#cta-confirm").addEventListener("click", async () => {
-    if (st.busy || !st.guestToken || !st.slot) return;
+    if (salon) return void salon.submit($<HTMLButtonElement>("#cta-confirm"));
+    if (st.busy || !st.slot) return;
+    if (!st.guestToken) return sessionExpired(); // cleared when the page was hidden
     const btn = $<HTMLButtonElement>("#cta-confirm");
     view("#submit-error", false);
     busy(btn, true);
-    const r = await createBooking(api, slug, st.guestToken, { serviceIds: chosen().map((s) => s.id), startsAt: st.slot.startsAt, name: cleanName(name.value), surname: cleanName(surname.value), policyVersion: policy, clientComment: cleanComment(comment.value) });
+    const slot = unsure.get("")?.slot ?? st.slot; // after a request of unknown outcome only the SAME slot is ever sent again
+    const r = await createBooking(api, slug, st.guestToken, { serviceIds: chosen().map((s) => s.id), startsAt: slot.startsAt, name: cleanName(name.value), surname: cleanName(surname.value), policyVersion: policy, clientComment: cleanComment(comment!.value) });
     busy(btn, false);
-    if (!r.ok) return void bookingFailed(r.fail);
+    invalidateAvailability();
+    if (!r.ok) return void bookingFailed(r, slot);
+    unsure.delete("");
+    clearMarker("master", slug);
     st.done = true;
     st.guestToken = null;
     track("booking_confirmed", { services_count: totals().n });
@@ -672,62 +754,110 @@ export function initBooking(root: HTMLElement): { open(): void } {
     history.replaceState({ bk: "done" }, "", location.href);
     show("done");
   });
-  function bookingFailed(fail: Fail): void {
+  /** «вівторок, 27 жовтня, 10:30»: the time in the «Можливо, ви вже записані на …» notice. */
+  const whenLabel = (day: string, slot: Slot): string => `${dayLong(day)}, ${kyivTime(slot.startsAt)}`;
+  /** The «may exist» state of the master link: frozen slot and fields, no way back, the check-SMS message. */
+  function showUncertain(): void {
+    st.frozen = true;
+    lockContact();
+    for (const b of $$("[data-screen=confirm] [data-back]")) b.hidden = true;
+    comment!.readOnly = true; // the request that may exist carried this note
+    $("#cta-confirm .lbl").textContent = S.retry;
+    $("#submit-error-text").textContent = fmt(S.uncertain, { master: masterName });
+    view("#submit-error", true);
+  }
+  function bookingFailed(r: { fail: Fail; status?: number }, slot: Slot): void {
+    const fail = r.fail;
     track("booking_error", { code: fail === "conflict" ? 409 : fail === "rate-limited" ? 429 : fail === "unavailable" ? 503 : "other" });
+    // A dropped answer / 502 / 504 (or any failure of the resend after one, e.g. 409 «probably booked by you»): never offer another time.
+    if (mayExist(r, unsure.has(""))) {
+      if (!unsure.has("")) {
+        unsure.set("", { slot, day: st.day ?? "" });
+        saveMarker("master", slug, { slotStartIso: slot.startsAt, label: whenLabel(st.day ?? kyivDay(slot.startsAt), slot) }); // survives a reload (no personal data)
+      }
+      return showUncertain();
+    }
     if (fail === "conflict") {
       st.slot = null;
       conflictPending = true;
       go("time", false);
       return;
     }
-    if (fail === "unauthorized") {
-      st.guestToken = null;
-      go("otp", false);
-      $("#otp-session").hidden = false;
-      return;
-    }
+    if (fail === "unauthorized") return sessionExpired();
     const msg = fail === "validation" ? S.invalid : fail === "rate-limited" ? S.limit : fail === "unavailable" ? fmt(S.unavailable, { email: S.supportEmail }) : S.error;
     $("#submit-error-text").textContent = msg;
     view("#submit-error", true);
   }
+  // The guest token is a bearer credential: it does not survive the page being hidden (tab closed, navigation, bfcache).
+  window.addEventListener("pagehide", () => (st.guestToken = null));
+  /** Once a booking exists (or may exist) the rest is booked under the same name and phone: the fields freeze, the code step loses its way back. */
+  function lockContact(): void {
+    for (const i of [name, surname, phone]) i.readOnly = true;
+    for (const b of $$("[data-screen=otp] [data-back]")) b.hidden = true;
+  }
+  function sessionExpired(): void {
+    st.guestToken = null;
+    go("otp", false);
+    $("#otp-session").hidden = false;
+  }
 
   // ------------------------------------------------------------------ done
-  function renderDone(b: { startsAt: string; durationMinutes: number; cancelUrl: string | null }): void {
-    const card = $("#done-card");
-    recap(card, true);
+  /** The «Додати в календар» button: the .ics carries the booking's own cancel link (a bearer token: only in the file the guest downloads). */
+  function calendarButton(b: { startsAt: string; minutes: number; master: string; services: string; cancelAbs: string | null }): HTMLElement {
     const wrap = el("div", "calwrap");
     const btn = el("button", "calbtn");
     btn.type = "button";
     btn.innerHTML = `${icon(calendarAdd, true)}<span class="t-strong115"></span>`;
     $("span", btn).textContent = S.calendar;
-    const minutes = totals().minutes || b.durationMinutes;
-    // The cancel link is a bearer token: it goes only into the file the guest downloads, never to analytics, logs or the page URL.
-    const cPath = cancelPath(b.cancelUrl);
-    const cancelAbs = cPath ? location.origin + cPath : null;
     btn.addEventListener("click", () => {
-      const base = fmt(S.icsDescription, { services: chosen().map((s) => s.name).join(", ") });
+      const base = fmt(S.icsDescription, { services: b.services });
       downloadIcs(
         buildIcs({
           uid: crypto.randomUUID(),
           startsAt: b.startsAt,
-          minutes,
-          summary: fmt(S.icsSummary, { master: masterName }),
-          description: cancelAbs ? `${base}\n${fmt(S.icsCancel, { url: cancelAbs })}` : base,
-          location: [salon, city].filter(Boolean).join(", "),
-          ...(cancelAbs ? { url: cancelAbs } : {}),
+          minutes: b.minutes,
+          summary: fmt(S.icsSummary, { master: b.master }),
+          description: b.cancelAbs ? `${base}\n${fmt(S.icsCancel, { url: b.cancelAbs })}` : base,
+          location: [salonName, city].filter(Boolean).join(", "),
+          ...(b.cancelAbs ? { url: b.cancelAbs } : {}),
         }),
         "beautica-booking.ics",
       );
     });
     wrap.append(btn);
-    card.append(el("div", "rule dense"), wrap);
-    const path = cPath;
+    return wrap;
+  }
+  function renderDone(b: { startsAt: string; durationMinutes: number; cancelUrl: string | null }): void {
+    const card = $("#done-card");
+    recap(card, true);
+    const minutes = totals().minutes || b.durationMinutes;
+    const cPath = cancelPath(b.cancelUrl);
+    const cancelAbs = cPath ? location.origin + cPath : null;
+    card.append(el("div", "rule dense"), calendarButton({ startsAt: b.startsAt, minutes, master: masterName, services: chosen().map((s) => s.name).join(", "), cancelAbs }));
     const cancel = $<HTMLAnchorElement>("#done-cancel");
-    if (path) {
-      cancel.href = path;
+    if (cPath) {
+      cancel.href = cPath;
       cancel.hidden = false;
     }
   }
 
+  if (salonMode) {
+    const core: Core = {
+      root, S, api, slug, policy, services, st, $, $$, el, icon, fmt, busy, lrow, recap, calendarButton, sessionExpired,
+      go: (step, push) => go(step as Step, push),
+      show: (step) => show(step as Step),
+      conflict: () => {
+        conflictPending = true;
+        go("time");
+      },
+      name: () => cleanName(name.value),
+      surname: () => cleanName(surname.value),
+      salonName, city, address, note,
+      lockContact,
+      whenLabel,
+      invalidateSlots: invalidateAvailability,
+    };
+    salon = salonMod!.createSalon(core, salonInfo!);
+  }
   return { open: () => go("services") };
 }

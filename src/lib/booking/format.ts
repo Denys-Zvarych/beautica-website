@@ -28,6 +28,14 @@ export function pluralServices(n: number): string {
   return `${n} ${word}`;
 }
 
+/** 0 записів / 1 запис / 2 записи / 5 записів (the salon wizard's «Записи за майстрами» counter, as the app's plural). */
+export function pluralRecords(n: number): string {
+  const m100 = n % 100;
+  const m10 = n % 10;
+  const word = m100 >= 11 && m100 <= 14 ? "записів" : m10 === 1 ? "запис" : m10 >= 2 && m10 <= 4 ? "записи" : "записів";
+  return `${n} ${word}`;
+}
+
 export function pluralReviews(n: number): string {
   const m100 = n % 100;
   const m10 = n % 10;

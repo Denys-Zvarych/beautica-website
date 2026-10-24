@@ -303,15 +303,17 @@
   position: absolute;
   inset: 0;
   border-radius: inherit;
-  border: var(--vt-app-line-2) solid transparent;
+  border: var(--vt-app-line-2) solid var(--vt-color-accent);
+  opacity: 0; /* the border fades in (opacity only), it is never a transitioned colour */
   pointer-events: none;
-  transition: border-color var(--vt-dur-fast) var(--vt-ease);
+  transition: opacity var(--vt-dur-fast) var(--vt-ease);
 }
 .field .box:focus-within::after {
-  border-color: var(--vt-color-accent);
+  opacity: 1;
 }
 .field.invalid .box::after {
   border-color: var(--vt-color-error);
+  opacity: 1;
 }
 .field .box > .icon {
   margin-left: var(--vt-space-md);
@@ -386,22 +388,32 @@
   border: 0;
   border-radius: var(--vt-radius-field);
   background: var(--vt-color-base);
-  box-shadow: var(--vt-shadow-extruded-small);
   outline: 0;
   font: var(--vt-fw-heading) var(--vt-fs-heading) / normal var(--vt-font-display);
   color: var(--vt-color-accent-deep); /* the app's digit is accent (2:1 on the base, fails AA); accentDeep keeps the hue */
   caret-color: var(--vt-color-accent);
-  transition: box-shadow var(--vt-dur-fast) var(--vt-ease);
+}
+/* The cell's shadow lives on the label's pseudo-element and fades out (opacity) while the cell has focus or the code is wrong. */
+.otp label::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: var(--vt-radius-field);
+  box-shadow: var(--vt-shadow-extruded-small);
+  pointer-events: none;
+  transition: opacity var(--vt-dur-fast) var(--vt-ease);
+}
+.otp label:focus-within::before,
+.otp.invalid label::before {
+  opacity: 0;
 }
 .otp input:focus {
-  box-shadow: none;
   outline: var(--vt-app-line-2) solid var(--vt-color-accent);
   outline-offset: calc(var(--vt-app-line-2) * -1);
 }
 .otp.invalid input {
   outline: var(--vt-app-line-2) solid var(--vt-color-error);
   outline-offset: calc(var(--vt-app-line-2) * -1);
-  box-shadow: none;
 }
 .mail-tile {
   display: grid;
@@ -471,17 +483,29 @@
   text-decoration: none;
   border-radius: var(--vt-radius-button);
   background: var(--vt-color-base);
-  box-shadow: var(--vt-shadow-extruded-button);
   color: var(--vt-color-accent-deep);
-  transition:
-    transform var(--vt-dur-fast) var(--vt-ease),
-    box-shadow var(--vt-dur-fast) var(--vt-ease);
+  position: relative;
+  isolation: isolate;
+  transition: transform var(--vt-dur-fast) var(--vt-ease);
   --icon-size: var(--vt-space-lg);
   --icon-gap: 0;
 }
+/* The shadow is a pseudo-element: pressing fades it out (opacity), nothing animates box-shadow. */
+.cta2::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  pointer-events: none;
+  box-shadow: var(--vt-shadow-extruded-button);
+  transition: opacity var(--vt-dur-fast) var(--vt-ease);
+}
 .cta2:active {
-  box-shadow: none;
   transform: scale(0.98);
+}
+.cta2:active::before {
+  opacity: 0;
 }
 @media (hover: hover) {
   .cta2:hover {
@@ -507,3 +531,211 @@
   list-style: none;
 }
 
+
+/* ---------- salon wizard (phase 016): step pill, master pager, master rows, assignment plan, per-master cards ---------- */
+.stepno {
+  display: inline-block;
+  margin: 0 0 var(--vt-space-md);
+  padding: calc(var(--vt-space-xs) / 2) var(--vt-space-sm);
+  border-radius: var(--vt-radius-pill);
+  background: var(--vt-color-base);
+  box-shadow: var(--vt-shadow-extruded-small);
+}
+.capnote {
+  margin: 0 0 var(--vt-space-sm);
+  text-align: center;
+}
+.mpager {
+  display: flex;
+  align-items: center;
+  gap: var(--vt-space-md);
+  margin-bottom: var(--vt-space-md);
+}
+.mpager .mcount {
+  flex: 1;
+  text-align: center;
+}
+.mlist {
+  display: flex;
+  flex-direction: column;
+  gap: var(--vt-space-md);
+}
+.mrow {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--vt-space-sm) var(--vt-space-md);
+  cursor: pointer;
+}
+.mrow input {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+.mrow .strip .t-fb.sec {
+  display: none;
+}
+.mrow .cov {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: flex-start;
+  gap: var(--vt-space-xs);
+  padding-inline: calc(var(--vt-space-sm) + var(--vt-space-xs));
+  color: var(--vt-color-accent-deep);
+  --icon-size: var(--vt-app-icon-13);
+  --icon-gap: 0;
+}
+.mrow input:checked ~ .chk {
+  background: var(--vt-gradient-accent);
+  box-shadow: var(--vt-app-shadow-check);
+}
+.mrow input:checked ~ .chk .icon {
+  opacity: 1;
+  transform: none;
+}
+.mrow input:focus-visible ~ .chk {
+  outline: medium solid var(--vt-color-accent-deep);
+  outline-offset: var(--vt-space-xs);
+}
+.plan-sub {
+  margin: var(--vt-space-xs) 0 0;
+}
+.pwell {
+  padding: var(--vt-space-sm) var(--vt-space-md);
+  border-radius: var(--vt-radius-field);
+  background: var(--vt-color-base);
+  box-shadow: var(--vt-app-shadow-inset);
+}
+.pwell.empty {
+  display: flex;
+  align-items: center;
+  gap: var(--vt-space-sm);
+  min-height: var(--vt-touch-min);
+  color: var(--vt-color-text-secondary);
+}
+.pwell .top {
+  display: flex;
+  align-items: center;
+  gap: var(--vt-space-xs);
+  --icon-size: var(--vt-app-icon-15);
+  --icon-gap: 0;
+}
+.pwell .top .t-strong {
+  flex: 1;
+  min-width: 0;
+}
+.pwell .top.ok {
+  color: var(--vt-color-success);
+}
+.pwell .top.open {
+  color: var(--vt-color-accent-deep);
+}
+.pwell .top .t-strong {
+  color: var(--vt-color-text);
+}
+.mchips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--vt-space-sm);
+  margin-top: var(--vt-space-sm);
+}
+.mchip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--vt-space-sm);
+  min-height: var(--vt-touch-min);
+  padding: 0 var(--vt-space-md) 0 var(--vt-space-sm);
+  border: 0;
+  border-radius: var(--vt-radius-pill);
+  background: var(--vt-color-base);
+  color: var(--vt-color-text-secondary);
+  font: 800 var(--vt-fs-label) / 1 var(--vt-font-body);
+  cursor: pointer;
+  position: relative;
+  isolation: isolate;
+}
+.mchip::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  pointer-events: none;
+  box-shadow: var(--vt-shadow-extruded-small);
+  transition: opacity var(--vt-dur-fast) var(--vt-ease);
+}
+.mchip[aria-pressed="true"] {
+  background: var(--vt-gradient-accent);
+  color: var(--vt-color-cream);
+}
+.mchip:active::before {
+  opacity: 0;
+}
+.mchip:focus-visible {
+  outline: medium solid var(--vt-color-accent-deep);
+  outline-offset: var(--vt-app-line-2);
+}
+.mchip .av {
+  display: grid;
+  place-items: center;
+  width: var(--vt-app-icon-22);
+  height: var(--vt-app-icon-22);
+  border-radius: 50%;
+  color: var(--vt-color-cream);
+  --icon-size: var(--vt-app-icon-13);
+  --icon-gap: 0;
+}
+.pgroup {
+  display: flex;
+  align-items: flex-start;
+  gap: calc(var(--vt-space-sm) + var(--vt-space-xs));
+  padding: var(--vt-space-sm) 0;
+}
+.pgroup .ravatar {
+  color: var(--vt-color-cream);
+}
+.pgroup .grow {
+  flex: 1;
+  min-width: 0;
+}
+.pgroup .grow .t-fb {
+  margin-top: calc(var(--vt-space-xs) / 2);
+}
+.puncov {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--vt-space-sm);
+  padding: var(--vt-space-sm) 0;
+  color: var(--vt-color-error);
+  --icon-size: var(--vt-app-icon-15);
+  --icon-gap: 0;
+}
+.puncov .t-fb {
+  color: var(--vt-color-text-secondary);
+}
+.plan-gap {
+  height: var(--vt-space-sm);
+}
+.appts {
+  display: flex;
+  flex-direction: column;
+  gap: var(--vt-space-xl);
+}
+.okline {
+  display: flex;
+  align-items: center;
+  gap: var(--vt-space-xs);
+  margin: var(--vt-space-sm) 0 0;
+  color: var(--vt-color-success);
+  --icon-size: var(--vt-app-icon-18);
+  --icon-gap: 0;
+}
+.appt .calwrap {
+  justify-content: stretch;
+}

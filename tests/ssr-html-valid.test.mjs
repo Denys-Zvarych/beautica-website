@@ -9,7 +9,7 @@ import { rawRequest, requireBase, ROOT } from "./helpers/env.mjs";
 requireBase();
 const config = JSON.parse(readFileSync(`${ROOT}/.htmlvalidate.json`, "utf8"));
 const validator = new HtmlValidate(config);
-const PAGES = ["/book/oksana-ab12", "/book/sparse-0001", "/book/oksana-ab12?sort=OLDEST", "/book/s/lavanda-1111", "/book/s/lavanda-1111?sort=LOWEST", "/book/closed-aaaa", "/book/nobody-0000", "/book/s/shut-2222", "/book/evil-0666"];
+const PAGES = ["/book/oksana-ab12", "/book/sparse-0001", "/book/oksana-ab12?sort=OLDEST", "/book/s/lavanda-1111", "/book/s/lavanda-1111?sort=LOWEST", "/book/closed-aaaa", "/book/nobody-0000", "/book/s/shut-2222", "/book/evil-0666", "/book/s/wiz-html-0001", "/book/retired-bbbb", "/book/s/retiredsalon-bbbb", "/book-steps/salon"];
 
 describe("rendered /book/* HTML validates", () => {
   for (const path of PAGES) {

@@ -211,3 +211,13 @@ describe("crawlers", () => {
     for (const bad of ["/l/", "/404", "/invite", "/bookings", "/book/", "/api/"]) assert.equal(map.body.includes(bad), false, `sitemap lists ${bad}`);
   });
 });
+
+describe("the salon wizard fragment /book-steps/salon (phase 016)", () => {
+  test("revalidated on every use (never a stale copy against new scripts), noindex, security headers once", async () => {
+    const res = await rawRequest("/book-steps/salon");
+    assert.equal(res.status, 200);
+    assert.equal(res.headers["cache-control"], "public, max-age=0, must-revalidate");
+    assert.equal(res.headers["x-robots-tag"], "noindex, nofollow");
+    for (const [k, v] of Object.entries(STATIC_SECURITY)) assert.equal(res.headers[k], v, k);
+  });
+});

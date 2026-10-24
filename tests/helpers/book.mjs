@@ -9,15 +9,18 @@ export const PNG = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAA
 export const FAKE_TURNSTILE = `(function(){var cb,n=0;function give(){var t="TOKEN-"+(++n);setTimeout(function(){cb(t)},5)}window.turnstile={render:function(el,o){cb=o.callback;give();var f=document.createElement("iframe");f.title="fake turnstile";f.style.cssText="width:300px;height:65px;border:0";el.appendChild(f);return "w1"},reset:function(){give()}};})();`;
 
 /** Every request the mock backend has seen, optionally filtered. */
-export async function mockLog(filter = () => true) {
+export async function mockLog(filter = () => true, since = 0) {
   const log = await (await fetch(`${MOCK_API}/__mock/log`)).json();
-  return log.filter(filter);
+  return log.slice(since).filter(filter);
 }
+/** The log length now: later `mockLog(filter, mark)` calls see only what came after. Tests must NOT clear the shared log (POST /__mock/reset):
+ *  other test files run against the same mock at the same time (--test-concurrency) and read it, so a reset deletes THEIR requests (flaky "0 !== 1"). */
+export const logMark = async () => (await mockLog()).length;
 export const callsTo = (log, method, pathPart) => log.filter((e) => e.method === method && e.path.includes(pathPart));
 
 /** A Playwright page on a booking-link page, with the media origin and Turnstile faked (nothing leaves the machine). */
-export async function bookPage(browser, slug, { width = 360, height = 800, turnstile = "ok", js = true, path, init } = {}) {
-  const env = await open(browser, { width, height, javaScriptEnabled: js });
+export async function bookPage(browser, slug, { width = 360, height = 800, turnstile = "ok", js = true, path, init, ...context } = {}) {
+  const env = await open(browser, { width, height, javaScriptEnabled: js, ...context }); // `context`: any other Playwright context option (e.g. reducedMotion)
   if (init) await env.context.addInitScript(init);
   const turnstileRequests = [];
   await env.context.route("https://media.beautica.test/**", (r) => r.fulfill({ status: 200, contentType: "image/png", body: PNG }));

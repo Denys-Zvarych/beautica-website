@@ -1,7 +1,8 @@
 ---
-// Salon link page body (mirrors PublicSalonProfileScreen): cover, hero card, bookable masters. Each master card opens that
-// master's own link page (the booking flow starts there). The public salon info carries no description, portfolio, services or
-// reviews, so those tabs of the app screen are not rendered (backend gap, reported).
+// Salon link page body (mirrors PublicSalonProfileScreen): cover, hero card, tabs, bookable masters, services, reviews. The sticky CTA
+// «Записатись на послугу» opens the salon booking wizard (phase 016, the app's services -> masters -> time -> confirm). A master card
+// opens that master's own link page when the master has one; a salon master without a personal link gets a plain, non-link card.
+// A tap on a service in the «Послуги» tab filters the «Майстри» tab (phase 017, like the app).
 import NeuCard from "../NeuCard.astro";
 import CategoryGroup from "./CategoryGroup.astro";
 import ReviewsSection from "./ReviewsSection.astro";
@@ -28,8 +29,11 @@ const address = [street, info.city].filter(Boolean).join(", ");
 // The logo initial skips the word «Салон» («Салон «Лаванда»» -> Л), like the app's monogram of the brand name.
 const monogram = Array.from(info.name.replace(/^салон\s+/iu, "").replace(/^[^\p{L}\p{N}]+/u, ""))[0]?.toUpperCase() ?? "";
 const firstName = (n: string) => n.trim().split(/\s+/)[0] ?? n;
+const filterable = info.serviceCoverage.length > 0 && info.masters.length > 0;
+const canBook = info.masters.length > 0 && info.serviceCategories.length > 0 && info.serviceCoverage.some((c) => c.masters.length > 0);
 ---
 
+<section class="screen" data-screen="profile">
 <div class="body">
   <div class="cover">
     {info.coverImageUrl ? <img src={info.coverImageUrl} alt="" width="420" height="232" decoding="async" fetchpriority="high" referrerpolicy="no-referrer" /> : <span class="cam"><Icon name="photo-camera-back" /></span>}
@@ -97,16 +101,31 @@ const firstName = (n: string) => n.trim().split(/\s+/)[0] ?? n;
 
     <div class="tabpanel" id="panel-1" data-panel="1">
       <h2 class="sr-only">{t("book.salon.mastersLabel")}</h2>
-      <div class="mgrid">
+      {
+        filterable && (
+          <div class="fchip-row" data-filter-chip data-template={t("book.salon.filterChip", { name: "{name}" })} aria-live="polite" hidden>
+            <span class="fchip">
+              <Icon name="spa" />
+              <span class="t-strong11 ellipsis" data-filter-label></span>
+              <button type="button" class="fclear" data-filter-clear aria-label={t("book.salon.filterClear")}><span class="x"><Icon name="close-rounded" /></span></button>
+            </span>
+          </div>
+        )
+      }
+      {filterable && <p class="t-fb muted muted-note" data-filter-empty hidden>{t("book.salon.filterEmpty")}</p>}
+      <div class="mgrid" data-mgrid>
         {
-          first.map((m) => (
-            <a class="mcard" href={`/book/${m.masterSlug}`} aria-label={[m.name, m.professionalTitle, m.avgRating !== null ? t("book.salon.ratingOf", { rating: formatRating(m.avgRating) }) : null].filter(Boolean).join(", ")}>
-              <span class={`mav ${avatarClass(m.name)}`}>{m.avatarUrl ? <img src={m.avatarUrl} alt="" width="73" height="73" loading="lazy" decoding="async" referrerpolicy="no-referrer" /> : <Icon name="person" />}</span>
-              <span class="t-sub11 ellipsis">{firstName(m.name)}</span>
-              {m.professionalTitle && <span class="role t-fb muted">{m.professionalTitle}</span>}
-              {m.avgRating !== null && <span class="mrate"><Icon name="star" /><span class="t-strong11">{formatRating(m.avgRating)}</span></span>}
-            </a>
-          ))
+          first.map((m) => {
+            const Tag = m.masterSlug ? "a" : "div";
+            return (
+              <Tag class={m.masterSlug ? "mcard" : "mcard plain"} href={m.masterSlug ? `/book/${m.masterSlug}` : undefined} role={m.masterSlug ? undefined : "group"} data-master-id={m.masterId} aria-label={[m.name, m.professionalTitle, m.avgRating !== null ? t("book.salon.ratingOf", { rating: formatRating(m.avgRating) }) : null].filter(Boolean).join(", ")}>
+                <span class={`mav ${avatarClass(m.name)}`}>{m.avatarUrl ? <img src={m.avatarUrl} alt="" width="73" height="73" loading="lazy" decoding="async" referrerpolicy="no-referrer" /> : <Icon name="person" />}</span>
+                <span class="t-sub11 ellipsis">{firstName(m.name)}</span>
+                {m.professionalTitle && <span class="role t-fb muted">{m.professionalTitle}</span>}
+                {m.avgRating !== null && <span class="mrate"><Icon name="star" /><span class="t-strong11">{formatRating(m.avgRating)}</span></span>}
+              </Tag>
+            );
+          })
         }
       </div>
       {
@@ -114,28 +133,32 @@ const firstName = (n: string) => n.trim().split(/\s+/)[0] ?? n;
           <>
             <div class="g-sm"></div>
             <button type="button" class="showall js-only" id="showall" hidden><span class="t-link">{t("book.salon.showAll")}</span><Icon name="keyboard-arrow-down" /></button>
-            <div class="mgrid more" id="mrest" data-collapsible>
-              {rest.map((m) => (
-                <a class="mcard" href={`/book/${m.masterSlug}`} aria-label={[m.name, m.professionalTitle, m.avgRating !== null ? t("book.salon.ratingOf", { rating: formatRating(m.avgRating) }) : null].filter(Boolean).join(", ")}>
-                  <span class={`mav ${avatarClass(m.name)}`}>{m.avatarUrl ? <img src={m.avatarUrl} alt="" width="73" height="73" loading="lazy" decoding="async" referrerpolicy="no-referrer" /> : <Icon name="person" />}</span>
-                  <span class="t-sub11 ellipsis">{firstName(m.name)}</span>
-                  {m.professionalTitle && <span class="role t-fb muted">{m.professionalTitle}</span>}
-              {m.avgRating !== null && <span class="mrate"><Icon name="star" /><span class="t-strong11">{formatRating(m.avgRating)}</span></span>}
-                </a>
-              ))}
+            <div class="mgrid more" id="mrest" data-collapsible data-mgrid>
+              {rest.map((m) => {
+                const Tag = m.masterSlug ? "a" : "div";
+                return (
+                  <Tag class={m.masterSlug ? "mcard" : "mcard plain"} href={m.masterSlug ? `/book/${m.masterSlug}` : undefined} role={m.masterSlug ? undefined : "group"} data-master-id={m.masterId} aria-label={[m.name, m.professionalTitle, m.avgRating !== null ? t("book.salon.ratingOf", { rating: formatRating(m.avgRating) }) : null].filter(Boolean).join(", ")}>
+                    <span class={`mav ${avatarClass(m.name)}`}>{m.avatarUrl ? <img src={m.avatarUrl} alt="" width="73" height="73" loading="lazy" decoding="async" referrerpolicy="no-referrer" /> : <Icon name="person" />}</span>
+                    <span class="t-sub11 ellipsis">{firstName(m.name)}</span>
+                    {m.professionalTitle && <span class="role t-fb muted">{m.professionalTitle}</span>}
+                    {m.avgRating !== null && <span class="mrate"><Icon name="star" /><span class="t-strong11">{formatRating(m.avgRating)}</span></span>}
+                  </Tag>
+                );
+              })}
             </div>
           </>
         )
       }
     </div>
 
-    <div class="tabpanel" id="panel-2" data-panel="2">
+    <div class="tabpanel" id="panel-2" data-panel="2" data-svc-filter={filterable ? "" : undefined}>
       <h2 class="sr-only">{t("book.salon.servicesLabel")}</h2>
+      {filterable && <p class="t-fb muted muted-note" data-filter-hint>{t("book.salon.filterHint")}</p>}
       {info.serviceCategories.length === 0 && <p class="t-fb muted muted-note">{t("book.salon.noServices")}</p>}
       {
         info.serviceCategories.map((g, i) => (
           <CategoryGroup name={g.displayName} categoryKey={g.category} count={g.count} open={i === 0}>
-            {g.services.map((sv) => <ServiceTile name={sv.name} price={sv.priceLabel} duration={formatDuration(sv.durationMinutes)} />)}
+            {g.services.map((sv) => <ServiceTile name={sv.name} price={sv.priceLabel} duration={formatDuration(sv.durationMinutes)} filterId={filterable ? sv.id : undefined} />)}
           </CategoryGroup>
         ))
       }
@@ -149,5 +172,17 @@ const firstName = (n: string) => n.trim().split(/\s+/)[0] ?? n;
   <div class="g-xxl"></div>
 </div>
 <div class="shelf salon">
-  <CtaButton href="#panel-1" icon="event-available">{t("book.salon.cta")}</CtaButton>
+  {
+    canBook ? (
+      <>
+        <div class="js-only" hidden data-book-cta data-error={t("book.notice.unavailable.text")}>
+          <CtaButton type="button" id="book-cta" icon="event-available">{t("book.salon.cta")}</CtaButton>
+        </div>
+        <div class="nojs" data-nojs><CtaButton href="#panel-1" icon="event-available">{t("book.salon.cta")}</CtaButton></div>
+      </>
+    ) : (
+      <CtaButton href="#panel-1" icon="event-available">{t("book.salon.cta")}</CtaButton>
+    )
+  }
 </div>
+</section>

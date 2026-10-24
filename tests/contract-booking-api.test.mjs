@@ -8,7 +8,7 @@ import { test, describe, before, after } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { startMockApi, SVC } from "./helpers/mock-api.mjs";
+import { startMockApi, SVC, WIZ, wizAssign } from "./helpers/mock-api.mjs";
 import { backendGate, javaInt } from "./helpers/backend.mjs";
 import { componentsOf, pathProblem, validate } from "./helpers/dto-schema.mjs";
 import { ROOT } from "./helpers/env.mjs";
@@ -23,7 +23,7 @@ after(() => mock?.close());
 const get = async (path) => (await fetch(`${mock.origin}${path}`)).json();
 
 const MASTER_SLUGS = ["oksana-ab12", "sparse-0001", "closed-aaaa", "evil-0666", "salonmaster-5555", "rail-8888"];
-const SALON_SLUGS = ["lavanda-1111", "shut-2222", "evilsalon-0666"];
+const SALON_SLUGS = ["lavanda-1111", "shut-2222", "evilsalon-0666", "wiz-contract-0001"];
 
 describe("1. the mock backend only serves what the real DTOs allow", gate, () => {
   for (const slug of MASTER_SLUGS)
@@ -42,6 +42,21 @@ describe("1. the mock backend only serves what the real DTOs allow", gate, () =>
     const days = await get(`/api/v1/book/oksana-ab12/bookable-days?from=${today}&to=${today}&serviceId=${SVC[0].id}`);
     assert.equal(days.length, 1);
     assert.deepEqual(validate(days, "List<MasterWorkingDayResponse>"), []);
+  });
+  test("salon wizard routes (backend 392/393): availability and bookable-days are the master-slug DTOs, the booking is a GuestBookingResponse", async () => {
+    const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Kyiv" }).format(new Date());
+    const base = `/api/v1/book/s/wiz-contract-0001/masters/${WIZ.masters[0].id}`;
+    const slots = await get(`${base}/availability?date=2030-01-02&serviceId=${wizAssign(1, 2)}`);
+    assert.ok(slots.length > 0);
+    assert.deepEqual(validate(slots, "List<AvailableSlotResponse>"), []);
+    const days = await get(`${base}/bookable-days?from=${today}&to=${today}&serviceId=${wizAssign(1, 2)}`);
+    assert.equal(days.length, 1);
+    assert.deepEqual(validate(days, "List<MasterWorkingDayResponse>"), []);
+    const res = await fetch(`${mock.origin}${base}/booking`, { method: "POST", headers: { authorization: "Bearer guest-token-ok" }, body: JSON.stringify({ masterServiceIds: [wizAssign(1, 2)], startsAt: "2030-01-02T10:00:00+02:00", name: "А", surname: "Б", privacyAccepted: true, privacyPolicyVersion: PRIVACY_POLICY_VERSION }) });
+    assert.equal(res.status, 201);
+    assert.deepEqual(validate(await res.json(), "GuestBookingResponse"), []);
+    // a service id that is not this master's assignment is not served (the real backend answers 404 as well)
+    assert.equal((await fetch(`${mock.origin}${base}/availability?date=2030-01-02&serviceId=${wizAssign(2, 3)}`)).status, 404);
   });
   test("POST /otp/verify is an ApiResponse<GuestTokenResponse>", async () => {
     const res = await fetch(`${mock.origin}/api/v1/book/otp/verify`, { method: "POST", body: JSON.stringify({ phone: "+380501234567", code: "123456" }) });
@@ -99,6 +114,15 @@ describe("2. every field the site reads exists in the real DTO", gate, () => {
     const reads = readsOf((r) => assert.ok(parseSalonInfo("lavanda-1111", traced(raw, r))));
     assert.ok(reads.length > 15);
     assert.deepEqual(reads.map((p) => pathProblem(p, "SalonBookingSlugInfoResponse")).filter(Boolean), []);
+  });
+  test("parseSalonInfo on the wizard fixture reads masterId and serviceCoverage[].masters[] that SalonBookingSlugInfoResponse really has", async () => {
+    const raw = await get("/api/v1/book/s/wiz-contract-0001/info");
+    const reads = readsOf((r) => assert.ok(parseSalonInfo("wiz-contract-0001", traced(raw, r))));
+    for (const needed of ["masters[].masterId", "serviceCoverage[].serviceId", "serviceCoverage[].masters[].masterId", "serviceCoverage[].masters[].masterServiceId", "serviceCategories[].services[].priceMin"]) assert.ok(reads.includes(needed), `the parser never read ${needed}`);
+    assert.deepEqual(reads.map((p) => pathProblem(p, "SalonBookingSlugInfoResponse")).filter(Boolean), []);
+    const info = parseSalonInfo("wiz-contract-0001", raw);
+    assert.equal(info.masters[0].masterSlug, null, "a master without a personal link is kept, with masterSlug null");
+    assert.equal(info.masters.length, 3);
   });
   for (const [kind, url, type] of [["master", "/api/v1/book/oksana-ab12/reviews", "PageResponse<ReviewResponse>"], ["salon", "/api/v1/book/s/lavanda-1111/reviews", "PageResponse<SalonReviewResponse>"]])
     test(`parseReviewsPage (${kind}) reads only ${type} fields`, async () => {
@@ -256,6 +280,22 @@ describe("3. every request the site sends is a legal backend request", gate, () 
     assert.equal("serviceId" in last().body, false);
     assert.equal(last().body.masterServiceIds.length, cap);
   });
+  test("POST /book/s/{slug}/masters/{id}/booking: masterServiceIds always (even for one service), no serviceId, on the salon route, matches GuestBookingRequest", async () => {
+    const id = WIZ.masters[1].id;
+    await createBooking("http://x", "wiz-contract-0001", "tok", { serviceIds: [wizAssign(2, 3)], startsAt: "2030-01-02T10:00:00+02:00", name: "М", surname: "К", policyVersion: PRIVACY_POLICY_VERSION, clientComment: "Для Ірини" }, id);
+    assert.equal(last().url, `http://x/api/v1/book/s/wiz-contract-0001/masters/${id}/booking`);
+    assert.deepEqual(requestProblems(last().body, "GuestBookingRequest"), []);
+    assert.deepEqual(last().body.masterServiceIds, [wizAssign(2, 3)]);
+    assert.equal("serviceId" in last().body, false);
+    assert.equal(last().init.headers.Authorization, "Bearer tok");
+  });
+  test("salon availability / bookable-days URLs carry the master id and the assignment ids as serviceId", async () => {
+    const id = WIZ.masters[0].id;
+    await getAvailability("http://x", "wiz-contract-0001", "2030-01-02", [wizAssign(1, 1), wizAssign(1, 2)], id);
+    assert.equal(last().url, `http://x/api/v1/book/s/wiz-contract-0001/masters/${id}/availability?date=2030-01-02&serviceId=${wizAssign(1, 1)}&serviceId=${wizAssign(1, 2)}`);
+    await getBookableDays("http://x", "wiz-contract-0001", "2030-01-02", "2030-01-09", [wizAssign(1, 1)], id);
+    assert.equal(last().url, `http://x/api/v1/book/s/wiz-contract-0001/masters/${id}/bookable-days?from=2030-01-02&to=2030-01-09&serviceId=${wizAssign(1, 1)}`);
+  });
   test("POST /booking: clientComment is sent only when non-blank, and within the backend's limit", async () => {
     const base = { serviceIds: [SVC[0].id], startsAt: "2030-01-02T10:00:00+02:00", name: "М", surname: "К", policyVersion: PRIVACY_POLICY_VERSION };
     await createBooking("http://x", "oksana-ab12", "tok", base);
@@ -290,6 +330,9 @@ describe("3b. form limits on the page never exceed what the backend accepts", ga
   });
   test("the service picker's cap equals the backend's MAX_SERVICES_PER_VISIT", () => {
     const app = readFileSync(join(ROOT, "src/scripts/booking/app.ts"), "utf8");
-    assert.equal(Number(/st\.picked\.size >= (\d+)\) return/.exec(app)?.[1]), javaInt("SlotCalculationService", "MAX_SERVICES_PER_VISIT"));
+    assert.equal(Number(/st\.picked\.size >= (\d+)\)/.exec(app)?.[1]), javaInt("SlotCalculationService", "MAX_SERVICES_PER_VISIT"));
+  });
+  test("the salon wizard's per-master comment box allows 500 characters as well", () => {
+    assert.match(html, /<textarea rows="3" maxlength="500"[^>]*data-appt-text/);
   });
 });

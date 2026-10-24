@@ -142,7 +142,8 @@ const canBook = info.bookable && info.services.length > 0;
   {
     canBook && (
       <div class="shelf">
-        <p class="t-body centered nojs" data-nojs>{t("book.master.noJs")}</p>
+        {/* <noscript>: with script the note is not rendered at all (its Latin word «JavaScript» made the browser download the whole Latin font just to be hidden a moment later). */}
+        <noscript><p class="t-body centered nojs" data-nojs>{t("book.master.noJs")}</p></noscript>
         <div class="js-only" hidden data-book-cta>
           <CtaButton type="button" id="book-cta" icon="add">{t("book.master.cta")}</CtaButton>
         </div>

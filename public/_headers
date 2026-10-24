@@ -5,6 +5,12 @@
   Referrer-Policy: strict-origin-when-cross-origin
   Permissions-Policy: camera=(), microphone=(), geolocation=(), interest-cohort=()
 
+# The salon booking wizard's steps (phase 016): an HTML fragment the booking island fetches; not a page.
+# Revalidated (ETag) on every use: the fragment's markup is tied to the scripts of the same deploy, so it must never outlive them.
+/book-steps/*
+  X-Robots-Tag: noindex, nofollow
+  Cache-Control: public, max-age=0, must-revalidate
+
 /email/*
   Cache-Control: public, max-age=86400
 
