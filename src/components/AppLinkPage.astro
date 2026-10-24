@@ -20,6 +20,8 @@ const { title, description, h1, text, openInApp = true } = Astro.props;
 
 <Layout title={title} description={description} noindex noReferrer>
   <main id="main" class="wrap">
+    {/* Blocking on purpose (see public/applink-ua.js): the Android button is part of the first paint, never a shift after it. */}
+    {openInApp && <script is:inline src="/applink-ua.js"></script>}
     <div class="vt-container">
       <NeuCard class="card">
         <h1 class="vt-heading">{h1}</h1>
@@ -48,7 +50,8 @@ const { title, description, h1, text, openInApp = true } = Astro.props;
 
 <script>
   import { androidIntent } from "../lib/appLinks";
-  // Android only: elsewhere an intent:// link does nothing, so the button stays hidden (and the text above stands).
+  // Android only: elsewhere an intent:// link does nothing, so the button stays hidden (and the text above stands). Its place in the layout is
+  // decided before the first paint by public/applink-ua.js (html.android); this only fills in the link (no layout change).
   const open = document.getElementById("open-in-app");
   if (open && /Android/i.test(navigator.userAgent)) {
     open.setAttribute("href", androidIntent(location.pathname + location.search));
@@ -70,7 +73,7 @@ const { title, description, h1, text, openInApp = true } = Astro.props;
     padding-block: var(--vt-space-xl);
     text-align: center;
   }
-  .wrap :global(.open:not(.show)) {
+  :global(html:not(.android)) .wrap :global(.open) {
     display: none;
   }
   .chips {

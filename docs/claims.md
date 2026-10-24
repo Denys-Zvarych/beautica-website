@@ -27,7 +27,7 @@ Columns:
 | A used or unknown cancel link answers 404 («вже використано або недійсне») | l/cancel#st-notfound | `../beautica-backend/src/main/java/com/beautica/booking/controller/PublicBookingController.java:234` | live |
 | Invite email links to /invite/accept?token= (opens in the app) | l/invite#main | `../beautica-backend/src/main/java/com/beautica/auth/InviteService.java:426` | live |
 | Booking email links to /bookings/{id} (details in the app) | l/booking#main | `../beautica-backend/src/main/java/com/beautica/notification/service/NotificationService.java:425` | live |
-| Review email links to /bookings/{id}/review (review left in the app) | l/review#main | `../beautica-backend/src/main/java/com/beautica/notification/service/NotificationService.java:412` | live |
+| Review email links to /bookings/{id}/review (review left in the app) | l/review#main | `../beautica-backend/src/main/java/com/beautica/notification/service/NotificationService.java:362` | live |
 | Guest cancel SMS/email links to /book/cancel/{token} | l/cancel#main | `../beautica-backend/src/main/java/com/beautica/booking/service/GuestBookingService.java:515` | live |
 | Guest booking: consent + policy version are stored with the booking | privacy#guest | `../beautica-backend/src/main/java/com/beautica/booking/domain/GuestConsent.java:13` | live |
 | Guest booking: Turnstile bot check before the SMS code is sent | privacy#guest | `../beautica-backend/src/main/java/com/beautica/auth/turnstile/TurnstileVerifier.java:66` | live |

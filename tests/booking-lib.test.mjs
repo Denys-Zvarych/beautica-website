@@ -38,9 +38,21 @@ describe("API parsing is defensive", () => {
     assert.equal(parseMasterInfo("x-1", "nope"), null);
     assert.equal(parseSalonInfo("x-1", { name: "S" }), null);
   });
-  test("salon masters keep their slugs", () => {
-    const s = parseSalonInfo("s-1", { salonId: "id", name: "S", bookable: true, masters: [{ masterSlug: "m-1abc", name: "M" }, { name: "no slug" }] });
-    assert.deepEqual(s.masters.map((x) => x.masterSlug), ["m-1abc"]);
+  test("salon masters: a slug is kept when there is one, a master without one is kept with masterSlug null (backend 391), one without an id cannot be booked and is dropped", () => {
+    const s = parseSalonInfo("s-1", {
+      salonId: "id",
+      name: "S",
+      bookable: true,
+      masters: [
+        { masterSlug: "m-1abc", masterId: "id-1", name: "With link" },
+        { masterSlug: null, masterId: "id-2", name: "No link" },
+        { masterSlug: "  ", masterId: "id-3", name: "Blank link" },
+        { masterSlug: "m-4abc", name: "No id" },
+        { masterId: "id-5" },
+      ],
+    });
+    assert.deepEqual(s.masters.map((x) => [x.masterId, x.masterSlug]), [["id-1", "m-1abc"], ["id-2", null], ["id-3", null]]);
+    assert.deepEqual(s.masters.filter((x) => x.masterSlug === null).map((x) => x.name), ["No link", "Blank link"], "no own card link for them");
   });
   test("bookable is false unless exactly true", () => assert.equal(parseMasterInfo("x-1", { masterName: "A", masterId: "i", bookable: "true" }).bookable, false));
 });

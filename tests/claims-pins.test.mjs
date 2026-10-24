@@ -36,7 +36,7 @@ describe("stated numbers equal the backend's", gate, () => {
     assert.equal(Number(/WINDOW_DAYS = (\d+)/.exec(read("src/scripts/booking/calendar.ts"))[1]), javaInt("BookingSmsProperties", "availabilityMaxDays"));
   });
   test("visit size: the picker's cap equals MAX_SERVICES_PER_VISIT", () => {
-    assert.equal(Number(/st\.picked\.size >= (\d+)\) return/.exec(read("src/scripts/booking/app.ts"))[1]), javaInt("SlotCalculationService", "MAX_SERVICES_PER_VISIT"));
+    assert.equal(Number(/st\.picked\.size >= (\d+)\)/.exec(read("src/scripts/booking/app.ts"))[1]), javaInt("SlotCalculationService", "MAX_SERVICES_PER_VISIT"));
   });
   test("no user-visible copy states a window or cap the code does not have", () => {
     const strings = flatten(uk.book).join("\n");
