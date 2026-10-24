@@ -1,0 +1,89 @@
+---
+// Fallback shell for a link the backend emails/SMSes (phase 004). Token route: noindex, no analytics, no-referrer (see _headers).
+// Default slot = page-specific body (the guest-cancel states). `openInApp` (default true) adds the Android "open in app" button:
+// hidden until the script confirms Android, then an intent:// URL built from the address bar (the real path, e.g. /bookings/{id}).
+import Layout from "./Layout.astro";
+import NeuCard from "./NeuCard.astro";
+import CtaButton from "./CtaButton.astro";
+import Chip from "./Chip.astro";
+import { t } from "../i18n/t";
+
+interface Props {
+  title: string;
+  description: string;
+  /** The page heading. Omitted when the slot brings one h1 per state (the cancel page). */
+  h1?: string;
+  text?: string;
+  openInApp?: boolean;
+}
+const { title, description, h1, text, openInApp = true } = Astro.props;
+---
+
+<Layout title={title} description={description} noindex noReferrer>
+  <main id="main" class="wrap">
+    {/* Blocking on purpose (see public/applink-ua.js): the Android button is part of the first paint, never a shift after it. */}
+    {openInApp && <script is:inline src="/applink-ua.js"></script>}
+    <div class="vt-container">
+      <NeuCard class="card">
+        {h1 && <h1 class="vt-heading">{h1}</h1>}
+        {text && <p class="vt-prose">{text}</p>}
+        <slot />
+        {
+          openInApp && (
+            <>
+              <CtaButton href="#" id="open-in-app" class="open" icon="google-play">
+                {t("appLink.openInApp")}
+              </CtaButton>
+              <p class="vt-prose">{t("appLink.phoneHint")}</p>
+              <p class="vt-body">{t("appLink.noApp")}</p>
+              {/* add when live: Google Play badge + QR code to the Play listing (replaces the chips below) */}
+              <ul class="chips">
+                <li><Chip icon="google-play">{t("index.soonGooglePlay")}</Chip></li>
+                <li><Chip icon="app-store">{t("index.soonAppStore")}</Chip></li>
+              </ul>
+            </>
+          )
+        }
+      </NeuCard>
+    </div>
+  </main>
+</Layout>
+
+<script>
+  import { androidIntent } from "../lib/appLinks";
+  // Android only: elsewhere an intent:// link does nothing, so the button stays hidden (and the text above stands). Its place in the layout is
+  // decided before the first paint by public/applink-ua.js (html.android); this only fills in the link (no layout change).
+  const open = document.getElementById("open-in-app");
+  if (open && /Android/i.test(navigator.userAgent)) {
+    open.setAttribute("href", androidIntent(location.pathname + location.search));
+    open.classList.add("show");
+  }
+</script>
+
+<style>
+  .wrap {
+    padding-block: var(--vt-space-xl);
+  }
+  .wrap :global(.card) {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--vt-space-md);
+    max-width: calc(var(--vt-max-width) / 2.5);
+    margin-inline: auto;
+    padding-block: var(--vt-space-xl);
+    text-align: center;
+  }
+  :global(html:not(.android)) .wrap :global(.open) {
+    display: none;
+  }
+  .chips {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--vt-space-md);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+</style>

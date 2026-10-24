@@ -1,0 +1,149 @@
+---
+// Static shell for the guest cancel link /book/cancel/{token} (200 rewrite in public/_redirects). The token is read from the
+// address bar in the browser and only ever sent to the API; nothing is stored or logged. States are all in the HTML and
+// toggled with `hidden`. The page has ONE h1 (#cancel-title): «Скасування запису» while loading (and without script), then the heading of the
+// state shown (data-h-*); the script moves focus to it. The static «Скасування запису» is otherwise the <title> only.
+import AppLinkPage from "../../components/AppLinkPage.astro";
+import CtaButton from "../../components/CtaButton.astro";
+import { t } from "../../i18n/t";
+import { API_BASE } from "../../lib/appLinks";
+---
+
+<AppLinkPage title={t("cancel.metaTitle")} description={t("cancel.metaDescription")} openInApp={false}>
+  <h1 id="cancel-title" class="vt-heading" tabindex="-1">{t("cancel.h1")}</h1>
+  <div
+    id="cancel-root"
+    class="states"
+    data-api={API_BASE}
+    data-until={t("cancel.until", { time: "{time}" })}
+    data-confirm={t("cancel.confirm")}
+    data-cancelling={t("cancel.cancelling")}
+    data-h-confirm={t("cancel.confirmTitle")}
+    data-h-cancelled={t("cancel.doneTitle")}
+    data-h-closed={t("cancel.closedTitle")}
+    data-h-notfound={t("cancel.notfoundTitle")}
+    data-h-error={t("cancel.errorTitle")}
+  >
+    <div class="state" id="st-loading" role="status">
+      <p class="vt-prose">{t("cancel.loading")}</p>
+      <noscript><p class="vt-prose">{t("cancel.noscript")}</p></noscript>
+    </div>
+
+    <div class="state" id="st-confirm" hidden>
+      <dl class="facts vt-prose">
+        <div><dt>{t("cancel.master")}</dt><dd id="c-master"></dd></div>
+        <div><dt>{t("cancel.service")}</dt><dd id="c-service"></dd></div>
+        <div><dt>{t("cancel.when")}</dt><dd id="c-when"></dd></div>
+      </dl>
+      <p class="vt-body" id="c-until"></p>
+      <CtaButton type="button" id="c-confirm" spinner>{t("cancel.confirm")}</CtaButton>
+      <p class="vt-body">{t("cancel.changedMind")}</p>
+    </div>
+
+    <div class="state" id="st-cancelled" hidden>
+      <p class="vt-prose">{t("cancel.doneText")}</p>
+    </div>
+
+    <div class="state" id="st-closed" hidden>
+      <p class="vt-prose">{t("cancel.closedText")}</p>
+    </div>
+
+    <div class="state" id="st-notfound" hidden>
+      <p class="vt-prose">{t("cancel.notfoundText")}</p>
+    </div>
+
+    <div class="state" id="st-error" hidden>
+      <p class="vt-prose">{t("cancel.errorText")}</p>
+      <CtaButton type="button" id="c-retry">{t("cancel.retry")}</CtaButton>
+    </div>
+  </div>
+</AppLinkPage>
+
+<style>
+  .states {
+    display: contents;
+  }
+  .state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--vt-space-md);
+    outline: none;
+  }
+  #cancel-title:focus {
+    outline: none;
+  }
+  .state[hidden] {
+    display: none;
+  }
+  .facts {
+    display: flex;
+    flex-direction: column;
+    gap: var(--vt-space-sm);
+    margin: 0;
+  }
+  .facts div {
+    display: flex;
+    flex-direction: column;
+  }
+  .facts dt {
+    font-size: var(--vt-fs-label);
+    font-weight: var(--vt-fw-label);
+    letter-spacing: var(--vt-ls-label);
+  }
+  .facts dd {
+    margin: 0;
+    color: var(--vt-color-text);
+  }
+</style>
+
+<script>
+  import { tokenFromPath, fetchInfo, cancelBooking, formatWhen, type CancelState } from "../../lib/guestCancel";
+
+  const root = document.getElementById("cancel-root")!;
+  const api = root.dataset.api!;
+  const token = tokenFromPath(location.pathname);
+  const $ = (id: string) => document.getElementById(id)!;
+  const confirmBtn = $("c-confirm") as HTMLButtonElement;
+  const label = confirmBtn.querySelector<HTMLElement>(".lbl")!;
+  const show = (s: "loading" | CancelState) => {
+    for (const el of root.querySelectorAll<HTMLElement>(".state")) el.hidden = el.id !== `st-${s}`;
+    const title = $("cancel-title");
+    if (s !== "loading") {
+      title.textContent = root.dataset[`h${s[0]!.toUpperCase()}${s.slice(1)}`] ?? title.textContent;
+      title.focus();
+    }
+  };
+  const ctl = () => {
+    const c = new AbortController();
+    setTimeout(() => c.abort(), 15_000);
+    return c.signal;
+  };
+
+  async function load() {
+    if (!token) return show("notfound");
+    show("loading");
+    const { state, info } = await fetchInfo(api, token, ctl());
+    if (info && state === "confirm") {
+      $("c-master").textContent = info.masterName;
+      $("c-service").textContent = info.serviceName;
+      $("c-when").textContent = formatWhen(info.startsAt);
+      $("c-until").textContent = (root.dataset.until ?? "").replace("{time}", formatWhen(info.windowClosesAt));
+    }
+    show(state);
+  }
+
+  confirmBtn.addEventListener("click", async () => {
+    if (!token || confirmBtn.disabled) return;
+    confirmBtn.disabled = true;
+    confirmBtn.setAttribute("aria-busy", "true");
+    label.textContent = root.dataset.cancelling ?? "";
+    const state = await cancelBooking(api, token, ctl());
+    confirmBtn.disabled = false;
+    confirmBtn.removeAttribute("aria-busy");
+    label.textContent = root.dataset.confirm ?? "";
+    show(state);
+  });
+  $("c-retry").addEventListener("click", load);
+  load();
+</script>

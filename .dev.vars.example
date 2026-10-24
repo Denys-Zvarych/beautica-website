@@ -1,0 +1,7 @@
+# Local dev (`astro dev`, `wrangler dev`): copy to .dev.vars (git-ignored). Never commit real values.
+# Public values only; the Worker key is optional locally (the local backend does not need it).
+API_ORIGIN=http://localhost:8080
+# Cloudflare's always-pass test site key (the local backend has Turnstile off and ignores the token).
+TURNSTILE_SITE_KEY=1x00000000000000000000AA
+# Optional, secret: same value as BOOKING_INFO_WORKER_KEY on the backend (>= 32 chars). Never commit the real one.
+BOOKING_INFO_WORKER_KEY=

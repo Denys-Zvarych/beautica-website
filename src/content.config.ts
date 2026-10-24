@@ -76,8 +76,8 @@ const legal = defineCollection({
     metaTitle: z.string(),
     description: z.string(),
     version: z.string(),
-    /** ISO date the current version takes effect ("Дата набрання чинності"). */
-    updated: z.coerce.date(),
+    /** ISO date the current version takes effect ("Дата набрання чинності"); an optional ".N" revision suffix is dropped for display. */
+    updated: z.string().regex(/^\d{4}-\d{2}-\d{2}(\.\d{1,3})?$/).transform((s) => new Date(s.slice(0, 10))), // YYYY-MM-DD[.N]: the policy version the guest consent records
     locale: z.enum(["uk"]),
   }),
 });

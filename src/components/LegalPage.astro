@@ -20,10 +20,12 @@ interface Props {
   /** Markdown headings from render(); only depth 2 enter the table of contents. */
   headings: { depth: number; slug: string; text: string }[];
   /** Optional primary action under the title (e.g. a prefilled mailto). */
+  /** Label for the date line; defaults to the policy wording «Дата набрання чинності». */
+  dateLabel?: string;
   cta?: { href: string; label: string; icon?: IconName; id?: string };
 }
 
-const { title, metaTitle, description, version, updated, path, headings, cta } = Astro.props;
+const { title, metaTitle, description, version, updated, path, headings, cta, dateLabel = t("legal.effective") } = Astro.props;
 const toc = headings.filter((h) => h.depth === 2);
 const site = Astro.site as URL;
 const effective = updated.toLocaleDateString("uk-UA", { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" });
@@ -39,7 +41,8 @@ const jsonLd = breadcrumbList([
       <header class="intro">
         <h1 class="vt-display">{title}</h1>
         <p class="vt-label meta">
-          {t("legal.version", { version })} · {t("legal.effective")}: <time datetime={updated.toISOString().slice(0, 10)}>{effective}</time>
+          <span>{t("legal.version", { version })}</span>
+          <span>{dateLabel}: <time datetime={updated.toISOString().slice(0, 10)}>{effective}</time></span>
         </p>
         {cta && <CtaButton class="intro-cta" href={cta.href} icon={cta.icon} id={cta.id}>{cta.label}</CtaButton>}
       </header>
@@ -85,6 +88,11 @@ const jsonLd = breadcrumbList([
     display: flex;
     flex-direction: column;
     gap: var(--vt-space-sm);
+  }
+  /* Version and date on their own lines: one line in the fallback face must not become two in Nunito (CLS). */
+  .meta {
+    display: flex;
+    flex-direction: column;
   }
   .intro :global(.intro-cta) {
     align-self: flex-start;

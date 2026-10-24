@@ -1,0 +1,358 @@
+---
+// The guest booking flow (mirrors the app's booking screens + two web-only steps: phone/name with consent, SMS code).
+// Server-rendered, hidden skeleton; the island (src/scripts/booking) shows one screen at a time and fills the dynamic parts.
+// Steps: services -> date -> time -> contact -> otp -> confirm -> done. The URL never changes (history.state keeps the step).
+// Salon mode (`salon` prop, phase 016, the app's client salon flow): services (whole catalogue) -> masters (assign each service to ONE master) ->
+// date + time once per chosen master -> contact -> otp (once) -> confirm (one card per master, no grand total) -> done (one booking per master).
+import CtaButton from "../CtaButton.astro";
+import NeuCard from "../NeuCard.astro";
+import Icon from "../Icon.astro";
+import SlotChip from "../SlotChip.astro";
+import BookTopBar from "./BookTopBar.astro";
+import MasterStrip from "./MasterStrip.astro";
+import ServiceTile from "./ServiceTile.astro";
+import CategoryGroup from "./CategoryGroup.astro";
+import { t } from "../../i18n/t";
+import { safeJson } from "../../lib/safeJson";
+import { formatDuration, formatPriceFrom, groupByCategory } from "../../lib/booking/format";
+import type { MasterInfo } from "../../lib/booking/types";
+
+interface Props {
+  /** The master being booked (master link). Exactly one of `info` / `salon`. */
+  info?: MasterInfo;
+  /** Salon mode (phase 016): the wizard skeleton. The services, strips and coverage are not in this markup: the island builds them from
+   *  GET /book/s/{slug}/info when the visitor opens the wizard, so the salon page itself carries none of it. */
+  salon?: boolean;
+}
+const { info, salon } = Astro.props;
+const total = 4;
+const stepNo = (n: number) => t("book.salonFlow.step", { current: n, total });
+// Strings the island needs (everything else is in the server HTML). Escaped for a JSON data block.
+const js = {
+  chooseAtLeast: t("book.services.chooseAtLeast"), shelfTitle: t("book.services.shelfTitle"), total: t("book.services.total"), remove: t("book.services.remove", { name: "{name}" }),
+  booking: t("book.time.booking"), morning: t("book.time.morning"), day: t("book.time.day"), evening: t("book.time.evening"), selected: t("book.date.selected"),
+  required: t("book.contact.required"), phoneErr: t("book.contact.phoneErr"), turnstileErr: t("book.contact.turnstileErr"), turnstileLoadErr: t("book.contact.turnstileLoadErr"),
+  wait: t("book.otp.wait", { sec: "{sec}" }),
+  salonLabel: t("book.confirm.salon"), cityLabel: t("book.confirm.city"), dateLabel: t("book.confirm.date"), timeLabel: t("book.confirm.time"), servicesLabel: t("book.confirm.services"), totalLabel: t("book.confirm.total"),
+  invalid: t("book.confirm.invalid"), limit: t("book.confirm.limit"), unavailable: t("book.confirm.unavailable", { email: "{email}" }), error: t("book.confirm.error"), supportEmail: t("site.supportEmail"),
+  uncertain: t("book.salonFlow.confirm.uncertain", { master: "{master}" }), retry: t("book.salonFlow.confirm.retry"),
+  calendar: t("book.done.calendar"), cap: t("book.salonFlow.services.cap", { count: 10 }), counter: t("book.confirm.counter", { n: "{n}", max: 500 }), addressLabel: t("book.confirm.address"), commentRow: t("book.confirm.commentRow"), icsSummary: t("book.ics.summary", { master: "{master}" }), icsDescription: t("book.ics.description", { services: "{services}" }), icsCancel: t("book.ics.cancel", { url: "{url}" }),
+};
+const sf = salon
+  ? {
+      next: t("book.next"), timeCta: t("book.time.cta"), chooseMaster: t("book.salonFlow.masters.chooseMaster"), uncovered: t("book.salonFlow.masters.uncovered", { service: "{service}" }),
+      resolverHint: t("book.salonFlow.masters.resolverHint"), allAssigned: t("book.salonFlow.masters.allAssigned"), partialAssigned: t("book.salonFlow.masters.partialAssigned"),
+      progress: t("book.salonFlow.masters.progress", { assigned: "{assigned}", total: "{total}" }), groupingEmpty: t("book.salonFlow.masters.groupingEmpty"), pagerCounter: t("book.salonFlow.time.counter", { current: "{current}", count: "{count}" }),
+      booked: t("book.salonFlow.confirm.booked"), changeTime: t("book.salonFlow.confirm.changeTime"), sending: t("book.salonFlow.confirm.sending"), cta: t("book.confirm.cta"),
+      partial: t("book.salonFlow.confirm.partial", { n: "{n}" }), failedFor: t("book.salonFlow.confirm.failedFor", { master: "{master}" }), doneOne: t("book.salonFlow.done.one", { master: "{master}" }), conflict: t("book.time.conflict"),
+      mastersToggle: t("book.salonFlow.masters.toggle", { name: "{name}", covered: "{covered}" }),
+    }
+  : {};
+const jsJson = safeJson({ ...js, ...sf });
+// Master link: the master's services grouped by category. Salon: the island fills the catalogue from the salon info (templates below).
+const groups = info ? groupByCategory(info.services, info.categories, t("book.master.otherServices")).map((g) => ({ ...g, items: g.items.map((s) => ({ id: s.id, name: s.name, durationMinutes: s.durationMinutes, priceFrom: s.priceFrom, price: formatPriceFrom(s.priceFrom) })) })) : [];
+const strip = info ? { name: info.masterName, subtitle: info.professionalTitle, avatarUrl: info.avatarUrl, rating: info.avgRating, reviewCount: info.reviewCount, salonMaster: !!info.salon } : null;
+---
+
+<section class="screen" data-screen="services" hidden>
+  <BookTopBar title={salon ? t("book.salonFlow.services.title") : t("book.services.title")} heading />
+  <div class="body">
+    <div class="pad-h pt-md">
+      {salon && <p class="stepno t-fb muted">{stepNo(1)}</p>}
+      <p class="t-body11">{salon ? t("book.salonFlow.services.intro") : t("book.services.intro")}</p>
+      <div class="g-lg"></div>
+      {strip && <MasterStrip {...strip} />}
+      {strip && <div class="g-xl"></div>}
+      {salon && <div class="errcard mb-md" role="alert" id="svc-load-error" hidden><Icon name="error-outline" /><span class="t-fb err">{t("book.notice.unavailable.text")}</span></div>}
+      <div id="svc-list">
+        {
+          groups.map((g) => (
+            <CategoryGroup name={g.name} categoryKey={g.key || null} count={g.items.length} selectable open={!salon || g === groups[0]}>
+              {g.items.map((s) => <ServiceTile selectable id={s.id} name={s.name} minutes={s.durationMinutes} priceFrom={s.priceFrom} price={s.price} duration={formatDuration(s.durationMinutes)} />)}
+            </CategoryGroup>
+          ))
+        }
+      </div>
+      <div class="g-xxl"></div>
+    </div>
+  </div>
+  <div class="shelf" data-sb="services">
+    <p class="t-fb err capnote" id="cap-note" role="status" hidden></p>
+    <div data-sb-summary></div>
+    <CtaButton type="button" id="cta-services" icon="arrow-forward">{t("book.next")}</CtaButton>
+  </div>
+</section>
+
+{
+  salon && (
+    <section class="screen" data-screen="masters" hidden>
+      <BookTopBar title={t("book.salonFlow.masters.title")} heading />
+      <div class="body">
+        <div class="pad-h pt-md">
+          <p class="stepno t-fb muted">{stepNo(2)}</p>
+          <p class="t-body11">{t("book.salonFlow.masters.intro")}</p>
+          <div class="g-lg"></div>
+          <div class="row">
+            <span class="t-section">{t("book.salonFlow.masters.section")}</span>
+            <span class="sp" />
+            <span class="t-fb muted">{t("book.salonFlow.masters.sectionHint")}</span>
+          </div>
+          <div class="g-sm"></div>
+          <div class="mlist" id="master-list"></div>
+          <div class="g-lg"></div>
+          <NeuCard pad="md">
+            <div class="row">
+              <span class="t-section">{t("book.salonFlow.masters.groupingTitle")}</span>
+              <span class="sp" />
+              <span class="t-fb muted" id="plan-count" />
+            </div>
+            <p class="t-fb muted plan-sub">{t("book.salonFlow.masters.groupingSubtitle")}</p>
+            <div class="g-md"></div>
+            <div id="plan"></div>
+          </NeuCard>
+          <div class="g-sm"></div>
+          <p class="t-fb muted centered" id="plan-hint"></p>
+          <div class="g-xxl"></div>
+        </div>
+      </div>
+      <div class="shelf" data-sb="masters">
+        <p class="t-fb muted centered prompt" id="masters-progress"></p>
+        <CtaButton type="button" id="cta-masters" icon="arrow-forward">{t("book.next")}</CtaButton>
+      </div>
+    </section>
+  )
+}
+
+<section class="screen" data-screen="date" hidden>
+  <BookTopBar title={salon ? t("book.salonFlow.time.title") : t("book.date.title")} heading />
+  <div class="body">
+    <div class="pad-h pt-md">
+      {salon && <p class="stepno t-fb muted">{stepNo(3)}</p>}
+      {
+        salon && (
+          <div class="mpager" data-mpager hidden>
+            <button type="button" class="chevbtn" data-mprev aria-label={t("book.salonFlow.time.prev")}><Icon name="chevron-left" /></button>
+            <span class="t-sub12 mcount" data-mcount aria-live="polite"></span>
+            <button type="button" class="chevbtn" data-mnext aria-label={t("book.salonFlow.time.next")}><Icon name="chevron-right" /></button>
+          </div>
+        )
+      }
+      {strip ? <MasterStrip {...strip} /> : <div data-strip></div>}
+    </div>
+    <div class="g-lg"></div>
+    <div class="wk" id="wk" aria-hidden="true"></div>
+    <div class="cal">
+      <div class="cal-head">
+        <button type="button" class="chevbtn" id="prev" aria-label={t("book.date.prev")}><Icon name="chevron-left" /></button>
+        <span class="t-title" id="month" aria-live="polite"></span>
+        <button type="button" class="chevbtn" id="next" aria-label={t("book.date.next")}><Icon name="chevron-right" /></button>
+      </div>
+      <div class="g-sm"></div>
+      <div class="cal-grid" id="grid" role="group" aria-label={t("book.date.calendar")}></div>
+    </div>
+  </div>
+  <div class="shelf" data-sb="date">
+    <div data-sb-summary></div>
+    <CtaButton type="button" id="cta-date" icon="arrow-forward">{t("book.next")}</CtaButton>
+  </div>
+</section>
+
+<section class="screen" data-screen="time" hidden>
+  <BookTopBar title={t("book.time.title")} heading />
+  <div class="body">
+    <div class="pad-h pt-md">
+      {salon && <p class="stepno t-fb muted">{stepNo(3)}</p>}
+      {
+        salon && (
+          <div class="mpager" data-mpager hidden>
+            <button type="button" class="chevbtn" data-mprev aria-label={t("book.salonFlow.time.prev")}><Icon name="chevron-left" /></button>
+            <span class="t-sub12 mcount" data-mcount aria-live="polite"></span>
+            <button type="button" class="chevbtn" data-mnext aria-label={t("book.salonFlow.time.next")}><Icon name="chevron-right" /></button>
+          </div>
+        )
+      }
+      {strip ? <MasterStrip {...strip} /> : <div data-strip></div>}
+      <div class="g-lg"></div>
+      <h2 class="t-sub13">{t("book.time.free")}</h2>
+      <div class="g-md"></div>
+      <div class="errcard mb-md" role="alert" id="time-conflict" hidden><Icon name="error-outline" /><span class="t-fb err">{t("book.time.conflict")}</span></div>
+      <div class="errcard mb-md" role="alert" id="time-error" hidden><Icon name="error-outline" /><span class="t-fb err">{t("book.time.error")}</span></div>
+      <p class="t-body" id="time-loading" role="status" hidden>{t("book.time.loading")}</p>
+      <div id="slots"></div>
+      <div class="empty-state" id="time-empty" hidden>
+        <Icon name="event-busy" />
+        <p class="t-strong">{t("book.time.emptyTitle")}</p>
+        <p class="t-body">{t("book.time.emptyText")}</p>
+        <CtaButton type="button" id="time-change" icon="edit-calendar">{t("book.time.change")}</CtaButton>
+      </div>
+      <div class="g-md"></div>
+    </div>
+  </div>
+  <div class="shelf" data-sb="time">
+    <div data-sb-summary></div>
+    <CtaButton type="button" id="cta-time" icon="check-circle" spinner={!!salon}>{t("book.time.cta")}</CtaButton>
+  </div>
+  <template id="tpl-slot"><SlotChip time="" /></template>
+</section>
+
+<section class="screen" data-screen="contact" hidden>
+  <BookTopBar title={t("book.contact.title")} heading />
+  <div class="body">
+    <div class="pad-h pt-lg pb-lg">
+      <div class="g-xs"></div>
+      <h2 class="t-sub15">{t("book.contact.h")}</h2>
+      <div class="g-xs"></div>
+      <p class="t-body">{t("book.contact.text")}</p>
+      <div class="g-lg"></div>
+      <form id="contact-form" novalidate class="stack form-stack">
+        <div class="field" id="f-name">
+          <label class="flabel t-label" for="name">{t("book.contact.name")}</label>
+          <div class="box"><Icon name="person-outline" /><input id="name" name="name" type="text" autocomplete="given-name" maxlength="100" placeholder={t("book.contact.namePh")} aria-describedby="e-name" /></div>
+        </div>
+        <div class="field" id="f-surname">
+          <label class="flabel t-label" for="surname">{t("book.contact.surname")}</label>
+          <div class="box"><Icon name="person-outline" /><input id="surname" name="surname" type="text" autocomplete="family-name" maxlength="100" placeholder={t("book.contact.surnamePh")} aria-describedby="e-surname" /></div>
+        </div>
+        <div class="field" id="f-phone">
+          <label class="flabel t-label" for="phone">{t("book.contact.phone")}</label>
+          <div class="box"><Icon name="phone" /><input id="phone" name="phone" type="tel" autocomplete="tel" inputmode="numeric" maxlength="17" placeholder={t("book.contact.phonePh")} aria-describedby="e-phone" /></div>
+        </div>
+        <label class="chk-row" id="f-consent">
+          <input type="checkbox" id="consent" aria-describedby="e-consent" />
+          <span class="chk" aria-hidden="true"><Icon name="done" /></span>
+          <span class="t-body">{t("book.contact.consent")} <a href="/privacy#guest" target="_blank" rel="noopener" class="t-link"><span class="vt-u">{t("book.contact.consentLink")}</span></a></span>
+        </label>
+        <div class="field" id="consent-err" hidden><div class="ferr" id="e-consent" role="alert"><Icon name="error-outline" /><span class="t-fb err">{t("book.contact.consentErr")}</span></div></div>
+        <div class="turn" id="ts-widget" role="group" aria-label={t("book.contact.turnstile")}></div>
+        <div class="field" id="turn-err" hidden><div class="ferr" role="alert"><Icon name="error-outline" /><span class="t-fb err">{t("book.contact.turnstileErr")}</span></div></div>
+        <div class="banner" role="alert" id="cb-limit" hidden><Icon name="error-outline" /><span class="t-fb">{t("book.otp.limit")}</span></div>
+        <div class="banner" role="alert" id="cb-sms" hidden><Icon name="error-outline" /><span class="t-fb">{t("book.otp.sms")} <a href={`mailto:${t("site.supportEmail")}`} class="t-link">{t("site.supportEmail")}</a></span></div>
+        <div class="banner" role="alert" id="cb-error" hidden><Icon name="error-outline" /><span class="t-fb">{t("book.otp.error")}</span></div>
+        <div class="g-md"></div>
+        <div class="block-cta"><CtaButton type="submit" id="cta-contact" icon="arrow-forward" spinner>{t("book.contact.cta")}</CtaButton></div>
+      </form>
+    </div>
+  </div>
+</section>
+
+<section class="screen" data-screen="otp" hidden>
+  <div class="body rel">
+    <button type="button" class="nib back-abs" data-back aria-label={t("book.back")}><Icon name="arrow-back-ios" /></button>
+    <div class="pad-h pt-lg pb-xl">
+      <div class="g-xs"></div>
+      <div class="mail-tile"><Icon name="mail-read" /></div>
+      <div class="g-lg"></div>
+      <h2 class="t-heading centered" data-step-heading tabindex="-1" aria-level="1">{t("book.otp.h")}</h2>
+      <div class="g-sm"></div>
+      <p class="t-body centered">{t("book.otp.text")}<br /><span class="t-strong" id="otp-phone"></span></p>
+      <div class="g-xl"></div>
+      <div class="otp" id="otp" role="group" aria-label={t("book.otp.group")}>
+        {[1, 2, 3, 4, 5, 6].map((n) => <label><input type="text" inputmode="numeric" pattern="[0-9]*" maxlength="1" autocomplete={n === 1 ? "one-time-code" : "off"} aria-label={t("book.otp.digit", { n })} /></label>)}
+      </div>
+      <div class="g-xl"></div>
+      <p class="t-body centered" id="otp-resend">{t("book.otp.noCode")} <span class="t-link wait" id="otp-wait"></span><button type="button" class="link-btn t-link link-hit" id="otp-resend-btn" hidden>{t("book.otp.resend")}</button></p>
+      <div class="g-md"></div>
+      <div class="banner" role="alert" id="otp-wrong" hidden><Icon name="error-outline" /><span class="t-fb">{t("book.otp.wrong")}</span></div>
+      <div class="banner" role="alert" id="otp-limit" hidden><Icon name="error-outline" /><span class="t-fb">{t("book.otp.limit")}</span></div>
+      <div class="banner" role="alert" id="otp-sms" hidden><Icon name="error-outline" /><span class="t-fb">{t("book.otp.sms")} <a href={`mailto:${t("site.supportEmail")}`} class="t-link">{t("site.supportEmail")}</a></span></div>
+      <div class="banner" role="alert" id="otp-session" hidden><Icon name="error-outline" /><span class="t-fb">{t("book.confirm.session")}</span></div>
+      <div class="banner" role="alert" id="otp-error" hidden><Icon name="error-outline" /><span class="t-fb">{t("book.otp.error")}</span></div>
+    </div>
+  </div>
+  <div class="authbottom"><CtaButton type="button" id="cta-otp" spinner>{t("book.otp.cta")}</CtaButton></div>
+</section>
+
+<section class="screen" data-screen="confirm" hidden>
+  <BookTopBar title={salon ? t("book.salonFlow.confirm.title") : t("book.confirm.title")} heading />
+  <div class="body">
+    <div class="pad-h pt-md pb-md">
+      {salon && <p class="stepno t-fb muted">{stepNo(4)}</p>}
+      <NeuCard bordered pad="md" class="mb-md">
+        <div class="lrow"><span class="lbl t-label">{t("book.confirm.client")}</span><span class="val t-value-12" id="c-name"></span><span class="det t-fb muted w600" id="c-phone"></span></div>
+      </NeuCard>
+      {
+        salon ? (
+          <>
+            <NeuCard bordered pad="md" class="mb-md"><div id="salon-addr"></div></NeuCard>
+            <div class="appts" id="salon-cards"></div>
+          </>
+        ) : (
+          <>
+            <MasterStrip {...strip!} />
+            <div class="g-md" />
+            <NeuCard pad="md"><div id="confirm-card"></div></NeuCard>
+            <div class="g-md" />
+            <div>
+              <label class="t-label block-label" for="comment">{t("book.confirm.commentLabel")}</label>
+              <div class="field"><div class="box ta"><textarea id="comment" name="comment" rows="3" maxlength="500" placeholder={t("book.confirm.commentPh")}></textarea></div></div>
+              <div class="counter t-fb muted" id="counter" aria-hidden="true">{t("book.confirm.counter", { n: 0, max: 500 })}</div>
+            </div>
+          </>
+        )
+      }
+      <div class="errcard mt-md" role="alert" id="submit-error" hidden><Icon name="error-outline" /><span class="t-fb err" id="submit-error-text"></span></div>
+    </div>
+  </div>
+  <div class="footer"><CtaButton type="button" id="cta-confirm" icon="check-circle" spinner>{t("book.confirm.cta")}</CtaButton></div>
+</section>
+
+<section class="screen" data-screen="done" hidden>
+  <div class="body pt-lg">
+    <div class="pad-h">
+      <div class="reveal"><div class="medallion"><span><Icon name="done" /></span></div></div>
+      <div class="g-xs"></div>
+      <h2 class="t-heading-lg centered reveal" data-step-heading tabindex="-1" aria-level="1">{t("book.done.h")}</h2>
+      <div class="g-sm"></div>
+      <p class="t-body11 centered reveal">{salon ? t("book.salonFlow.done.sub") : t("book.done.sub")}</p>
+      <div class="g-lg"></div>
+      {salon ? <div class="appts reveal" id="done-list"></div> : <NeuCard bordered pad="sm" class="reveal"><div id="done-card"></div></NeuCard>}
+      <div class="g-md"></div>
+      <NeuCard bordered pad="sm" class="reveal"><p class="t-body11">{t("book.done.cancelRule")}</p></NeuCard>
+      <div class="g-md"></div>
+      {!salon && <div class="stack reveal tight"><a class="cta2" id="done-cancel" href="/" hidden><span class="vt-cta">{t("book.done.cancel")}</span></a></div>}
+      <div class="g-xl"></div>
+    </div>
+  </div>
+</section>
+
+{
+  salon && (
+    <>
+      {/* Cloned per master by the island: the strip, the visit's rows, an own comment (<= 500) and its own status. */}
+      <template id="tpl-appt">
+        <article class="appt" data-appt>
+          <div data-strip></div>
+          <div class="g-sm"></div>
+          <NeuCard bordered pad="md">
+            <div data-appt-body></div>
+            <div class="rule dense"></div>
+            <div data-appt-comment>
+              <label class="t-label block-label" data-appt-label>{t("book.confirm.commentLabel")}</label>
+              <div class="field"><div class="box ta"><textarea rows="3" maxlength="500" placeholder={t("book.confirm.commentPh")} data-appt-text></textarea></div></div>
+              <div class="counter t-fb muted" aria-hidden="true" data-appt-counter>{t("book.confirm.counter", { n: 0, max: 500 })}</div>
+            </div>
+          </NeuCard>
+          <div class="errcard mt-md" role="alert" data-appt-error hidden><Icon name="error-outline" /><span class="t-fb err" data-appt-error-text></span></div>
+          <div class="g-sm"></div>
+          <button type="button" class="cta2" data-appt-change hidden><Icon name="edit-calendar" /><span class="vt-cta">{t("book.salonFlow.confirm.changeTime")}</span></button>
+          <p class="okline t-fb" data-appt-ok hidden><Icon name="check-circle" />{t("book.salonFlow.confirm.booked")}</p>
+        </article>
+      </template>
+      <template id="tpl-done">
+        <article class="appt" data-done>
+          <p class="t-sub13 ellipsis" data-done-title></p>
+          <div class="g-sm"></div>
+          <NeuCard bordered pad="sm"><div data-done-body></div></NeuCard>
+          <div class="g-sm"></div>
+          <a class="cta2" href="/" data-done-cancel hidden><span class="vt-cta">{t("book.done.cancel")}</span></a>
+        </article>
+      </template>
+      {/* The island clones these for the catalogue (a category with its service rows) and for every master strip, then fills the text. */}
+      <template id="tpl-cat"><CategoryGroup name="" count={0} selectable open={false}><slot /></CategoryGroup></template>
+      <template id="tpl-svc"><ServiceTile selectable id="" name="…" minutes={0} priceFrom={0} price="" duration="" /></template>
+      <template id="tpl-strip"><MasterStrip name="" subtitle={null} avatarUrl={null} rating={null} reviewCount={0} salonMaster /></template>
+    </>
+  )
+}
+
+<script type="application/json" id="book-i18n" set:html={jsJson}></script>

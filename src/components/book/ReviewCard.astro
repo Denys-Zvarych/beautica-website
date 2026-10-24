@@ -1,0 +1,27 @@
+---
+// One review (the app's ReviewCard). The author is shown exactly as the API returns it. The booking island builds the same markup
+// for reviews it loads (src/scripts/booking/reviews.ts): keep the two in step.
+import NeuCard from "../NeuCard.astro";
+import Icon from "../Icon.astro";
+import Stars from "./Stars.astro";
+import { t } from "../../i18n/t";
+import { relativeUk } from "../../lib/booking/format";
+import type { ReviewItem } from "../../lib/booking/types";
+interface Props {
+  review: ReviewItem;
+  now?: Date;
+}
+const { review: r, now = new Date() } = Astro.props;
+const idx = (Array.from(r.clientDisplayName).reduce((a, c) => a + c.codePointAt(0)!, 0) % 6) + 1;
+---
+
+<NeuCard as="article" pad="md-plus" class="rev">
+  <div class="head">
+    <span class={`ravatar av-${idx}`} aria-hidden="true"><Icon name="person" /></span>
+    <span class="t-sub12 ellipsis">{r.clientDisplayName}</span>
+    <span class="t-fb muted">{relativeUk(r.createdAt, now)}</span>
+  </div>
+  <Stars rating={r.rating} label={t("book.master.ratingOf", { rating: r.rating })} />
+  {r.comment && <p class="t-strong body-text">{r.comment}</p>}
+  {r.serviceName && <div class="svc"><Icon name="spa" /><span class="t-fb muted w600 ellipsis">{r.serviceName}</span></div>}
+</NeuCard>

@@ -3,9 +3,18 @@ import LogoTile from "../components/LogoTile.astro";
 import Layout from "../components/Layout.astro";
 import Chip from "../components/Chip.astro";
 import { t } from "../i18n/t";
+import { organization, webSite } from "../lib/jsonld";
+
+const site = new URL("/", Astro.site as URL).href;
+// MobileApplication is deliberately absent: add it with the Play listing URL once the app is live.
+// add when live: MobileApplication JSON-LD (downloadUrl = Play listing) in src/lib/jsonld.ts + this page
+const jsonLd = [
+  organization({ name: t("site.name"), url: site, logo: new URL("/icon-192.png", site).href }),
+  webSite({ name: t("site.name"), url: site, inLanguage: "uk" }),
+];
 ---
 
-<Layout title={t("index.metaTitle")} description={t("index.metaDescription")} hideHeader>
+<Layout title={t("index.metaTitle")} description={t("index.metaDescription")} jsonLd={jsonLd} hideHeader>
   <main id="main" class="hero">
     <div class="vt-container stack">
       <LogoTile priority />

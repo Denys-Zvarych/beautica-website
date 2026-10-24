@@ -4,11 +4,17 @@ interface Props {
   /** Heading level semantics are the caller's job; `as` only swaps the wrapper element. */
   as?: "div" | "section" | "article" | "li";
   class?: string;
+  /** NeumorphicCard(color: baseEmphasis): the slightly lighter card. */
+  emphasis?: boolean;
+  /** Hairline border + borderedCard shadow (booking summary cards). */
+  bordered?: boolean;
+  /** Padding step: "md" = 16, "sm" = 12, "md-plus" = 18. Unset = 24 (unchanged). */
+  pad?: "sm" | "md" | "md-plus";
 }
-const { as: Tag = "div", class: className } = Astro.props;
+const { as: Tag = "div", class: className, emphasis = false, bordered = false, pad } = Astro.props;
 ---
 
-<Tag class:list={["neu-card", className]}>
+<Tag class:list={["neu-card", { emphasis, bordered }, pad && `pad-${pad}`, className]}>
   <slot />
 </Tag>
 
@@ -18,5 +24,21 @@ const { as: Tag = "div", class: className } = Astro.props;
     border-radius: var(--vt-radius-card);
     background: var(--vt-color-base);
     box-shadow: var(--vt-shadow-extruded-card);
+  }
+  .emphasis {
+    background: var(--vt-color-base-emphasis);
+  }
+  .bordered {
+    border: var(--vt-app-hair) solid var(--vt-color-faint);
+    box-shadow: var(--vt-shadow-bordered-card);
+  }
+  .pad-md {
+    padding: var(--vt-space-md);
+  }
+  .pad-sm {
+    padding: calc(var(--vt-space-sm) + var(--vt-space-xs));
+  }
+  .pad-md-plus {
+    padding: calc(var(--vt-space-md) + var(--vt-space-xs) / 2);
   }
 </style>

@@ -1,0 +1,8 @@
+---
+// The salon wizard's steps as a static HTML fragment (phase 016): fetched by the booking island when the visitor opens the wizard, so the
+// /book/s/{slug} page itself carries none of this markup. No <html>: the fragment is inserted into the open page. Never indexed (see
+// public/_headers, robots.txt, the sitemap filter).
+import BookingFlow from "../../components/book/BookingFlow.astro";
+---
+
+<BookingFlow salon />
