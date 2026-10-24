@@ -1,0 +1,82 @@
+---
+// Reviews tab body (RatingSummaryCard + sort row + review cards), master and salon. The first view is server-rendered; the script
+// re-sorts and loads more from GET /api/v1/book/{slug|s/slug}/reviews. Without script the sort menu is ?sort= links that re-render
+// page 0 on the server (src/middleware.ts keeps the sort in the edge-cache key).
+import NeuCard from "../NeuCard.astro";
+import Icon from "../Icon.astro";
+import Stars from "./Stars.astro";
+import ReviewCard from "./ReviewCard.astro";
+import { t } from "../../i18n/t";
+import { formatRating, pluralReviews, pluralStars, REVIEW_SORTS, type ReviewSort } from "../../lib/booking/format";
+import type { RatingBucket, ReviewItem } from "../../lib/booking/types";
+
+interface Props {
+  kind: "master" | "salon";
+  slug: string;
+  apiOrigin: string;
+  avg: number | null;
+  count: number;
+  buckets: RatingBucket[];
+  reviews: ReviewItem[];
+  sort: ReviewSort;
+  /** Panel id the sort links return to. */
+  anchor: string;
+}
+const { kind, slug, apiOrigin, avg, count, buckets, reviews, sort, anchor } = Astro.props;
+const total = buckets.reduce((a, b) => a + b.count, 0) || count;
+const label = (s: ReviewSort) => t(`book.reviews.${s.toLowerCase()}`);
+const now = new Date();
+---
+
+<div data-reviews data-kind={kind} data-slug={slug} data-api={apiOrigin} data-sort={sort} data-count={count} data-shown={reviews.length} data-rating-label={t("book.master.ratingOf", { rating: "{rating}" })} data-error={t("book.reviews.error")} data-loading={t("book.reviews.loading")}>
+  <NeuCard class="rsum">
+    <div class="left">
+      <span class="t-avg">{formatRating(avg)}</span>
+      {count > 0 && <Stars rating={avg ?? 0} label={t("book.master.ratingOf", { rating: formatRating(avg) })} big />}
+      <span class="t-fb muted">{pluralReviews(count)}</span>
+    </div>
+    <span class="divider" aria-hidden="true"></span>
+    <div class="dist">
+      {
+        buckets.map((b) => (
+          <div class="drow">
+            <span class="t-strong11">{b.rating}</span>
+            <Icon name="star" />
+            <span class="track" role="img" aria-label={`${pluralStars(b.rating)}: ${b.count}`}><span class="fillbar" style={`width: ${total > 0 ? ((b.count / total) * 100).toFixed(1) : "0.0"}%`}></span></span>
+            <span class="cnt t-fb muted">{b.count}</span>
+          </div>
+        ))
+      }
+    </div>
+  </NeuCard>
+  {
+    count > 0 && (
+      <>
+        <div class="g-md"></div>
+        <div class="sortrow">
+          <span class="t-fb muted" data-sort-label aria-live="polite">{label(sort)}</span>
+          <details class="sortmenu" data-sortmenu>
+            <summary class="sortbtn" aria-label={t("book.reviews.sortLabel")}><Icon name="swap-vert" /></summary>
+            <div class="menu" role="group" aria-label={t("book.reviews.sortLabel")}>
+              {REVIEW_SORTS.map((s) => <a href={`?sort=${s}#${anchor}`} data-sort-option={s} aria-current={s === sort ? "true" : undefined}>{label(s)}</a>)}
+            </div>
+          </details>
+        </div>
+        <div class="g-md"></div>
+      </>
+    )
+  }
+  {
+    count === 0 && <p class="t-fb muted centered pad-v">{t("book.master.noReviews")}</p>
+  }
+  {
+    count > 0 && (
+      <div class="list-md" data-review-list>
+        {reviews.map((r) => <ReviewCard review={r} now={now} />)}
+      </div>
+    )
+  }
+  <template data-review-tpl><ReviewCard review={{ id: "t", clientDisplayName: "x", serviceName: "x", rating: 0, comment: "x", createdAt: "" }} /></template>
+  <p class="t-fb muted rev-status" data-rev-status role="status" hidden></p>
+  <button type="button" class="more-reviews t-link" data-more hidden>{t("book.reviews.more")}</button>
+</div>

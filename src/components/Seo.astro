@@ -1,5 +1,6 @@
 ---
 import { locales, defaultLocale, t } from "../i18n/t";
+import { safeJson } from "../lib/safeJson";
 
 interface Props {
   title: string;
@@ -11,6 +12,8 @@ interface Props {
   imageAlt?: string;
   /** noindex,nofollow meta (token routes, 404, 410). The matching header lives in _headers (phase 004). */
   noindex?: boolean;
+  /** Overrides the robots meta content while keeping canonical + OG (e.g. "noindex, follow" for a sorted view of an indexable page). */
+  robots?: string;
   ogType?: string;
   /** summary_large_image for static pages, summary for profiles. */
   twitterCard?: "summary_large_image" | "summary";
@@ -25,6 +28,7 @@ const {
   image = "/og-default.png",
   imageAlt = t("site.name"),
   noindex = false,
+  robots,
   ogType = "website",
   twitterCard = "summary_large_image",
   jsonLd,
@@ -56,7 +60,7 @@ const alternates =
 <title>{title}</title>
 <meta name="description" content={description} />
 {!noindex && <link rel="canonical" href={canonical} />}
-<meta name="robots" content={noindex ? "noindex, nofollow" : "index, follow"} />
+<meta name="robots" content={robots ?? (noindex ? "noindex, nofollow" : "index, follow")} />
 {!noindex && alternates.map((a) => <link rel="alternate" hreflang={a.hreflang} href={a.href} />)}
 {!noindex && alternates.length > 0 && <link rel="alternate" hreflang="x-default" href={alternates[0]!.href} />}
 
@@ -80,4 +84,4 @@ const alternates =
   )
 }
 
-{ldBlocks.map((block) => <script type="application/ld+json" set:html={JSON.stringify(block)} />)}
+{ldBlocks.map((block) => <script type="application/ld+json" set:html={safeJson(block)} />)}

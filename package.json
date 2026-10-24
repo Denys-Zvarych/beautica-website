@@ -15,7 +15,13 @@
     "check:responsive": "node scripts/check-responsive.mjs",
     "check:claims": "node scripts/check-claims.mjs",
     "list:not-live": "node scripts/list-not-live.mjs",
-    "check:cls": "node scripts/measure-cls.mjs"
+    "check:cls": "node scripts/measure-cls.mjs",
+    "test": "node scripts/run-tests.mjs",
+    "test:static": "node --test --test-reporter=spec tests/static-build.test.mjs",
+    "test:contract": "node --test --test-reporter=spec tests/contract-booking-api.test.mjs tests/claims-pins.test.mjs tests/booking-config.test.mjs tests/ci-wiring.test.mjs",
+    "check:cls:ci": "node scripts/measure-cls.mjs --runs 1 --routes /,/privacy,/delete-account,/l/cancel",
+    "check:lighthouse": "lhci autorun",
+    "check:lighthouse-ssr": "node scripts/lighthouse-ssr.mjs"
   },
   "dependencies": {
     "@astrojs/cloudflare": "14.3.4",
@@ -26,6 +32,7 @@
   },
   "devDependencies": {
     "@astrojs/check": "0.9.10",
+    "@lhci/cli": "0.15.1",
     "html-validate": "11.16.4",
     "playwright-core": "1.64.1",
     "sharp": "0.35.5",
@@ -33,6 +40,9 @@
     "wrangler": "4.151.2"
   },
   "overrides": {
-    "sharp": "0.35.5"
+    "sharp": "0.35.5",
+    "miniflare": {
+      "undici": "7.30.1"
+    }
   }
 }

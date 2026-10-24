@@ -9,9 +9,11 @@ interface Props {
   size?: "hero" | "header" | "fill";
   /** Hero logo is the LCP candidate on `/`: eager + high priority. */
   priority?: boolean;
+  /** Above the fold but not the LCP candidate (header tile, 404): eager load without fetchpriority. */
+  eager?: boolean;
   class?: string;
 }
-const { size = "hero", priority = false, class: className } = Astro.props;
+const { size = "hero", priority = false, eager = false, class: className } = Astro.props;
 const px = size === "header" ? 40 : 117; // HTML intrinsic hints only; rendered size comes from the tokens below
 ---
 
@@ -24,7 +26,7 @@ const px = size === "header" ? 40 : 117; // HTML intrinsic hints only; rendered 
     widths={[px, px * 2]}
     sizes={`${px}px`}
     format="webp"
-    loading={priority ? "eager" : undefined}
+    loading={priority || eager ? "eager" : undefined}
     fetchpriority={priority ? "high" : undefined}
   />
 </span>

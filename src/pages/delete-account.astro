@@ -11,7 +11,7 @@ const { Content, headings } = await render(entry);
 const mailto = `mailto:${PRIVACY_EMAIL}?subject=${encodeURIComponent(t("deleteAccount.mailSubject"))}&body=${encodeURIComponent(t("deleteAccount.mailBody"))}`;
 ---
 
-<LegalPage {...entry.data} path="/delete-account" headings={headings} cta={{ href: mailto, label: t("deleteAccount.cta"), icon: "mail", id: "delete-request-open" }}>
+<LegalPage {...entry.data} path="/delete-account" dateLabel={t("legal.updated")} headings={headings} cta={{ href: mailto, label: t("deleteAccount.cta"), icon: "mail", id: "delete-request-open" }}>
   <Content />
   <DeleteRequestForm />
 </LegalPage>

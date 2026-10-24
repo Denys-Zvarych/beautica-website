@@ -64,7 +64,7 @@ for (const route of ROUTES) {
       if (a.row && b.row && a.h >= 48 && b.h >= 48 && Math.max(gapX, gapY) >= 0) continue;
       if (Math.max(gapX, gapY) < 8) problems.push(`${tag}: targets ${a.tag} and ${b.tag} are < 8 px apart`);
     }
-    if (SHOTS && width !== 320) await page.screenshot({ path: join(SHOTS, `${route === "/" ? "index" : route.slice(1)}-${width}.png`), fullPage: true });
+    if (SHOTS && width !== 320) await page.screenshot({ path: join(SHOTS, `${route === "/" ? "index" : route.slice(1).replace(/\//g, "-")}-${width}.png`), fullPage: true });
     console.log(`${tag}: scrollWidth ${r.scrollWidth} <= ${r.innerWidth}, ${r.targets.length} targets`);
     await page.close();
   }

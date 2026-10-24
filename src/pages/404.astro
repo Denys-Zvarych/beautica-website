@@ -7,7 +7,7 @@ import { t } from "../i18n/t";
 ---
 
 <Layout title={t("notFound.metaTitle")} description={t("notFound.metaDescription")} noindex>
-  <main id="main" class="wrap">
+  <main id="main" class="wrap" data-motion-root>
     <div class="pebbles" aria-hidden="true">
       <span class="pebble p1"></span>
       <span class="pebble p2"></span>
@@ -17,7 +17,7 @@ import { t } from "../i18n/t";
       <NeuCard class="card">
         <div class="digits" aria-hidden="true">
           <span class="digit d1">4</span>
-          <span class="zero"><span class="float"><LogoTile size="fill" /></span></span>
+          <span class="zero"><span class="float"><LogoTile size="fill" eager /></span></span>
           <span class="digit d2">4</span>
         </div>
         <h1 class="vt-heading">{t("notFound.h1")}</h1>
@@ -47,7 +47,6 @@ import { t } from "../i18n/t";
     padding-block: var(--vt-space-xl);
     text-align: center;
     position: relative;
-    animation: rise 400ms ease-out both;
   }
   .digits {
     display: flex;
@@ -136,6 +135,12 @@ import { t } from "../i18n/t";
     animation-duration: 15s;
     animation-delay: -3s;
   }
+  /* Off-screen: the infinite loops stop (set by the observer below). */
+  .wrap[data-offscreen] .float,
+  .wrap[data-offscreen] .float::before,
+  .wrap[data-offscreen] .pebble {
+    animation-play-state: paused;
+  }
   .stage {
     position: relative;
   }
@@ -148,13 +153,7 @@ import { t } from "../i18n/t";
     padding-inline: var(--vt-space-md);
     color: var(--vt-color-accent-deep);
   }
-  /* transform/opacity only. The global reduced-motion rule removes every animation: everything rests visible. */
-  @keyframes rise {
-    from {
-      opacity: 0;
-      transform: translateY(var(--vt-space-md));
-    }
-  }
+  /* The card itself never animates: H1, text and button are LCP candidates. transform/opacity only. The global reduced-motion rule removes every animation: everything rests visible. */
   @keyframes drop {
     0% {
       opacity: 0;
@@ -204,3 +203,13 @@ import { t } from "../i18n/t";
     }
   }
 </style>
+
+<script>
+  // Pause the infinite float/breathe/drift loops while the page is scrolled out of view (no work off-screen).
+  const root = document.querySelector<HTMLElement>("[data-motion-root]");
+  if (root && "IntersectionObserver" in window) {
+    new IntersectionObserver(([e]) => {
+      root.toggleAttribute("data-offscreen", !e.isIntersecting);
+    }).observe(root);
+  }
+</script>

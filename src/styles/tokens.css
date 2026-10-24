@@ -26,6 +26,7 @@
   --vt-color-shadow-light: #FFFBF4; /* @src BrandColors.shadowLightStrong */
   --vt-color-shadow-dark-card: #C4B49E; /* @src BrandColors.shadowDarkCard */
   --vt-color-shadow-dark-button: #C0AF98; /* @src BrandColors.shadowDarkButton */
+  --vt-color-weekend: #5F5A55; /* @src BrandColors.weekendMuted */
   --vt-color-error: #B0452F; /* @src BrandColors.error */
   --vt-color-success: #5C7A4A; /* @src BrandColors.success */
 
@@ -95,6 +96,20 @@
   --vt-fw-card-title: 700; /* @src VelvetText._cardTitleStyle.fontWeight */
   --vt-lh-card-title: 1.2; /* @src VelvetText._cardTitleStyle.height */
 
+  --vt-fs-input: 13px; /* @src VelvetText._inputStyle.fontSize */
+  --vt-fw-input: 600; /* @src VelvetText._inputStyle.fontWeight */
+
+  --vt-fs-display-name: 19px; /* @src VelvetText._displayNameStyle.fontSize */
+  --vt-fw-display-name: 700; /* @src VelvetText._displayNameStyle.fontWeight */
+  --vt-lh-display-name: 1.2; /* @src VelvetText._displayNameStyle.height */
+
+  --vt-ls-section: 0.4px; /* @src VelvetText._sectionLabelStyle.letterSpacing */
+  --vt-fw-section: 600; /* @src VelvetText._sectionLabelStyle.fontWeight */
+
+  --vt-fs-stat-value: 17px; /* @src VelvetText._statValueStyle.fontSize */
+  --vt-fw-stat-value: 700; /* @src VelvetText._statValueStyle.fontWeight */
+  --vt-ls-stat-caption: 0.3px; /* @src VelvetText._statCaptionStyle.letterSpacing */
+
   --vt-fs-pill: 11px; /* @src VelvetText._pillStyle.fontSize */
   --vt-fw-pill: 800; /* @src VelvetText._pillStyle.fontWeight */
   --vt-ls-pill: 0.2px; /* @src VelvetText._pillStyle.letterSpacing */
@@ -121,10 +136,123 @@
   --vt-dur-base: 280ms;
   --vt-ease: cubic-bezier(0.22, 1, 0.36, 1);
   --vt-lift: 2px;
-}
 
-@media (min-width: 1024px) {
-  :root {
-    --vt-fs-display: 40px;
-  }
+  /* --- App widget values (--vt-app-*, allow-listed): copied from beautica-mobile WIDGET code, not the three theme files, so the
+     checker cannot diff them. Used only by the booking-link pages (src/styles/book.css). Source symbol per token:
+     --vt-app-col: app's only max-width constant (dialogs): the app is phone-only, wide screens centre one column
+     --vt-app-hair: hairline borders and rules
+     --vt-app-avatar: ProfileAvatar.kDiameter
+     --vt-app-stat-radius: StatTile (VelvetRadii.field + 2)
+     --vt-app-tab-line-w: ProfileTabBar._ProfileTab
+     --vt-app-tile: PortfolioTile.size
+     --vt-app-check: CatalogueCheckControl._size
+     --vt-app-slot-w: slot_picker_screen _group SizedBox(width: 74)
+     --vt-app-slot-face: SlotChip._height
+     --vt-app-cal-row: kCalendarRowHeight
+     --vt-app-cal-badge: kCalendarDayBadgeSize
+     --vt-app-otp-w: OtpCodeField._OtpCell maxWidth
+     --vt-app-otp-h: OtpCodeField._OtpCell height
+     --vt-app-master-card-h: kSalonMasterCardHeight
+     --vt-app-master-avatar: salon_master_card _kAvatarDiameter
+     --vt-app-salon-logo: _SalonHeroCard._logoDiameter
+     --vt-app-cover-h: _PublicSalonProfileScreenState._coverHeight
+     --vt-app-cover-overlap: _CoverAndHero._cardCoverOverlap
+     --vt-app-review-avatar: ReviewAvatar
+     --vt-app-strip-disc: MasterAvatarBadge
+     --vt-app-contact-well: ContactTile well
+     --vt-app-chev-btn: MonthCalendar chevron button
+     --vt-app-sort-btn: review sort button
+     --vt-app-medallion: SuccessLottieBadge box
+     --vt-app-medallion-disc: SuccessLottieBadge final frame disc
+     --vt-app-mail-tile: verification_screen mail tile
+     --vt-app-empty-box: empty-state tile
+     --vt-app-shelf-list-h: SelectedServicesShelf max height
+     --vt-app-icon-12: Icon sizes used in the widgets (Icon(size:))
+     --vt-app-icon-44-avatar: ProfileAvatar placeholder (0.42 * 104)
+     --vt-app-fs-115: VelvetText.bodyStrong145
+     --vt-app-fs-125: VelvetText.bookAccentBold155
+     --vt-app-fs-15: VelvetText.subheadingWizard15
+     --vt-app-fs-23: VelvetText.headingLg
+     --vt-app-fs-30: SalonLogo monogram (diameter * 0.44)
+     --vt-app-fs-43: VelvetText.salonReviewAverage
+     --vt-app-shadow-inset: NeumorphicInset._InsetShadowPainter
+     --vt-app-shadow-shelf: _BookingShelf boxShadow
+     --vt-app-shadow-footer: BookingCtaFooter boxShadow
+     --vt-app-shadow-check: CatalogueCheckControl
+     --vt-app-shadow-cover-btn: _CoverIconButton
+     --vt-app-grad-avatar-1: MasterAvatarBadge palette
+     --vt-app-grad-avatar-2: MasterAvatarBadge palette
+     --vt-app-grad-avatar-3: MasterAvatarBadge palette
+     --vt-app-grad-avatar-4: MasterAvatarBadge palette
+     --vt-app-grad-avatar-5: MasterAvatarBadge palette
+     --vt-app-grad-avatar-6: MasterAvatarBadge palette
+     --vt-app-grad-logo: SalonLogo monogram
+     --vt-app-grad-cover: salon cover placeholder
+     --vt-app-color-cover-btn: _CoverIconButton fill
+     (--vt-app-icon-*: Icon(size:) values in those widgets; --vt-app-fs-*: VelvetText copyWith(fontSize:) variants.) --- */
+  --vt-app-col: 420px;
+  --vt-app-hair: 1px;
+  --vt-app-avatar: 104px;
+  --vt-app-stat-radius: 18px;
+  --vt-app-tab-line-w: 44px;
+  --vt-app-tile: 72px;
+  --vt-app-check: 30px;
+  --vt-app-slot-w: 74px;
+  --vt-app-slot-face: 40px;
+  --vt-app-cal-row: 44px;
+  --vt-app-cal-badge: 38px;
+  --vt-app-otp-w: 41px;
+  --vt-app-otp-h: 50px;
+  --vt-app-master-card-h: 190px;
+  --vt-app-master-avatar: 73px;
+  --vt-app-salon-logo: 68px;
+  --vt-app-cover-h: 232px;
+  --vt-app-cover-overlap: 25px;
+  --vt-app-review-avatar: 40px;
+  --vt-app-strip-disc: 52px;
+  --vt-app-contact-well: 40px;
+  --vt-app-chev-btn: 40px;
+  --vt-app-sort-btn: 44px;
+  --vt-app-medallion: 80px;
+  --vt-app-medallion-disc: 52px;
+  --vt-app-mail-tile: 72px;
+  --vt-app-empty-box: 88px;
+  --vt-app-shelf-list-h: 188px;
+  --vt-app-line-2: 2px;
+  --vt-app-line-3: 3px;
+  --vt-app-icon-12: 12px;
+  --vt-app-icon-13: 13px;
+  --vt-app-icon-15: 15px;
+  --vt-app-icon-17: 17px;
+  --vt-app-icon-18: 18px;
+  --vt-app-icon-20: 20px;
+  --vt-app-icon-22: 22px;
+  --vt-app-icon-26: 26px;
+  --vt-app-icon-28: 28px;
+  --vt-app-icon-30: 30px;
+  --vt-app-icon-34: 34px;
+  --vt-app-icon-36: 36px;
+  --vt-app-icon-44: 44px;
+  --vt-app-icon-44-avatar: 43.68px;
+  --vt-app-fs-115: 11.5px;
+  --vt-app-fs-125: 12.5px;
+  --vt-app-fs-15: 15px;
+  --vt-app-fs-23: 23px;
+  --vt-app-fs-30: 30px;
+  --vt-app-fs-43: 43px;
+  --vt-app-shadow-inset: inset 4px 4px 6px -1px #C0AF98, inset -4px -4px 6px -1px #FFFBF4;
+  --vt-app-shadow-shelf: 0 -9px 24px #C4B49E, 0 -1px 3px -1px #FFFBF4;
+  --vt-app-shadow-footer: 0 -8px 20px #C4B49E, 0 -1px 3px -1px #FFFBF4;
+  --vt-app-shadow-check: 2px 2px 5px -1px #8C6A44, -2px -2px 5px -1px #FFFBF4;
+  --vt-app-shadow-cover-btn: 0 4px 12px rgba(106, 74, 40, 0.32);
+  --vt-app-grad-avatar-1: linear-gradient(to bottom right, #D4B896, #8A6840);
+  --vt-app-grad-avatar-2: linear-gradient(to bottom right, #B89A7A, #6A4A28);
+  --vt-app-grad-avatar-3: linear-gradient(to bottom right, #DFC6A8, #B89A7A);
+  --vt-app-grad-avatar-4: linear-gradient(to bottom right, #C8A878, #6A4A28);
+  --vt-app-grad-avatar-5: linear-gradient(to bottom right, #CFB090, #8A6840);
+  --vt-app-grad-avatar-6: linear-gradient(to bottom right, #E0CAAC, #B89A7A);
+  --vt-app-grad-logo: linear-gradient(to bottom right, #D8BE9C, #6A4A28);
+  --vt-app-grad-cover: linear-gradient(to bottom right, #8A6840, #6A4A28, #4A3322);
+  --vt-app-color-cover-btn: rgba(245, 237, 224, 0.86);
+  --vt-app-cta-overlay: linear-gradient(135deg, rgba(255, 255, 255, 0.28), transparent 45%, rgba(0, 0, 0, 0.14));
 }

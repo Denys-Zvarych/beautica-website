@@ -1,0 +1,13 @@
+# Backend email/SMS links -> static shells. Status 200 = rewrite: the address bar keeps the real URL (the page reads the
+# token from it). Workers static assets support this (miniflare/asset-worker handleRedirects, status 200 = proxied).
+/invite/accept /l/invite 200
+/bookings/:id/review /l/review 200
+/bookings/:id /l/booking 200
+/book/cancel/:token /l/cancel 200
+
+# Trailing-slash variants of the same four shapes: a browser navigation to "/x/" would otherwise miss the rules above and get the
+# 404 page (HTTP clients got the platform 301, browsers did not). Redirect to the slash-less URL (query string is kept). 307, not 301: the token must never sit in a permanently cached Location.
+/invite/accept/ /invite/accept 307
+/bookings/:id/review/ /bookings/:id/review 307
+/bookings/:id/ /bookings/:id 307
+/book/cancel/:token/ /book/cancel/:token 307

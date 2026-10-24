@@ -34,3 +34,11 @@ export function formatPhone(raw: string, deleting = false): string {
   if (n.length > 7) out += `-${n.slice(7, 9)}`;
   return out;
 }
+
+/** `+380 50 123 45 67` (the booking form's mask, as the app's field shows it). Empty input stays empty. */
+export function formatPhoneGrouped(raw: string, deleting = false): string {
+  const n = nationalDigits(raw);
+  if (!n) return deleting || !/\d/.test(raw) ? "" : "+380";
+  const parts = [n.slice(0, 2), n.slice(2, 5), n.slice(5, 7), n.slice(7, 9)].filter(Boolean);
+  return `+380 ${parts.join(" ")}`;
+}

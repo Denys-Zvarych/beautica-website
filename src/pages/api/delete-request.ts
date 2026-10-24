@@ -7,6 +7,8 @@ import { buildMessage, validate } from "../../lib/deleteRequest";
 export const prerender = false;
 
 const MAX_BODY = 8 * 1024;
+/** Extra bytes read and thrown away after the cap is crossed, so a client mid-upload still receives the 413 (see readCapped). */
+const DRAIN_LIMIT = 256 * 1024;
 
 interface Bindings {
   DELETION_MAIL: { send(message: unknown): Promise<unknown> };
@@ -47,15 +49,46 @@ export const POST: APIRoute = async ({ request }) => {
   }
 };
 
-/** true = over the limit. A missing or failing limiter counts as "not limited". */
+/** Reads the body through a counting stream: null = more than MAX_BODY bytes (Content-Length can be absent or a lie, e.g. chunked). */
+async function readCapped(request: Request): Promise<Uint8Array | null> {
+  if (!request.body) return new Uint8Array();
+  const reader = request.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    total += value.byteLength;
+    if (total > MAX_BODY) {
+      // Answering while the client is still uploading makes workerd reset the connection, so the 413 body never arrives.
+      // Discard (never buffer) up to DRAIN_LIMIT more bytes so a normal client finishes and reads it, then give up on the rest.
+      while (total <= DRAIN_LIMIT) {
+        const next = await reader.read().catch(() => ({ done: true, value: undefined }));
+        if (next.done) break;
+        total += next.value.byteLength;
+      }
+      await reader.cancel().catch(() => {});
+      return null;
+    }
+    chunks.push(value);
+  }
+  const out = new Uint8Array(total);
+  let at = 0;
+  for (const c of chunks) (out.set(c, at), (at += c.byteLength));
+  return out;
+}
+
+/** true = over the limit. A missing or failing limiter counts as "not limited" (fail-open on purpose: the form must not go down
+ *  with the limiter; the honeypot and the size cap remain). Both paths log the same distinct, PII-free warning. */
 async function checkLimit(b: Partial<Bindings>, ip: string): Promise<boolean> {
   if (!b.DELETION_LIMITER) {
-    console.warn("delete-request: DELETION_LIMITER binding missing, continuing without rate limit");
+    console.warn("delete-request: rate limiter unavailable");
     return false;
   }
   try {
     return !(await b.DELETION_LIMITER.limit({ key: ip })).success;
   } catch (err) {
+    console.warn("delete-request: rate limiter unavailable");
     logError("rate limiter failed, continuing", err);
     return false;
   }
@@ -77,15 +110,22 @@ async function handle(request: Request, wantsJson: boolean): Promise<Response> {
   const ip = request.headers.get("cf-connecting-ip") ?? "unknown";
   // A missing or failing limiter must not take the form down (Turnstile-less, but the honeypot and size cap remain).
   const limited = checkLimit(b, ip);
-  const parsed = request.formData().then(
-    (f) => f,
-    () => null,
+  const bodyRead = readCapped(request).then(
+    (read) => read,
+    () => undefined,
   );
   if (await limited) {
     console.info("delete-request: rate-limited");
     return reply(wantsJson, 429, { ok: false, error: "rate_limited" }, "error");
   }
-  const form = await parsed;
+  const bytes = await bodyRead;
+  if (bytes === null) return reply(wantsJson, 413, { ok: false, error: "too_large" }, "error");
+  const form = bytes
+    ? await new Response(bytes, { headers: { "content-type": request.headers.get("content-type") ?? "" } }).formData().then(
+        (f) => f,
+        () => null,
+      )
+    : null;
   if (!form) return reply(wantsJson, 400, { ok: false, error: "invalid" }, "error");
 
   // Honeypot: bots fill the hidden field. Pretend success, send nothing.

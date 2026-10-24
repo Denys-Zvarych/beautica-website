@@ -1,0 +1,123 @@
+// Typed calls to the public booking API (PublicBookingController + PhoneOtpController). Credential-less fetches with a timeout;
+// every outcome is mapped to a small union, so the UI never inspects status codes. No PII is ever logged.
+export type Fail = "validation" | "unauthorized" | "conflict" | "rate-limited" | "unavailable" | "not-found" | "network" | "error";
+/** `status`: the HTTP status of a failed answer (absent for network / unreadable-body failures). */
+export type Result<T> = { ok: true; data: T } | { ok: false; fail: Fail; status?: number };
+
+export interface Slot {
+  startsAt: string;
+  endsAt: string;
+}
+export interface BookableDay {
+  date: string;
+  /** false = no free time that day for the chosen services (the calendar greys it out). */
+  working: boolean;
+}
+export interface BookingCreated {
+  startsAt: string;
+  masterName: string;
+  serviceName: string;
+  durationMinutes: number;
+  cancelUrl: string | null;
+}
+export interface BookingRequest {
+  serviceIds: string[];
+  startsAt: string;
+  name: string;
+  surname: string;
+  policyVersion: string;
+  /** Optional note for the master (backend phase 385: at most 1000 chars). Omitted when blank. */
+  clientComment?: string;
+}
+
+const TIMEOUT_MS = 15000;
+
+export function failFor(status: number): Fail {
+  if (status === 401 || status === 403) return "unauthorized";
+  if (status === 409) return "conflict";
+  if (status === 429) return "rate-limited";
+  if (status === 404) return "not-found";
+  if (status === 400 || status === 422) return "validation";
+  if (status === 503 || status === 502 || status === 504) return "unavailable";
+  return "error";
+}
+
+async function call<T>(url: string, init: RequestInit, read: (json: unknown) => T | null): Promise<Result<T>> {
+  let res: Response;
+  try {
+    res = await fetch(url, { ...init, credentials: "omit", cache: "no-store", referrerPolicy: "no-referrer", signal: AbortSignal.timeout(TIMEOUT_MS) });
+  } catch {
+    return { ok: false, fail: "network" };
+  }
+  if (!res.ok) return { ok: false, fail: failFor(res.status), status: res.status };
+  let json: unknown = null;
+  try {
+    json = await res.json();
+  } catch {
+    /* an empty body is fine for some endpoints */
+  }
+  const data = read(json);
+  return data === null ? { ok: false, fail: "error" } : { ok: true, data };
+}
+
+const obj = (v: unknown): Record<string, unknown> => (typeof v === "object" && v !== null ? (v as Record<string, unknown>) : {});
+const post = (body: unknown, token?: string): RequestInit => ({
+  method: "POST",
+  headers: { "Content-Type": "application/json", Accept: "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+  body: JSON.stringify(body),
+});
+
+/** `/book/{slug}` for a master link; `/book/s/{slug}/masters/{masterId}` for one master of a salon link (backend 392/393: salon masters have no link of their own). */
+const scope = (api: string, slug: string, masterId?: string): string =>
+  masterId ? `${api}/api/v1/book/s/${encodeURIComponent(slug)}/masters/${encodeURIComponent(masterId)}` : `${api}/api/v1/book/${encodeURIComponent(slug)}`;
+
+export function getAvailability(api: string, slug: string, day: string, serviceIds: string[], masterId?: string): Promise<Result<Slot[]>> {
+  const q = new URLSearchParams({ date: day });
+  for (const id of serviceIds) q.append("serviceId", id);
+  return call(`${scope(api, slug, masterId)}/availability?${q}`, { headers: { Accept: "application/json" } }, (j) =>
+    Array.isArray(j) ? j.flatMap((s) => (typeof obj(s).startsAt === "string" && typeof obj(s).endsAt === "string" ? [{ startsAt: obj(s).startsAt as string, endsAt: obj(s).endsAt as string }] : [])) : null,
+  );
+}
+
+/** GET /book/{slug}/bookable-days (backend 387): per day of [from, to] (inside today ... today+60, Kyiv), whether the chosen services fit. */
+export function getBookableDays(api: string, slug: string, from: string, to: string, serviceIds: string[], masterId?: string): Promise<Result<BookableDay[]>> {
+  const q = new URLSearchParams({ from, to });
+  for (const id of serviceIds) q.append("serviceId", id);
+  return call(`${scope(api, slug, masterId)}/bookable-days?${q}`, { headers: { Accept: "application/json" } }, (j) =>
+    Array.isArray(j) ? j.flatMap((d) => (typeof obj(d).date === "string" && typeof obj(d).working === "boolean" ? [{ date: obj(d).date as string, working: obj(d).working as boolean }] : [])) : null,
+  );
+}
+
+export function sendOtp(api: string, phone: string, policyVersion: string, turnstileToken: string | null): Promise<Result<true>> {
+  return call(`${api}/api/v1/book/otp/send`, post({ phone, privacyAccepted: true, privacyPolicyVersion: policyVersion, ...(turnstileToken ? { turnstileToken } : {}) }), () => true);
+}
+
+export function verifyOtp(api: string, phone: string, code: string): Promise<Result<string>> {
+  return call(`${api}/api/v1/book/otp/verify`, post({ phone, code }), (j) => {
+    const t = obj(obj(j).data).guestToken;
+    return typeof t === "string" && t ? t : null;
+  });
+}
+
+export function createBooking(api: string, slug: string, guestToken: string, b: BookingRequest, masterId?: string): Promise<Result<BookingCreated>> {
+  // The salon route takes `masterServiceIds` always (1-10); the master link keeps `serviceId` for a single service.
+  const ids = b.serviceIds.length === 1 && !masterId ? { serviceId: b.serviceIds[0] } : { masterServiceIds: b.serviceIds };
+  const body = { ...ids, startsAt: b.startsAt, name: b.name, surname: b.surname, privacyAccepted: true, privacyPolicyVersion: b.policyVersion, ...(b.clientComment ? { clientComment: b.clientComment } : {}) };
+  return call(`${scope(api, slug, masterId)}/booking`, post(body, guestToken), (j) => {
+    const o = obj(j);
+    return typeof o.startsAt === "string"
+      ? { startsAt: o.startsAt, masterName: String(o.masterName ?? ""), serviceName: String(o.serviceName ?? ""), durationMinutes: Number(o.durationMinutes ?? 0), cancelUrl: typeof o.cancelUrl === "string" ? o.cancelUrl : null }
+      : null;
+  });
+}
+
+/** The cancel page lives on this site: keep only the `/book/cancel/{uuid}` path of whatever origin the backend put in the URL. */
+export function cancelPath(cancelUrl: string | null): string | null {
+  if (!cancelUrl) return null;
+  try {
+    const p = new URL(cancelUrl, "https://beautica.app").pathname;
+    return /^\/book\/cancel\/[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(p) ? p : null;
+  } catch {
+    return null;
+  }
+}
