@@ -3,13 +3,14 @@
 import { test, describe, before, after } from "node:test";
 import assert from "node:assert/strict";
 import { launch, open } from "./helpers/browser.mjs";
-import { BASE, TOKEN, rawRequest, requireBase } from "./helpers/env.mjs";
+import { BASE, TOKEN, rawRequest, requireBase, uk } from "./helpers/env.mjs";
 import { tokenFromPath } from "../src/lib/guestCancel.ts";
 
 requireBase();
 
 const SHAPES = [
-  { path: `/book/cancel/${TOKEN}`, h1: "Скасування запису" },
+  // The cancel page has one h1 that follows its state (loading, then the state shown): any of its headings proves the page rendered.
+  { path: `/book/cancel/${TOKEN}`, h1: ["Скасування запису", uk.cancel.confirmTitle, uk.cancel.doneTitle, uk.cancel.closedTitle, uk.cancel.notfoundTitle, uk.cancel.errorTitle] },
   { path: `/bookings/${TOKEN}`, h1: "Ваш запис у Beautica" },
   { path: `/bookings/${TOKEN}/review`, h1: "Залиште відгук" },
   { path: "/invite/accept?token=abc123", h1: "Вас запросили до Beautica" },
@@ -35,7 +36,9 @@ describe("trailing slash on token routes", () => {
         const res = await page.goto(BASE + withSlash(path));
         assert.equal(res.status(), 200, "a browser navigation must not hit the 404 page");
         assert.equal(page.url(), BASE + path, "the address bar ends on the slash-less URL (query kept)");
-        assert.equal((await page.locator("h1").innerText()).trim(), h1);
+        assert.equal(await page.locator("h1").count(), 1, "one h1");
+        const got = (await page.locator("h1").innerText()).trim();
+        assert.ok([h1].flat().includes(got), `h1 «${got}»`);
       } finally {
         await context.close();
       }

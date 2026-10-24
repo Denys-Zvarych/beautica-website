@@ -123,7 +123,7 @@ describe("master page without optional data", async () => {
 describe("states that are not a profile", () => {
   const cases = [
     { slug: "closed-aaaa", status: 200, h1: "Ця сторінка більше не працює", cache: "no-store" },
-    { slug: "retired-bbbb", status: 410, h1: "Посилання більше не дійсне", cache: "no-store" },
+    { slug: "retired-bbbb", status: 410, h1: "Посилання на запис більше не активне", cache: "no-store" },
     { slug: "nobody-0000", status: 404, h1: "Сторінку не знайдено", cache: "no-store" },
     { slug: "down-cccc", status: 503, h1: "Сторінка тимчасово недоступна", cache: "no-store", retryAfter: "7" },
     { slug: "limited-dddd", status: 429, h1: "Сторінка тимчасово недоступна", cache: "no-store", retryAfter: "12" },

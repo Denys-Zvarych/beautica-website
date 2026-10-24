@@ -1,14 +1,16 @@
 ---
 // Static shell for the guest cancel link /book/cancel/{token} (200 rewrite in public/_redirects). The token is read from the
 // address bar in the browser and only ever sent to the API; nothing is stored or logged. States are all in the HTML and
-// toggled with `hidden` (the script moves focus to the visible one).
+// toggled with `hidden`. The page has ONE h1 (#cancel-title): «Скасування запису» while loading (and without script), then the heading of the
+// state shown (data-h-*); the script moves focus to it. The static «Скасування запису» is otherwise the <title> only.
 import AppLinkPage from "../../components/AppLinkPage.astro";
 import CtaButton from "../../components/CtaButton.astro";
 import { t } from "../../i18n/t";
 import { API_BASE } from "../../lib/appLinks";
 ---
 
-<AppLinkPage title={t("cancel.metaTitle")} description={t("cancel.metaDescription")} h1={t("cancel.h1")} openInApp={false}>
+<AppLinkPage title={t("cancel.metaTitle")} description={t("cancel.metaDescription")} openInApp={false}>
+  <h1 id="cancel-title" class="vt-heading" tabindex="-1">{t("cancel.h1")}</h1>
   <div
     id="cancel-root"
     class="states"
@@ -16,14 +18,18 @@ import { API_BASE } from "../../lib/appLinks";
     data-until={t("cancel.until", { time: "{time}" })}
     data-confirm={t("cancel.confirm")}
     data-cancelling={t("cancel.cancelling")}
+    data-h-confirm={t("cancel.confirmTitle")}
+    data-h-cancelled={t("cancel.doneTitle")}
+    data-h-closed={t("cancel.closedTitle")}
+    data-h-notfound={t("cancel.notfoundTitle")}
+    data-h-error={t("cancel.errorTitle")}
   >
     <div class="state" id="st-loading" role="status">
       <p class="vt-prose">{t("cancel.loading")}</p>
       <noscript><p class="vt-prose">{t("cancel.noscript")}</p></noscript>
     </div>
 
-    <div class="state" id="st-confirm" tabindex="-1" hidden>
-      <h2 class="vt-card-title">{t("cancel.confirmTitle")}</h2>
+    <div class="state" id="st-confirm" hidden>
       <dl class="facts vt-prose">
         <div><dt>{t("cancel.master")}</dt><dd id="c-master"></dd></div>
         <div><dt>{t("cancel.service")}</dt><dd id="c-service"></dd></div>
@@ -34,23 +40,19 @@ import { API_BASE } from "../../lib/appLinks";
       <p class="vt-body">{t("cancel.changedMind")}</p>
     </div>
 
-    <div class="state" id="st-cancelled" tabindex="-1" hidden>
-      <h2 class="vt-card-title">{t("cancel.doneTitle")}</h2>
+    <div class="state" id="st-cancelled" hidden>
       <p class="vt-prose">{t("cancel.doneText")}</p>
     </div>
 
-    <div class="state" id="st-closed" tabindex="-1" hidden>
-      <h2 class="vt-card-title">{t("cancel.closedTitle")}</h2>
+    <div class="state" id="st-closed" hidden>
       <p class="vt-prose">{t("cancel.closedText")}</p>
     </div>
 
-    <div class="state" id="st-notfound" tabindex="-1" hidden>
-      <h2 class="vt-card-title">{t("cancel.notfoundTitle")}</h2>
+    <div class="state" id="st-notfound" hidden>
       <p class="vt-prose">{t("cancel.notfoundText")}</p>
     </div>
 
-    <div class="state" id="st-error" tabindex="-1" hidden>
-      <h2 class="vt-card-title">{t("cancel.errorTitle")}</h2>
+    <div class="state" id="st-error" hidden>
       <p class="vt-prose">{t("cancel.errorText")}</p>
       <CtaButton type="button" id="c-retry">{t("cancel.retry")}</CtaButton>
     </div>
@@ -66,6 +68,9 @@ import { API_BASE } from "../../lib/appLinks";
     flex-direction: column;
     align-items: center;
     gap: var(--vt-space-md);
+    outline: none;
+  }
+  #cancel-title:focus {
     outline: none;
   }
   .state[hidden] {
@@ -103,7 +108,11 @@ import { API_BASE } from "../../lib/appLinks";
   const label = confirmBtn.querySelector<HTMLElement>(".lbl")!;
   const show = (s: "loading" | CancelState) => {
     for (const el of root.querySelectorAll<HTMLElement>(".state")) el.hidden = el.id !== `st-${s}`;
-    if (s !== "loading") $(`st-${s}`).focus();
+    const title = $("cancel-title");
+    if (s !== "loading") {
+      title.textContent = root.dataset[`h${s[0]!.toUpperCase()}${s.slice(1)}`] ?? title.textContent;
+      title.focus();
+    }
   };
   const ctl = () => {
     const c = new AbortController();

@@ -28,7 +28,7 @@ const [result, sortedReviews] = isValidSlug(slug)
 const site = (Astro.site as URL).origin;
 const home = { href: "/", label: t("book.notice.home") };
 
-type Notice = { title: string; text: string; metaTitle: string; status: number; cta?: { href: string; label: string }; retryAfter?: number };
+type Notice = { title: string; text?: string; metaTitle: string; status: number; cta?: { href: string; label: string }; retryAfter?: number };
 let notice: Notice | null = null;
 if (result.kind === "not-found") notice = { ...pick("notFound"), status: 404, cta: home };
 else if (result.kind === "gone") notice = { ...pick("retired"), status: 410, cta: home }; // BOOKING_LINK_RETIRED: the link was replaced
@@ -37,7 +37,7 @@ else if (result.kind === "unavailable") notice = { ...pick("unavailable"), statu
 else if (!result.data.bookable) notice = { ...pick("unbookable"), status: 200 };
 
 function pick(k: "notFound" | "unbookable" | "unavailable" | "retired") {
-  return { title: t(`book.notice.${k}.title`), text: t(`book.notice.${k}.text`), metaTitle: t(`book.notice.${k}.metaTitle`) };
+  return { title: t(`book.notice.${k}.title`), text: k === "retired" ? undefined : t(`book.notice.${k}.text`), metaTitle: t(`book.notice.${k}.metaTitle`) };
 }
 
 if (notice) noticeResponse(Astro.response, notice.status, notice.retryAfter);

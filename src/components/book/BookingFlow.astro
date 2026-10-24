@@ -309,10 +309,7 @@ const strip = info ? { name: info.masterName, subtitle: info.professionalTitle, 
       <div class="g-md"></div>
       <NeuCard bordered pad="sm" class="reveal"><p class="t-body11">{t("book.done.cancelRule")}</p></NeuCard>
       <div class="g-md"></div>
-      <div class="stack reveal tight">
-        {!salon && <a class="cta2" id="done-cancel" href="/" hidden><span class="vt-cta">{t("book.done.cancel")}</span></a>}
-        <a class="cta2" href="/"><Icon name="home" /><span class="vt-cta">{t("book.done.home")}</span></a>
-      </div>
+      {!salon && <div class="stack reveal tight"><a class="cta2" id="done-cancel" href="/" hidden><span class="vt-cta">{t("book.done.cancel")}</span></a></div>}
       <div class="g-xl"></div>
     </div>
   </div>

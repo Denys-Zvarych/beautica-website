@@ -133,7 +133,11 @@ describe("happy path: one service", () => {
       assert.equal(paint.fill, "none", "a stroke glyph is an outline, not a filled blob");
       assert.notEqual(paint.stroke, "none");
       assert.ok(parseFloat(paint.w) >= 1.5);
-      await page.getByRole("link", { name: "На головну" }).waitFor();
+      // The success screen has no «На головну» button (removed by request): no such text, no bare link to "/" left on it.
+      assert.equal(await page.locator("[data-screen=done]").getByText("На головну").count(), 0);
+      assert.equal(await page.locator("[data-screen=done] a[href='/']:not([hidden])").count(), 0);
+      assert.equal(await page.locator("[data-screen=done] a#done-cancel:not([hidden])").count(), 1, "the cancel link stays");
+      assert.equal(await page.getByRole("button", { name: "Додати в календар" }).count(), 1, "the calendar button stays");
     });
   });
 

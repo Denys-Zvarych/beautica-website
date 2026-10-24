@@ -8,7 +8,8 @@ import BookTopBar from "./BookTopBar.astro";
 interface Props {
   topbar: string;
   title: string;
-  text: string;
+  /** Omitted on the retired-link page: the heading says it all. */
+  text?: string;
   cta?: { href: string; label: string };
 }
 const { topbar, title, text, cta } = Astro.props;
@@ -20,8 +21,8 @@ const { topbar, title, text, cta } = Astro.props;
     <div class="scroll">
       <NeuCard class="notice">
         <h1 class="t-heading">{title}</h1>
-        <div class="g-sm"></div>
-        <p class="t-body">{text}</p>
+        {text && <div class="g-sm"></div>}
+        {text && <p class="t-body">{text}</p>}
         {cta && <CtaButton href={cta.href}>{cta.label}</CtaButton>}
       </NeuCard>
     </div>

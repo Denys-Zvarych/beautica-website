@@ -33,6 +33,15 @@ async function assertOnlyState(page, name) {
   for (const s of ALL_STATES) assert.equal(await page.locator(`#st-${s}`).isVisible(), s === name, `#st-${s} visibility (expected only ${name})`);
 }
 const focusedId = (page) => page.evaluate(() => document.activeElement?.id);
+/** One heading per state (audit): exactly one h1 in the accessibility tree, with the text of the state shown, and the focus is on it. */
+const TITLE = { confirm: () => c.confirmTitle, closed: () => c.closedTitle, notfound: () => c.notfoundTitle, error: () => c.errorTitle, cancelled: () => c.doneTitle };
+async function oneH1(page, st) {
+  const h1 = page.getByRole("heading", { level: 1 });
+  assert.equal(await h1.count(), 1, `${st}: exactly one h1`);
+  assert.equal((await h1.innerText()).trim(), TITLE[st](), `${st}: the h1 is the state's own heading`);
+  assert.equal(await page.getByRole("heading", { level: 2 }).count(), 0, `${st}: no second, stacked title`);
+  assert.equal(await focusedId(page), "cancel-title", `${st}: focus moves to the heading`);
+}
 const expected = (problems, re) => assert.deepEqual(problems.filter((p) => !re.test(p)), [], "unexpected console/page errors");
 
 describe("loading the booking", () => {
@@ -45,7 +54,7 @@ describe("loading the booking", () => {
       assert.match(await page.locator("#c-when").innerText(), /5 березня.*12:00/); // 10:00Z = 12:00 in Europe/Kyiv (winter)
       assert.match(await page.locator("#c-until").innerText(), /^Скасувати можна до 5 березня.*10:00\.$/);
       assert.equal(await page.getByRole("heading", { name: c.confirmTitle }).isVisible(), true);
-      assert.equal(await focusedId(page), "st-confirm", "focus moves to the state heading block");
+      await oneH1(page, "confirm");
       assert.deepEqual(problems, []);
     });
   });
@@ -70,6 +79,8 @@ describe("loading the booking", () => {
       await state("loading").waitFor({ state: "visible" });
       await assertOnlyState(page, "loading");
       assert.equal(await page.getByText(c.loading).isVisible(), true);
+      assert.equal(await page.getByRole("heading", { level: 1 }).count(), 1, "loading: one h1");
+      assert.equal((await page.getByRole("heading", { level: 1 }).innerText()).trim(), c.h1, "loading: the static «Скасування запису»");
       release();
       await state("confirm").waitFor({ state: "visible" });
     });
@@ -82,7 +93,7 @@ describe("loading the booking", () => {
       await assertOnlyState(page, "closed");
       assert.equal(await page.getByRole("heading", { name: c.closedTitle }).isVisible(), true);
       assert.equal(await page.getByText(c.closedText).isVisible(), true);
-      assert.equal(await focusedId(page), "st-closed");
+      await oneH1(page, "closed");
     });
   });
 
@@ -91,7 +102,7 @@ describe("loading the booking", () => {
       await run({ get: () => ({ status }) }, async ({ page, state, problems }) => {
         await state(st).waitFor({ state: "visible" });
         await assertOnlyState(page, st);
-        assert.equal(await focusedId(page), `st-${st}`);
+        await oneH1(page, st);
         expected(problems, /status of \d\d\d/);
       });
     });
@@ -118,7 +129,7 @@ describe("confirming the cancel", () => {
       await state("cancelled").waitFor({ state: "visible" });
       await assertOnlyState(page, "cancelled");
       assert.equal(await page.getByRole("heading", { name: c.doneTitle }).isVisible(), true);
-      assert.equal(await focusedId(page), "st-cancelled");
+      await oneH1(page, "cancelled");
       const posts = calls.filter((x) => x.method === "POST");
       assert.equal(posts.length, 1);
       assert.equal(posts[0].url, API_ORIGIN + API_PATH);

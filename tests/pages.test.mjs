@@ -34,11 +34,17 @@ describe("render probe", () => {
           assert.equal(res.status(), r.status ?? 200);
           const h1 = page.getByRole("heading", { level: 1 });
           assert.equal(await h1.count(), 1);
-          assert.equal((await h1.innerText()).replace(/\s+/g, " ").trim().startsWith(r.h1), true);
+          // The cancel page has ONE h1 whose text is the state's: «Скасування запису» while loading, then the state's own heading (below).
+          if (!r.cancel) assert.equal((await h1.innerText()).replace(/\s+/g, " ").trim().startsWith(r.h1), true);
           assert.ok(await visibleBox(h1), "H1 has no box");
           assert.ok(await visibleBox(page.getByRole("main")), "<main> has no box");
           assert.ok(await visibleBox(page.getByRole("contentinfo")), "footer has no box");
           if (r.cancel) await page.locator("#st-notfound").waitFor({ state: "visible" }); // wait for the fetch to settle, not a sleep
+          if (r.cancel) {
+            assert.equal(await h1.count(), 1);
+            assert.equal((await h1.innerText()).trim(), uk.cancel.notfoundTitle, "the one h1 is the heading of the state shown, no stacked second title");
+            assert.equal(await page.getByRole("heading", { level: 2 }).count(), 0);
+          }
           // Chromium logs the 404 status itself as a console error: that single line is the expected one (the 404 page, the mocked API 404).
           const expected404 = r.status === 404 || r.cancel ? [`console: Failed to load resource: the server responded with a status of 404 (Not Found)`] : [];
           assert.deepEqual(problems, expected404);

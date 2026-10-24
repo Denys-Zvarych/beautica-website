@@ -214,6 +214,8 @@ describe("016: the whole story, one booking per master", () => {
       assert.equal(posts[0].body.privacyAccepted, true);
       assert.equal((await mockLog((e) => e.path.includes("/otp/send"))).filter((e) => e.body.phone === "+380501110001").length, 1, "one code for the whole visit");
       // --- done: each booking has its own cancel link and calendar file
+      assert.equal(await page.locator("[data-screen=done]").getByText("На головну").count(), 0, "no «На головну» on the success screen");
+      assert.equal(await page.locator("[data-screen=done] a[href='/']:not([hidden])").count(), 0, "no link to the home page, only the bookings' own cancel links");
       const done = page.locator("#done-list [data-done]");
       assert.equal(await done.count(), 3, "the salon address card + one per master");
       const hrefs = await page.locator("#done-list a[data-done-cancel]:not([hidden])").evaluateAll((a) => a.map((x) => x.getAttribute("href")));
@@ -810,13 +812,14 @@ describe("audit cycle 3: the uncertain booking survives a reload (sessionStorage
 
 describe("old links: 410 BOOKING_LINK_RETIRED", () => {
   for (const path of ["/book/retired-bbbb", "/book/s/retiredsalon-bbbb"]) {
-    test(`${path}: 410, noindex, the friendly «Посилання більше не дійсне» page with a way home`, async () => {
+    test(`${path}: 410, noindex, the «Посилання на запис більше не активне» page with a way home, no explanatory sentence`, async () => {
       const res = await get(path);
       assert.equal(res.status, 410);
       assert.equal(res.headers["x-robots-tag"], "noindex, nofollow");
       assert.equal(res.headers["cache-control"], "no-store");
-      assert.match(res.body, /<h1[^>]*>Посилання більше не дійсне<\/h1>/);
-      assert.match(res.body, /<title>Посилання більше не дійсне — Beautica<\/title>/);
+      assert.match(res.body, /<h1[^>]*>Посилання на запис більше не активне<\/h1>/);
+      assert.equal(res.body.includes("замінили це посилання") || res.body.includes("більше не дійсне"), false, "the old title and the removed sentence are gone");
+      assert.match(res.body, /<title>Посилання на запис більше не активне — Beautica<\/title>/);
       assert.match(res.body, /href="\/"[^>]*>[\s\S]*?На головну/);
       assert.equal(/application\/ld\+json|rel="canonical"|data-book-root/.test(res.body), false);
     });

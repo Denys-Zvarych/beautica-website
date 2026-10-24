@@ -11,7 +11,8 @@ import { t } from "../i18n/t";
 interface Props {
   title: string;
   description: string;
-  h1: string;
+  /** The page heading. Omitted when the slot brings one h1 per state (the cancel page). */
+  h1?: string;
   text?: string;
   openInApp?: boolean;
 }
@@ -24,7 +25,7 @@ const { title, description, h1, text, openInApp = true } = Astro.props;
     {openInApp && <script is:inline src="/applink-ua.js"></script>}
     <div class="vt-container">
       <NeuCard class="card">
-        <h1 class="vt-heading">{h1}</h1>
+        {h1 && <h1 class="vt-heading">{h1}</h1>}
         {text && <p class="vt-prose">{text}</p>}
         <slot />
         {
