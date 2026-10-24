@@ -119,11 +119,12 @@ jobs:
           echo "::warning::beautica-backend not checkable (private?). DTO contract and claim-number pins NOT verified in CI; run npm run test:contract locally."
           npm run test:contract
 
-  # Flows + endpoint contract + headers/SEO against `wrangler dev` on the built site (scripts/run-tests.mjs starts and stops it),
-  # plus the CLS probe. Runs in parallel with `site`, so it adds no wall-clock time to the PR.
+  # Flows + endpoint contract + headers/SEO against `wrangler dev` on the built site (scripts/run-tests.mjs starts and stops it), plus the CLS probes.
+  # Runs in parallel with `site`, `lighthouse` and `e2e_booking` (the slow browser specs, below): each job stays far from its 20-minute cap
+  # (the single job that held everything was cancelled at its old 12-minute cap).
   e2e:
     runs-on: ubuntu-latest
-    timeout-minutes: 12
+    timeout-minutes: 20
     env:
       CHROMIUM_PATH: /usr/bin/google-chrome
     steps:
@@ -149,15 +150,43 @@ jobs:
         timeout-minutes: 5
         run: node scripts/run-tests.mjs tests/booking-flow.test.mjs
 
-      # The salon wizard (services -> masters -> time per master -> OTP once -> a booking per master) and the services-tab filter: ~2 min on a quiet runner.
-      - name: Tests - salon booking wizard (browser, mock backend)
-        timeout-minutes: 5
-        run: node scripts/run-tests.mjs tests/book-salon-wizard.test.mjs
-
       # Where the Turnstile token, phone, SMS code, guest token and name may go (per request, storage, analytics funnel). ~30 s.
       - name: Tests - guest booking privacy (data flow + analytics funnel)
         timeout-minutes: 5
         run: node scripts/run-tests.mjs tests/booking-privacy.test.mjs
+
+      # Cold-cache layout shift. Lighthouse profile (412 px, lost font preload => reflow) on four representative routes; the late-font
+      # stress profile (360/320 px, fonts delayed) on the home page, the four legal pages and the token shell.
+      - name: CLS probe - Lighthouse-like profile
+        timeout-minutes: 5
+        run: node scripts/measure-cls.mjs --profiles lighthouse --runs 1 --routes /,/privacy,/delete-account,/l/cancel
+      - name: CLS probe - late-font stress profile
+        timeout-minutes: 5
+        run: node scripts/measure-cls.mjs --profiles stress --runs 1 --routes /,/privacy,/terms,/support,/delete-account,/l/cancel
+
+  # The slow browser specs of the booking pages (salon wizard, axe sweeps) and Lighthouse on the SSR link pages, against `wrangler dev` + the mock
+  # backend. A job of its own so the two e2e jobs run side by side (both are required checks).
+  e2e_booking:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      CHROMIUM_PATH: /usr/bin/google-chrome
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - run: npm ci
+
+      - run: npm run build
+
+      # The salon wizard (services -> masters -> time per master -> OTP once -> a booking per master) and the services-tab filter: ~2 min on a quiet runner.
+      - name: Tests - salon booking wizard (browser, mock backend)
+        timeout-minutes: 5
+        run: node scripts/run-tests.mjs tests/book-salon-wizard.test.mjs
 
       - name: Tests - axe sweep of the link pages (360 px)
         timeout-minutes: 5
@@ -182,15 +211,6 @@ jobs:
           export CHROME_PATH
           "$CHROME_PATH" --version
           node scripts/lighthouse-ssr.mjs --runs 3
-
-      # Cold-cache layout shift. Lighthouse profile (412 px, lost font preload => reflow) on four representative routes; the late-font
-      # stress profile (360/320 px, fonts delayed) on the home page, the four legal pages and the token shell.
-      - name: CLS probe - Lighthouse-like profile
-        timeout-minutes: 5
-        run: node scripts/measure-cls.mjs --profiles lighthouse --runs 1 --routes /,/privacy,/delete-account,/l/cancel
-      - name: CLS probe - late-font stress profile
-        timeout-minutes: 5
-        run: node scripts/measure-cls.mjs --profiles stress --runs 1 --routes /,/privacy,/terms,/support,/delete-account,/l/cancel
 
   # Lighthouse over every page (3 runs, median): perf >= 95, a11y 100, SEO 100 (0.66 on the noindex pages, where only
   # is-crawlable fails by design), CLS/LCP/TBT, and resource budgets. Own job: ~4 min of Chrome runs stay off the critical path.

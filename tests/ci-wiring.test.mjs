@@ -29,6 +29,21 @@ describe("every spec runs on pull requests", () => {
     assert.equal(s?.job, "e2e");
     assert.match(ci, /CHROMIUM_PATH: \/usr\/bin\/google-chrome/);
   });
+  test("the slow booking specs run in the e2e_booking job and the rest in e2e; both jobs have a job-level cap of 15-30 minutes (a single 12-minute job was cancelled)", () => {
+    const where = (needle) => steps.find((x) => x.text.includes(needle))?.job;
+    assert.equal(where("tests/booking-flow.test.mjs"), "e2e");
+    assert.equal(where("tests/booking-privacy.test.mjs"), "e2e");
+    assert.equal(where("tests/book-salon-wizard.test.mjs"), "e2e_booking");
+    assert.equal(where("scripts/lighthouse-ssr.mjs"), "e2e_booking");
+    assert.equal(steps.filter((x) => x.job === "e2e_booking" && x.text.includes("tests/book-axe.test.mjs")).length, 2, "axe at 360 and at 768,1280");
+    for (const job of ["e2e", "e2e_booking"]) {
+      const cap = (new RegExp(`^  ${job}:\\n[\\s\\S]*?^    timeout-minutes: (\\d+)`, "m").exec(ci) ?? [])[1];
+      assert.ok(Number(cap) >= 15 && Number(cap) <= 30, `${job}: job timeout-minutes ${cap}`);
+      // the steps of one job add up to less than its cap on a loaded runner (setup ~3 min + the steps' real durations, never all at their 5-minute caps)
+      const n = steps.filter((x) => x.job === job && /timeout-minutes/.test(x.text)).length;
+      assert.ok(n * 5 <= 80, `${job} has ${n} capped steps`);
+    }
+  });
   test("every package.json test/check script used by CI exists", () => {
     for (const m of ci.matchAll(/npm run ([\w:-]+)/g)) if (m[1] !== "build") assert.ok(pkg.scripts[m[1]], `ci.yml runs npm run ${m[1]}, missing in package.json`);
   });
