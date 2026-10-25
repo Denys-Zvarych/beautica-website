@@ -1,0 +1,10 @@
+---
+// Analytics loader (phase 007), rendered by Layout unless the page is a token route (`analytics={false}`), so token routes ship none of it.
+// The meta marks the page for track.ts (events wait for Umami). The tags themselves are injected after load by src/scripts/analytics.ts
+// (a tag in <head> cost ~800 ms of FCP/LCP); ids and hosts live in src/config/analytics.mjs.
+---
+
+<meta name="beautica-analytics" content="on" />
+<script>
+  import "../scripts/analytics";
+</script>

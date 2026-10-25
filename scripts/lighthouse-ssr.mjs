@@ -2,7 +2,7 @@
 // Lighthouse (mobile, simulated throttling) on the SSR link pages: wrangler dev on the built site + the mock backend, 3 runs per URL,
 // Image LCP is OUT OF SCOPE here: photos (media.beautica.test) are blocked: the mock origin does not resolve, and a failing DNS lookup would be measured as page weight. Recheck
 // the real LCP with prod photos (R2 offers no resize: dimensions are explicit, decoding async, below-fold images lazy).
-// median LCP / TBT / CLS and total JS transfer. Fails when a budget is broken:  LCP < 2400 ms (target 2000), TBT < 50 ms, CLS < 0.02, JS <= 20480 B (the load-time number: BEFORE user intent; the ≤ 30 KB gz total after a full booking walk is gated in tests/book-perf.test.mjs).
+// median LCP / TBT / CLS and total JS transfer. Fails when a budget is broken:  LCP < 2400 ms (target 2000), TBT < 50 ms, CLS < 0.02, JS (gz level 9 body, same-origin) <= 20480 B (the load-time number: BEFORE user intent; the ≤ 30 KB gz total after a full booking walk is gated in tests/book-perf.test.mjs).
 //
 //   npm run build && node scripts/lighthouse-ssr.mjs [--runs 3]      (CHROME_PATH or a Chromium in the usual places)
 import { spawn } from "node:child_process";
@@ -10,6 +10,7 @@ import { createServer } from "node:net";
 import { existsSync, mkdtempSync, readFileSync } from "node:fs";
 import { loadavg, tmpdir } from "node:os";
 import { dirname, join } from "node:path";
+import { gzSizeOfUrls } from "./lib/gzSize.mjs";
 import { startMockApi } from "../tests/helpers/mock-api.mjs";
 
 const arg = (k, d) => (process.argv.includes(k) ? process.argv[process.argv.indexOf(k) + 1] : d);
@@ -51,7 +52,8 @@ if (loadavg()[0] > 2.5) {
   console.warn(`WARN: the machine is noisy (load average ${loadavg()[0].toFixed(1)} > 2.5 after waiting): TBT / LCP below may be inflated, re-run when it is quiet`);
 }
 const bad = [];
-for (const path of process.env.LH_PAGES ? JSON.parse(process.env.LH_PAGES) : PAGES) { // LH_PAGES (JSON array): measure just these
+// One page = RUNS Lighthouse runs -> medians. Wrapped so a TBT-only breach on a noisy machine can be re-measured once.
+async function measure(path) {
   const lcp = [], tbt = [], cls = [], js = [];
   for (let i = 0; i < RUNS; i++) {
     const out = join(dirname(state), `lh-${i}.json`);
@@ -67,9 +69,21 @@ for (const path of process.env.LH_PAGES ? JSON.parse(process.env.LH_PAGES) : PAG
     }
     tbt.push(r.audits["total-blocking-time"].numericValue);
     cls.push(r.audits["cumulative-layout-shift"].numericValue);
-    js.push(r.audits["network-requests"].details.items.filter((x) => x.resourceType === "Script").reduce((a, x) => a + x.transferSize, 0));
+    // first-party JS only (as tests/book-perf.test.mjs): the analytics tags are third-party and injected after load. Budget = gzip BODY bytes (scripts/lib/gzSize.mjs); raw transferSize (with headers) below is informational only.
+    if (process.env.LH_SCRIPTS) console.log(`  scripts: ${JSON.stringify(r.audits["network-requests"].details.items.filter((x) => x.resourceType === "Script").map((x) => [x.url.replace(/^http:\/\/127.0.0.1:\d+/, ""), x.transferSize]))}`);
+    js.push(await gzSizeOfUrls(r.audits["network-requests"].details.items.filter((x) => x.resourceType === "Script" && x.url.startsWith(`http://127.0.0.1:${port}/`)).map((x) => x.url)));
   }
-  const m = { lcp: median(lcp), tbt: median(tbt), cls: median(cls), js: median(js) };
+  return { m: { lcp: median(lcp), tbt: median(tbt), cls: median(cls), js: median(js) }, lcp };
+}
+
+for (const path of process.env.LH_PAGES ? JSON.parse(process.env.LH_PAGES) : PAGES) { // LH_PAGES (JSON array): measure just these
+  let { m, lcp } = await measure(path);
+  // Retry ONCE when the only breach is TBT and the machine is (or was at the start) noisy (the budget stays 50 ms; a breach on the retry fails).
+  if ((noisy || loadavg()[0] > 2.5) && m.tbt >= BUDGET.tbt && m.lcp < BUDGET.lcp && m.cls < BUDGET.cls && m.js <= BUDGET.js) {
+    console.warn(`  ${path}: TBT ${Math.round(m.tbt)} ms on a noisy machine, measuring once more`);
+    for (let waited = 0; loadavg()[0] > 2.5 && waited < 30; waited += 5) await new Promise((r) => setTimeout(r, 5000));
+    ({ m, lcp } = await measure(path));
+  }
   console.log(`${path}: LCP ${Math.round(m.lcp)} ms (runs ${lcp.map(Math.round)}), TBT ${Math.round(m.tbt)} ms, CLS ${m.cls.toFixed(3)}, JS ${m.js} B${noisy ? "  [WARN noisy machine]" : ""}`);
   if (m.lcp >= TARGET_LCP && m.lcp < BUDGET.lcp) console.warn(`  warning: ${path} LCP ${Math.round(m.lcp)} ms is above the ${TARGET_LCP} ms target`);
   for (const k of Object.keys(BUDGET)) if (!(m[k] < BUDGET[k] || (k === "js" && m[k] <= BUDGET[k]))) bad.push(`${path}: ${k} ${m[k]} >= ${BUDGET[k]}`);

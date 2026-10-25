@@ -10,6 +10,7 @@ import Seo from "./Seo.astro";
 import Header from "./Header.astro";
 import Footer from "./Footer.astro";
 import { t, defaultLocale } from "../i18n/t";
+import Analytics from "./Analytics.astro";
 
 interface Props {
   title: string;
@@ -33,9 +34,12 @@ interface Props {
   noReferrer?: boolean;
   /** An origin to open a connection to early (the booking API on the link pages). Default none. */
   preconnect?: string;
+  /** Cloudflare Web Analytics + Umami (phase 007). Token routes pass `false` and get neither tag; `noReferrer` pages never get them either. Default true. */
+  analytics?: boolean;
 }
 
-const { hideHeader = false, hideFooter = false, noReferrer = false, preloadLatin = true, preconnect, ...seo } = Astro.props;
+const { hideHeader = false, hideFooter = false, noReferrer = false, preloadLatin = true, preconnect, analytics = true, ...seo } = Astro.props;
+const withAnalytics = analytics && !noReferrer; // a token route (noReferrer) must never carry analytics, even if a caller forgets the prop
 ---
 
 <!doctype html>
@@ -56,6 +60,7 @@ const { hideHeader = false, hideFooter = false, noReferrer = false, preloadLatin
          (a lazy fetch swapped the face after layout; token pages also need it preloaded so no fetch carries the page URL as Referer). -->
     {preloadLatin && <link rel="preload" as="font" type="font/woff2" href={comfortaaLat} crossorigin />}
     <Seo {...seo} />
+    {withAnalytics && <Analytics />}
   </head>
   <body>
     <a class="skip-link" href="#main">{t("a11y.skipToContent")}</a>

@@ -6,6 +6,7 @@ import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
 import { gzipSync } from "node:zlib";
 import { ROOT } from "./helpers/env.mjs";
+import { UMAMI_SCRIPT_SRC, UMAMI_HOST_URL, UMAMI_WEBSITE_ID, UMAMI_DOMAINS, CF_BEACON_SRC, CF_BEACON_TOKEN } from "../src/config/analytics.mjs";
 
 const DIST = join(ROOT, "dist", "client");
 assert.ok(existsSync(DIST), "dist/client is missing: run `npm run build` first");
@@ -56,13 +57,43 @@ describe("CSP-safe markup (script-src 'self', no inline code)", () => {
   }
 });
 
+describe("analytics (phase 007): injected after load, never in the HTML", () => {
+  const chunk = readdirSync(join(DIST, "_astro")).find((f) => f.startsWith("Analytics.astro_astro_type_script"));
+  for (const file of htmlFiles) {
+    const html = readFileSync(file, "utf8");
+    const token = name(file).startsWith("/l/");
+    test(`${name(file)}: ${token ? "no analytics marker, loader or tag" : "marker + loader module, no render-path third-party tag"}`, () => {
+      assert.equal(/umami|cloudflareinsights|data-website-id|data-cf-beacon/.test(html), false, "a third-party tag in the HTML would delay LCP");
+      assert.equal(html.includes("beautica-analytics"), !token);
+      assert.equal(html.includes(chunk), !token);
+    });
+  }
+  test("the loader injects both tags with their attributes, after the load event / idle", () => {
+    assert.ok(chunk, "Analytics loader chunk missing");
+    const js = readFileSync(join(DIST, "_astro", chunk), "utf8") + readdirSync(join(DIST, "_astro")).filter((f) => f.endsWith(".js")).map((f) => readFileSync(join(DIST, "_astro", f), "utf8")).join("\n");
+    for (const v of [UMAMI_SCRIPT_SRC, UMAMI_HOST_URL, UMAMI_WEBSITE_ID, UMAMI_DOMAINS, CF_BEACON_SRC, CF_BEACON_TOKEN, "data-exclude-search", "data-exclude-hash", "data-cf-beacon", "requestIdleCallback", "load"]) assert.ok(js.includes(v), `${v} missing from the built loader`);
+  });
+  test("CSP allows exactly the analytics origins (script cloud.umami.is + beacon host; connect gateway + cloudflareinsights), token routes none", () => {
+    const headers = readFileSync(join(DIST, "_headers"), "utf8");
+    const star = headers.split(/\n(?=\S)/).find((b) => b.startsWith("/*")).match(/Content-Security-Policy: (.+)/)[1];
+    assert.ok(star.includes(`script-src 'self' ${UMAMI_SCRIPT_SRC} ${CF_BEACON_SRC};`), star);
+    assert.ok(star.includes(`${UMAMI_HOST_URL}/api/send https://cloudflareinsights.com/cdn-cgi/rum;`), star);
+    for (const p of ["/l/*", "/invite/*", "/bookings/*", "/book/cancel/*"]) {
+      const csp = headers.split(/\n(?=\S)/).find((b) => b.startsWith(p + "\n")).match(/^\s+Content-Security-Policy: (.+)$/m)?.[1];
+      assert.ok(csp && !/umami|cloudflareinsights/.test(csp), `${p}: token CSP carries analytics origins`);
+    }
+    const tsSrc = readFileSync(join(ROOT, "src/lib/securityHeaders.ts"), "utf8");
+    assert.ok(tsSrc.includes(UMAMI_SCRIPT_SRC) && tsSrc.includes(`${UMAMI_HOST_URL}/api/send`) && tsSrc.includes(CF_BEACON_SRC));
+  });
+});
+
 describe("size budgets (README § 4: JS <= 5 KB gz static, CSS <= 25 KB gz, fonts <= 4 files / 110 KB)", () => {
   for (const file of htmlFiles) {
     const html = readFileSync(file, "utf8");
     test(`${name(file)}: inlined CSS <= 25 KB gz, JS <= 5 KB gz, critical fonts preloaded, <= 4 files / 110 KB`, () => {
       const css = [...html.matchAll(/<style\b[^>]*>([\s\S]*?)<\/style>/g)].map((m) => m[1]).join("\n");
       assert.ok(gz(Buffer.from(css)) <= 25 * KB, `inline CSS is ${gz(Buffer.from(css))} B gz`);
-      const scripts = [...html.matchAll(/<script\b[^>]*\ssrc="([^"]+)"/g)].map((m) => m[1]);
+      const scripts = [...html.matchAll(/<script\b[^>]*\ssrc="([^"]+)"/g)].map((m) => m[1]).filter((u) => u.startsWith("/")); // same-origin only
       const jsGz = scripts.reduce((n, src) => n + gz(readFileSync(join(DIST, src))), 0);
       assert.ok(jsGz <= 5 * KB, `JS is ${jsGz} B gz (${scripts.join(", ")})`);
       const fonts = [...html.matchAll(/<link[^>]*rel="preload"[^>]*as="font"[^>]*href="([^"]+)"/g)].map((m) => m[1]);

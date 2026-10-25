@@ -34,9 +34,9 @@ describe("master page, bookable: first HTML (no JS) is complete", async () => {
   });
   test("CSP: API origin, the image origin from the data and Turnstile only; nothing broader", () => {
     const csp = res.headers["content-security-policy"];
-    assert.ok(csp.includes(`connect-src 'self' ${MOCK_API} https://challenges.cloudflare.com`), csp);
+    assert.ok(csp.includes(`connect-src 'self' ${MOCK_API} https://gateway.umami.is/api/send https://cloudflareinsights.com/cdn-cgi/rum https://challenges.cloudflare.com`), csp);
     assert.ok(csp.includes("img-src 'self' data: https://media.beautica.test;"), csp);
-    assert.ok(csp.includes("script-src 'self' https://challenges.cloudflare.com;"), csp);
+    assert.ok(csp.includes("script-src 'self' https://cloud.umami.is/script.js https://static.cloudflareinsights.com/beacon.min.js https://challenges.cloudflare.com;"), csp);
     assert.ok(csp.includes("frame-src https://challenges.cloudflare.com;"), csp);
     assert.ok(/frame-ancestors 'none'/.test(csp) && /object-src 'none'/.test(csp) && !/unsafe-eval/.test(csp));
     assert.ok(!/script-src[^;]*unsafe-inline/.test(csp), "no inline scripts");

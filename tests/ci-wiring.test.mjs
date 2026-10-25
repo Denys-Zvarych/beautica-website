@@ -74,7 +74,11 @@ describe("every route is under Lighthouse", () => {
   // The one deliberate exclusion: /book-steps/* are noindex HTML fragments the booking island fetches (phase 016), not pages; Lighthouse
   // measures the pages that load them. static-build.test.mjs checks the fragment itself (CSP-safe, no <html>/<title>).
   const staticRoutes = routes("").filter((r) => !r.includes("[") && !r.startsWith("/book-steps/")).map((r) => (r === "/index" ? "/index" : r));
-  const dynamicRoutes = routes("").filter((r) => r.includes("["));
+  // Catch-all 404 routes ([...rest]) are not pages either: they only re-serve the static /404 page through the middleware so that malformed
+  // token paths get the token headers (phase 007). Listed by name so a new catch-all cannot slip past Lighthouse unnoticed; /404 is measured.
+  const CATCH_ALL_404 = ["/book/cancel/[...rest]"];
+  const catchAll = routes("").filter((r) => r.includes("[..."));
+  const dynamicRoutes = routes("").filter((r) => r.includes("[") && !r.includes("[..."));
   const lhciUrls = lhci.ci.collect.url.map((u) => new URL(u).pathname.replace(/\.html$/, ""));
   for (const r of staticRoutes)
     test(`static page ${r} is in lighthouserc.json (3 runs, median)`, () => {
@@ -92,6 +96,10 @@ describe("every route is under Lighthouse", () => {
     assert.ok(pages.some((p) => p.includes("?sort=")), "a sorted view");
     assert.match(ci, /node scripts\/lighthouse-ssr\.mjs --runs 3/);
     assert.ok(existsSync(join(ROOT, "tests/helpers/mock-api.mjs")));
+  });
+  test("the only catch-all routes are the listed 404 re-servers (their page, /404, is under Lighthouse)", () => {
+    assert.deepEqual(catchAll.sort(), CATCH_ALL_404);
+    assert.ok(lhciUrls.includes("/404"));
   });
   test("the guest-cancel token route is measured through its static shell /l/cancel", () => assert.ok(lhciUrls.includes("/l/cancel")));
 });
