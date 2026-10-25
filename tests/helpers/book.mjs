@@ -29,6 +29,8 @@ export async function bookPage(browser, slug, { width = 360, height = 800, turns
     return turnstile === "ok" ? r.fulfill({ status: 200, contentType: "text/javascript", body: FAKE_TURNSTILE }) : r.abort("failed");
   });
   const res = await env.page.goto(`${BASE}${path ?? `/book/${slug}`}`, { waitUntil: "load" });
+  // The tabs are wired by a dynamic import after `load` (initTabs sets role=tablist, then selects tab 0): a tap before that is undone by it. Wait for it.
+  if (js && (await env.page.locator("[data-tabs]").count())) await env.page.waitForSelector("[data-tabs][role=tablist]", { state: "attached" });
   return { ...env, res, turnstileRequests };
 }
 
@@ -36,13 +38,21 @@ export async function bookPage(browser, slug, { width = 360, height = 800, turns
 // Saturdays are skipped on purpose: the mock greys them out for the pedicure service once the async bookable-days answer lands, so a click can race it.
 // A test that needs a Saturday must go through the pedicure path and wait for that answer explicitly.
 export async function pickableDay(page, { sunday = false, nth = 0 } = {}) {
-  return page.evaluate(([sun, n]) => {
-    const days = [...document.querySelectorAll(".dbtn.ok")].map((b) => b.dataset.day);
-    const today = document.querySelector(".dbtn.today")?.dataset.day;
-    const dow = (d) => new Date(`${d}T12:00:00Z`).getUTCDay();
-    const ok = days.filter((d) => d !== today && (dow(d) === 0) === sun && dow(d) !== 6);
-    return ok[n];
-  }, [sunday, nth]);
+  const find = () =>
+    page.evaluate(([sun, n]) => {
+      const days = [...document.querySelectorAll(".dbtn.ok")].map((b) => b.dataset.day);
+      const today = document.querySelector(".dbtn.today")?.dataset.day;
+      const dow = (d) => new Date(`${d}T12:00:00Z`).getUTCDay();
+      const ok = days.filter((d) => d !== today && (dow(d) === 0) === sun && dow(d) !== 6);
+      return ok[n];
+    }, [sunday, nth]);
+  // Near the end of a month (e.g. today is the month's last Sunday) the visible month has no such day left: go to the next month (inside the 60-day window).
+  let day = await find();
+  for (let i = 0; day === undefined && i < 2 && (await page.locator("#next").isEnabled()); i++) {
+    await page.click("#next");
+    day = await find();
+  }
+  return day;
 }
 
 /** Saves a screenshot when SHOTS_DIR is set (for the PR). */
