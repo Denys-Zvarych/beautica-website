@@ -19,7 +19,7 @@ interface Props {
 const { title, description, h1, text, openInApp = true } = Astro.props;
 ---
 
-<Layout title={title} description={description} noindex noReferrer>
+<Layout title={title} description={description} noindex noReferrer analytics={false}>
   <main id="main" class="wrap">
     {/* Blocking on purpose (see public/applink-ua.js): the Android button is part of the first paint, never a shift after it. */}
     {openInApp && <script is:inline src="/applink-ua.js"></script>}

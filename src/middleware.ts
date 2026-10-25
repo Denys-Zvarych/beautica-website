@@ -37,7 +37,7 @@ async function guard(ctx: Parameters<Parameters<typeof defineMiddleware>[0]>[0],
     }
   }
   if (request.method === "GET" && LINK_PAGE.test(new URL(request.url).pathname)) return cachedLinkPage(ctx, next);
-  return withSecurityHeaders(await next());
+  return withSecurityHeaders(await next(), new URL(request.url).pathname);
 }
 
 /**
@@ -65,7 +65,7 @@ async function cachedLinkPage(ctx: Parameters<Parameters<typeof defineMiddleware
       return out;
     }
   }
-  const res = withSecurityHeaders(await next());
+  const res = withSecurityHeaders(await next(), url.pathname);
   res.headers.set("X-Beautica-Cache", "MISS");
   // Negative cache: only the unknown-slug 404 (the page marks it), 15 s, edge only. Every other notice / error is never stored.
   const neg = Number(res.headers.get("X-Beautica-Neg-Ttl") ?? 0);

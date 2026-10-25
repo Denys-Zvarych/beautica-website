@@ -3,7 +3,7 @@
 import { test, describe, before, after } from "node:test";
 import assert from "node:assert/strict";
 import { launch, open } from "./helpers/browser.mjs";
-import { gzipSync } from "node:zlib";
+import { gzSize } from "../scripts/lib/gzSize.mjs";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { salonPage, pickServices, toggleMaster, clickAndLoadDays, scheduleMaster } from "./helpers/salon.mjs";
@@ -177,7 +177,7 @@ describe("JS budget: before intent and after a full walk", () => {
     // The sizes come from the built files (gzip level 9), the requests from the browser: a response body cannot always be read once the page moves on.
     env.page.on("response", (r) => {
       const u = new URL(r.url());
-      if (u.origin === new URL(BASE).origin && u.pathname.endsWith(".js") && r.status() === 200 && existsSync(join(ROOT, "dist/client", u.pathname))) seen.set(u.pathname, gzipSync(readFileSync(join(ROOT, "dist/client", u.pathname)), { level: 9 }).length);
+      if (u.origin === new URL(BASE).origin && u.pathname.endsWith(".js") && r.status() === 200 && existsSync(join(ROOT, "dist/client", u.pathname))) seen.set(u.pathname, gzSize(readFileSync(join(ROOT, "dist/client", u.pathname))));
     });
     await env.page.reload({ waitUntil: "networkidle" }); // listener on, then everything the page loads by itself
     const total = () => [...seen.values()].reduce((a, n) => a + n, 0);

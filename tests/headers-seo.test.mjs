@@ -7,6 +7,9 @@ import { rawRequest, TOKEN, requireBase, MOCK_API } from "./helpers/env.mjs";
 requireBase();
 
 const CSP =
+  "default-src 'self'; script-src 'self' https://cloud.umami.is/script.js https://static.cloudflareinsights.com/beacon.min.js; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self' https://api.beautica.app https://gateway.umami.is/api/send https://cloudflareinsights.com/cdn-cgi/rum; form-action 'self'; frame-ancestors 'none'; base-uri 'self'; object-src 'none'";
+// Token routes load no analytics: their CSP is the base policy without the Umami / Cloudflare Web Analytics origins.
+const TOKEN_CSP =
   "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self' https://api.beautica.app; form-action 'self'; frame-ancestors 'none'; base-uri 'self'; object-src 'none'";
 const STATIC_SECURITY = {
   "content-security-policy": CSP,
@@ -90,7 +93,8 @@ describe("token routes (real e-mail URL -> 200 rewrite -> noindex shell)", () =>
           assert.deepEqual(target.all("cache-control"), ["no-store"]);
           assert.deepEqual(target.all("x-robots-tag"), ["noindex, nofollow"]);
           for (const [k, v] of Object.entries(STATIC_SECURITY)) {
-            const expected = k === "content-security-policy" && r.shell === "/l/cancel" && target === res ? v.replace("https://api.beautica.app", MOCK_API) : v;
+            const base = k === "content-security-policy" ? TOKEN_CSP : v;
+            const expected = k === "content-security-policy" && r.shell === "/l/cancel" && target === res ? base.replace("https://api.beautica.app", MOCK_API) : base;
             assert.deepEqual(target.all(k), [expected], k);
           }
         });
@@ -108,6 +112,48 @@ describe("token routes (real e-mail URL -> 200 rewrite -> noindex shell)", () =>
     const res = await rawRequest("/bookings");
     assert.equal(res.status, 404);
     assert.deepEqual(res.all("x-content-type-options"), ["nosniff"]);
+  });
+});
+
+describe("malformed paths under token prefixes (the 404 must not report or leak the token)", () => {
+  for (const path of [`/book/cancel/${TOKEN}/extra`, "/book/cancel/abc123/extra", "/invite/abc/def", `/bookings/${TOKEN}/nope`, "/l/nothing"]) {
+    test(`${path}: 404, token CSP without analytics origins, no-referrer, no-store, noindex`, async () => {
+      const res = await rawRequest(path);
+      assert.equal(res.status, 404);
+      assert.deepEqual(res.all("content-security-policy"), [TOKEN_CSP]);
+      assert.equal(/umami|cloudflareinsights/.test(res.all("content-security-policy")[0]), false);
+      assert.deepEqual(res.all("referrer-policy"), ["no-referrer"]);
+      assert.deepEqual(res.all("cache-control"), ["no-store"]);
+      assert.match(res.all("x-robots-tag")[0], /noindex/);
+    });
+  }
+});
+
+// Phase 007 QA (security LOW): a deeper path under a token prefix is not served by any route; the asset layer / catch-all answers it. Whoever answers,
+// it must carry the token-route headers (a token may sit in the URL): no analytics origins in the CSP, no referrer, never cached, never indexed.
+// Trailing-slash variants are separate cases: the asset layer treats `/a/b/` and `/a/b` differently.
+describe("deeper token paths and trailing-slash variants (404 must still be a token response)", () => {
+  const DEEP = ["/book/cancel/a/b/", "/book/cancel/a/b", "/book/cancel/a/", "/invite/x/y/", "/invite/x/y", "/bookings/x/y/", "/bookings/x/y", "/l/x/y/", "/l/x/y", `/book/cancel/${TOKEN}/`, `/book/cancel/${TOKEN}/extra/`];
+  for (const path of DEEP) {
+    test(`${path}: 404 with the token CSP (no umami / cloudflareinsights), Referrer-Policy no-referrer once, no-store, noindex`, async () => {
+      const res = await rawRequest(path);
+      // One segment + trailing slash is the documented 307 to the slash-less token URL (tests/token-route-trailing-slash.test.mjs); the redirect is a token response too.
+      const redirect = path === "/book/cancel/a/" || path === `/book/cancel/${TOKEN}/`;
+      assert.equal(res.status, redirect ? 307 : 404, `status ${res.status}`);
+      const csp = res.all("content-security-policy");
+      assert.equal(csp.length, 1, "exactly one CSP");
+      assert.equal(/umami|cloudflareinsights/.test(csp[0]), false, csp[0]);
+      assert.ok(csp[0] === TOKEN_CSP || csp[0] === TOKEN_CSP.replace("https://api.beautica.app", MOCK_API), csp[0]);
+      assert.deepEqual(res.all("referrer-policy"), ["no-referrer"]);
+      assert.deepEqual(res.all("cache-control"), ["no-store"]);
+      assert.deepEqual(res.all("x-robots-tag"), ["noindex, nofollow"]);
+      assert.deepEqual(res.all("x-content-type-options"), ["nosniff"]);
+    });
+  }
+  test("the 404 body of a token prefix does not echo the path and carries no analytics marker", async () => {
+    const res = await rawRequest("/bookings/secret-looking-value/zzz/");
+    assert.equal(res.status, 404);
+    assert.equal(res.body.includes("secret-looking-value"), false);
   });
 });
 

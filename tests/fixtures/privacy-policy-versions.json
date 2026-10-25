@@ -8,6 +8,10 @@
     {
       "version": "2026-10-22.1",
       "sha256": "e92f3c32bed539a80c593db46805a0b309e57dde3453e23ab0a84d64f1486ee9"
+    },
+    {
+      "version": "2026-10-24",
+      "sha256": "9195a8c3d1af1d100ccf6d170bed49fea9e119a90560b44c27aec2563be4906c"
     }
   ]
 }

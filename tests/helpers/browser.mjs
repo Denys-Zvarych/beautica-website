@@ -28,13 +28,23 @@ export async function open(browser, { width = 360, height = 800, ...opts } = {})
       return route.abort("blockedbyclient");
     },
   );
+  // Phase 007: the two analytics scripts are answered with an empty script (registered after the block-all route: the latest route wins) (no network) and recorded apart from `external`,
+  // so a test can assert "analytics on page X" / "none on token routes" without a real request leaving the machine.
+  const analytics = [];
+  await context.route(
+    (url) => url.origin === "https://cloud.umami.is" || url.origin === "https://static.cloudflareinsights.com",
+    (route) => {
+      analytics.push(route.request().url());
+      return route.fulfill({ status: 200, contentType: "text/javascript", body: "" });
+    },
+  );
   const page = await context.newPage();
   page.on("console", (m) => m.type() === "error" && problems.push(`console: ${m.text()}`));
   page.on("pageerror", (e) => problems.push(`pageerror: ${e.message}`));
   page.on("requestfailed", (r) => {
     if (r.url().startsWith(BASE)) problems.push(`requestfailed: ${r.url()} ${r.failure()?.errorText}`);
   });
-  return { context, page, external, problems };
+  return { context, page, external, problems, analytics };
 }
 
 const CORS = { "access-control-allow-origin": BASE, "access-control-allow-methods": "GET, POST", "access-control-allow-headers": "*" };

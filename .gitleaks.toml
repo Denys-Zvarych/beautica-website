@@ -1,0 +1,15 @@
+# Extends the default gitleaks ruleset; only known, public / dummy values are allowed.
+[extend]
+useDefault = true
+
+# Cloudflare Web Analytics beacon token: PUBLIC by design (shipped in page HTML).
+[[allowlists]]
+description = "Public Cloudflare Web Analytics beacon token"
+paths = ['''^src/config/analytics\.mjs$''']
+regexes = ['''cbe9cf31a9ee45fa80b74d3696eea297''']
+
+# Dummy booking token (RFC 4122 doc example UUID) used by the mock-backend tests.
+[[allowlists]]
+description = "Dummy test token fixture"
+paths = ['''^tests/(helpers/env|track-allowlist\.test)\.mjs$''']
+regexes = ['''123e4567-e89b-42d3-a456-426614174000''']
