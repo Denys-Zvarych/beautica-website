@@ -27,7 +27,7 @@ describe("render probe", () => {
   for (const width of [360, 1280]) {
     for (const r of ROUTES) {
       test(`${r.path.replace(TOKEN, ":id")} @${width}: H1 «${r.h1}» visible, no errors, no external requests`, async () => {
-        const { context, page, external, problems } = await open(browser, { width });
+        const { context, page, external, problems, analytics } = await open(browser, { width });
         try {
           if (r.cancel) await mockCancelApi(context, { get: () => ({ status: 404 }) });
           const res = await page.goto(BASE + r.path, { waitUntil: "load" });
@@ -49,6 +49,11 @@ describe("render probe", () => {
           const expected404 = r.status === 404 || r.cancel ? [`console: Failed to load resource: the server responded with a status of 404 (Not Found)`] : [];
           assert.deepEqual(problems, expected404);
           assert.deepEqual(external, [], "page tried to reach a non-local origin");
+          // Phase 007: token routes carry no analytics tag (nothing requested); the 404 page does (Umami + Cloudflare beacon).
+          const isToken = /^\/(invite|bookings|book\/cancel)\//.test(r.path);
+          if (isToken) await page.waitForTimeout(1500); // longer than the idle injection takes: a token page must still have asked for nothing
+          else for (let i = 0; i < 50 && analytics.length < 2; i++) await page.waitForTimeout(100); // injected after load + idle
+          assert.equal(analytics.length, isToken ? 0 : 2, `analytics requests: ${analytics}`);
           const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
           assert.ok(overflow <= 0, `horizontal scroll: ${overflow}px`);
         } finally {

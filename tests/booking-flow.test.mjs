@@ -6,6 +6,7 @@ import { launch, visibleBox } from "./helpers/browser.mjs";
 import { BASE, MOCK_API } from "./helpers/env.mjs";
 import { bookPage, mockLog, callsTo, driveTo, fillContact, pickableDay, shot, toggleConsent, SVC_ID } from "./helpers/book.mjs";
 import { PRIVACY_POLICY_VERSION } from "../src/config/legal.mjs";
+import { UMAMI_SCRIPT_SRC, UMAMI_HOST_URL, CF_BEACON_SRC } from "../src/config/analytics.mjs";
 
 let browser;
 before(async () => (browser = await launch()));
@@ -761,23 +762,45 @@ describe("navigation, focus, privacy", () => {
   });
 
   test("privacy audit: no name, phone, token or code in storage, cookies, URLs or analytics; nothing else is requested", async () => {
-    await withPage("oksana-ab12", {}, async ({ page }) => {
+    await withPage("oksana-ab12", {}, async ({ page, context }) => {
+      // Both analytics scripts are answered locally (no network); the Umami stub also "sends" every tracked event to the gateway, which is answered locally too,
+      // so the whole analytics payload can be inspected. Registered after bookPage's routes: the latest route wins.
+      const UMAMI_STUB = `window.umami={track:function(e,p){fetch(${JSON.stringify(UMAMI_HOST_URL + "/api/send")},{method:"POST",mode:"no-cors",body:JSON.stringify({name:e,data:p||null,url:location.href,referrer:document.referrer})});}};`;
+      const sends = [];
+      await context.route(`${UMAMI_HOST_URL}/**`, (r) => {
+        sends.push({ url: r.request().url(), post: r.request().postData() });
+        return r.fulfill({ status: 200, body: "ok" });
+      });
+      await context.route(UMAMI_SCRIPT_SRC, (r) => r.fulfill({ status: 200, contentType: "text/javascript", body: UMAMI_STUB }));
       const reqs = [];
       page.on("request", (r) => reqs.push({ url: r.url(), method: r.method(), post: r.postData() }));
       await driveTo(page, "confirm", { contact: { name: "Приватність", surname: "Тестова", phone: "671234567" } });
       await page.click("#cta-confirm");
       await page.waitForSelector("#done-card", { state: "visible" });
+      await page.waitForFunction(() => typeof window.umami === "object", null, { timeout: 8000 }); // the tags are injected 1.5 s after load
+      await page.waitForTimeout(300);
       const stored = await page.evaluate(() => JSON.stringify({ l: { ...localStorage }, s: { ...sessionStorage }, c: document.cookie, h: history.state, u: location.href, n: window.name }));
-      for (const secret of ["Приватність", "Тестова", "671234567", "guest-token", "123456", "TOKEN-"]) assert.equal(stored.includes(secret), false, `${secret} leaked into storage/cookie/history/url`);
+      const SECRETS = ["Приватність", "Тестова", "671234567", "+380671234567", "guest-token", "123456", "TOKEN-"];
+      for (const secret of SECRETS) assert.equal(stored.includes(secret), false, `${secret} leaked into storage/cookie/history/url`);
       assert.deepEqual(JSON.parse(stored).l, {});
       assert.deepEqual(JSON.parse(stored).s, {});
+      const ANALYTICS_ORIGINS = [new URL(UMAMI_SCRIPT_SRC).origin, new URL(CF_BEACON_SRC).origin, new URL(UMAMI_HOST_URL).origin];
       for (const r of reqs) {
         assert.equal(/Приватність|Тестова|671234567|guest-token|%D0%9F/.test(decodeURIComponent(r.url)), false, `PII in URL ${r.url}`);
         const origin = new URL(r.url).origin;
-        assert.ok([BASE, MOCK_API, "https://media.beautica.test", "https://challenges.cloudflare.com"].includes(origin), `unexpected origin ${origin}`);
+        assert.ok([BASE, MOCK_API, "https://media.beautica.test", "https://challenges.cloudflare.com", ...ANALYTICS_ORIGINS].includes(origin), `unexpected origin ${origin}`);
+        if (ANALYTICS_ORIGINS.includes(origin)) assert.ok(r.url === UMAMI_SCRIPT_SRC || r.url === CF_BEACON_SRC || r.url === `${UMAMI_HOST_URL}/api/send`, `unexpected analytics URL ${r.url}`);
       }
-      assert.equal(reqs.filter((r) => r.url.includes("umami") || r.url.includes("analytics") || r.url.includes("cloudflareinsights")).length, 0, "no analytics script on the booking page (phase 007 adds it)");
-      const posts = reqs.filter((r) => r.method === "POST").map((r) => new URL(r.url).pathname);
+      // Exactly the two documented script URLs, and every analytics request (script URL, query, payload) is free of anything personal.
+      assert.deepEqual([...new Set(reqs.map((r) => r.url).filter((u) => /\.(umami|cloudflareinsights)\.|umami\.is/.test(u) && !u.startsWith(UMAMI_HOST_URL)))].sort(), [CF_BEACON_SRC, UMAMI_SCRIPT_SRC].sort());
+      assert.ok(sends.length > 0, "the stub saw at least one event, so the payload check below is not vacuous");
+      for (const a of [...reqs.filter((r) => ANALYTICS_ORIGINS.includes(new URL(r.url).origin)), ...sends]) {
+        const blob = decodeURIComponent(`${a.url} ${a.post ?? ""}`);
+        for (const secret of SECRETS) assert.equal(blob.includes(secret), false, `${secret} leaked into an analytics request ${a.url}`);
+        assert.equal(/\+?380\d{9}|\b\d{6}\b|token/i.test(blob), false, `phone/code/token-shaped value in an analytics request ${a.url}`);
+        assert.equal(new URL(a.url).search, "", `analytics URL carries a query: ${a.url}`);
+      }
+      const posts = reqs.filter((r) => r.method === "POST" && !r.url.startsWith(UMAMI_HOST_URL)).map((r) => new URL(r.url).pathname);
       assert.deepEqual(posts.filter((p) => !/\/book\/(otp\/(send|verify)|oksana-ab12\/booking)$/.test(p)), []);
     });
   });
@@ -1086,7 +1109,7 @@ describe("audit cycle 2: a booking of unknown outcome, and the caches (master li
       await page.waitForTimeout(300);
       await page.goBack();
       await page.click("#cta-services");
-      await page.waitForFunction(() => [...document.querySelectorAll(".dbtn")].some((b) => b.disabled && new Date(`${b.dataset.day}T12:00:00Z`).getUTCDay() === 0 && b.dataset.day > document.querySelector(".dbtn.today").dataset.day));
+      await page.waitForFunction(() => [...document.querySelectorAll(".dbtn")].some((b) => b.disabled && new Date(`${b.dataset.day}T12:00:00Z`).getUTCDay() === 0 && b.dataset.day >= document.querySelector(".dbtn.today").dataset.day));
       assert.equal(n, 2, "asked again after the failure");
       okProblems(env);
     } finally {

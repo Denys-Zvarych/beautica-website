@@ -4,7 +4,7 @@
 import type { APIRoute } from "astro";
 import { env } from "cloudflare:workers";
 import { bookingConfig } from "../../../lib/booking/config";
-import { CSP } from "../../../lib/securityHeaders";
+import { TOKEN_CSP } from "../../../lib/securityHeaders";
 
 export const prerender = false;
 
@@ -18,6 +18,6 @@ export const GET: APIRoute = async ({ request }) => {
   const html = (await shell.text()).replace(/(id="cancel-root"[^>]*?\sdata-api=")[^"]*(")/, `$1${cfg.apiOrigin}$2`);
   const headers = new Headers(shell.headers);
   for (const h of ["content-length", "content-encoding", "etag"]) headers.delete(h);
-  headers.set("Content-Security-Policy", CSP.replace(PROD_API, cfg.apiOrigin));
+  headers.set("Content-Security-Policy", TOKEN_CSP.replace(PROD_API, cfg.apiOrigin));
   return new Response(html, { status: 200, headers });
 };
