@@ -11,6 +11,9 @@ export const WRANGLER_LOG = process.env.TEST_WRANGLER_LOG ?? "";
 export const MOCK_API = process.env.TEST_API_ORIGIN ?? "";
 /** API origin of the guest cancel page: the Worker's runtime API_ORIGIN, which in the tests is the mock backend. */
 export const API_ORIGIN = MOCK_API || "https://api.beautica.app";
+/** "Now" of the booking-page tests: the browser clock (bookPage) and the mock backend's bookable-days window both use it, so the calendar never depends on the day CI runs
+ *  (late in a month the open month has no Monday / Sunday left). A Tuesday in mid-month: every weekday still ahead in the open month. Override with TEST_NOW to try other dates. */
+export const TEST_NOW = process.env.TEST_NOW ?? "2026-03-10T10:00:00Z";
 export const TOKEN = "123e4567-e89b-42d3-a456-426614174000";
 
 /** UI copy: read from the same file the site renders from, so labels are never retyped (exact copy is covered by headers-seo). */

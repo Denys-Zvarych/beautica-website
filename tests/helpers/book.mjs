@@ -2,11 +2,11 @@
 import { writeFileSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { open } from "./browser.mjs";
-import { BASE, MOCK_API } from "./env.mjs";
+import { BASE, MOCK_API, TEST_NOW } from "./env.mjs";
 
 export const PNG = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mO0Dwv7DwAEGAHYhxX0pQAAAABJRU5ErkJggg==", "base64");
-// Like the real widget: render() and every reset() deliver a fresh single-use token through the callback.
-export const FAKE_TURNSTILE = `(function(){var cb,n=0;function give(){var t="TOKEN-"+(++n);setTimeout(function(){cb(t)},5)}window.turnstile={render:function(el,o){cb=o.callback;give();var f=document.createElement("iframe");f.title="fake turnstile";f.style.cssText="width:300px;height:65px;border:0";el.appendChild(f);return "w1"},reset:function(){give()}};})();`;
+// Records the render options in window.__tsOpts. Like the real widget: render() and every reset() deliver a fresh single-use token through the callback.
+export const FAKE_TURNSTILE = `(function(){var cb,n=0;function give(){var t="TOKEN-"+(++n);setTimeout(function(){cb(t)},5)}window.turnstile={render:function(el,o){window.__tsOpts=o;cb=o.callback;give();var f=document.createElement("iframe");f.title="fake turnstile";f.style.cssText="width:300px;height:65px;border:0";el.appendChild(f);return "w1"},reset:function(){give()}};})();`;
 
 /** Every request the mock backend has seen, optionally filtered. */
 export async function mockLog(filter = () => true, since = 0) {
@@ -19,8 +19,10 @@ export const logMark = async () => (await mockLog()).length;
 export const callsTo = (log, method, pathPart) => log.filter((e) => e.method === method && e.path.includes(pathPart));
 
 /** A Playwright page on a booking-link page, with the media origin and Turnstile faked (nothing leaves the machine). */
-export async function bookPage(browser, slug, { width = 360, height = 800, turnstile = "ok", js = true, path, init, ...context } = {}) {
+export async function bookPage(browser, slug, { width = 360, height = 800, turnstile = "ok", js = true, path, init, clock = true, ...context } = {}) {
   const env = await open(browser, { width, height, javaScriptEnabled: js, ...context }); // `context`: any other Playwright context option (e.g. reducedMotion)
+  // The browser's "today" is TEST_NOW (time still flows from there), the same day the mock backend's bookable-days window starts at: the calendar does not depend on the real date.
+  if (clock) await env.context.clock.install({ time: new Date(TEST_NOW) });
   if (init) await env.context.addInitScript(init);
   const turnstileRequests = [];
   await env.context.route("https://media.beautica.test/**", (r) => r.fulfill({ status: 200, contentType: "image/png", body: PNG }));
