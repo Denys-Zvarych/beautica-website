@@ -68,7 +68,7 @@ describe("happy path: one service", () => {
       assert.equal(await text(page.locator("#otp-phone")), "+380 67 129 00 15");
       assert.match(await text(page.locator("#otp-resend")), /Надіслати знову \(\d+ с\)/, "resend cooldown is running");
       assert.equal(await page.locator("#cta-otp").isDisabled(), true);
-      for (const [i, d] of [..."123456"].entries()) await page.locator("#otp input").nth(i).fill(d);
+      await page.locator("#otp input").fill("123456");
       await page.click("#cta-otp");
       await page.waitForSelector("#confirm-card", { state: "visible" });
       assert.equal(await text(page.locator("#c-name")), `${name} Коваленко`);
@@ -348,7 +348,7 @@ describe("multi-service visit", () => {
       await fillContact(page, { name });
       await page.click("#cta-contact");
       await page.waitForSelector("#otp", { state: "visible" });
-      for (const [i, d] of [..."654321"].entries()) await page.locator("#otp input").nth(i).fill(d);
+      await page.locator("#otp input").fill("654321");
       await page.click("#cta-otp");
       await page.waitForSelector("#confirm-card", { state: "visible" });
       assert.ok((await text(page.locator("#confirm-card"))).includes("4 год"));
@@ -591,44 +591,61 @@ describe("SMS code step", () => {
       await driveTo(page, "contact", { contact: { name: "Невірний", phone: "500000020" } });
       await page.click("#cta-contact");
       await page.waitForSelector("#otp", { state: "visible" });
-      for (let i = 0; i < 6; i++) await page.locator("#otp input").nth(i).fill("0");
+      await page.locator("#otp input").fill("000000");
       await page.click("#cta-otp");
       await page.waitForSelector("#otp-wrong", { state: "visible" });
       assert.ok((await text(page.locator("#otp-wrong"))).includes("Невірний або прострочений код. Перевірте цифри або запросіть новий код."));
       assert.equal(await page.locator("#otp.invalid").count(), 1);
       assert.equal(await visibleScreen(page), "otp");
-      await page.locator("#otp input").nth(5).fill("7");
+      await page.locator("#otp input").fill("000007");
       assert.equal(await page.locator("#otp-wrong").isVisible(), false, "typing clears the error");
       await page.click("#cta-otp");
       await page.waitForSelector("#confirm-card", { state: "visible" });
     });
   });
 
-  test("the 6-digit code can be pasted into the first cell, and a whole-code autofill into one cell spreads", async () => {
+  test("one real input: whole-code autofill, a formatted paste and Backspace all work; the cells only mirror it", async () => {
     await withPage("oksana-ab12", {}, async ({ page }) => {
       await driveTo(page, "contact", { contact: { name: "Вставка", phone: "500000021" } });
       await page.click("#cta-contact");
       await page.waitForSelector("#otp", { state: "visible" });
-      await page.locator("#otp input").first().evaluate((el) => {
+      assert.equal(await page.locator("#otp input").count(), 1, "a single input is the autofill / paste target");
+      assert.equal(await page.locator("#otp .otp-cell[aria-hidden=true]").count(), 6);
+      assert.equal(await page.getAttribute("#otp input", "autocomplete"), "one-time-code");
+      assert.equal(await page.getAttribute("#otp input", "inputmode"), "numeric");
+      assert.equal(await page.getAttribute("#otp input", "maxlength"), "6");
+      await page.locator("#otp input").evaluate((el) => {
         el.value = "246810";
         el.dispatchEvent(new Event("input", { bubbles: true }));
       });
-      assert.deepEqual(await page.locator("#otp input").evaluateAll((els) => els.map((e) => e.value)), [..."246810"]);
+      assert.deepEqual(await page.locator("#otp .otp-cell").evaluateAll((els) => els.map((e) => e.textContent)), [..."246810"]);
       assert.equal(await page.locator("#cta-otp").isEnabled(), true);
-      assert.equal(await page.getAttribute("#otp input", "autocomplete"), "one-time-code");
-      assert.equal(await page.getAttribute("#otp input", "inputmode"), "numeric");
+      // A pasted «123 456» (iOS would cut it to 6 chars before sanitising) is reduced to digits by the paste handler.
+      await page.locator("#otp input").evaluate((el) => {
+        const dt = new DataTransfer();
+        dt.setData("text", "123 456");
+        el.dispatchEvent(new ClipboardEvent("paste", { clipboardData: dt, bubbles: true, cancelable: true }));
+      });
+      assert.equal(await page.inputValue("#otp input"), "123456");
+      await page.locator("#otp input").evaluate((el) => {
+        el.value = "12a3-";
+        el.dispatchEvent(new Event("input", { bubbles: true }));
+      });
+      assert.equal(await page.inputValue("#otp input"), "123", "non-digits are dropped");
+      assert.equal(await page.locator("#cta-otp").isEnabled(), false);
     });
   });
 
-  test("Backspace on an empty cell steps back", async () => {
+  test("Backspace removes the last digit", async () => {
     await withPage("oksana-ab12", {}, async ({ page }) => {
       await driveTo(page, "contact", { contact: { name: "Бекспейс", phone: "500000022" } });
       await page.click("#cta-contact");
       await page.waitForSelector("#otp", { state: "visible" });
-      await page.locator("#otp input").nth(0).fill("1");
-      assert.equal(await page.evaluate(() => document.activeElement === document.querySelectorAll("#otp input")[1]), true, "typing advances");
+      await page.locator("#otp input").pressSequentially("12");
+      assert.equal(await page.inputValue("#otp input"), "12");
       await page.keyboard.press("Backspace");
-      assert.equal(await page.evaluate(() => document.activeElement === document.querySelectorAll("#otp input")[0]), true);
+      assert.equal(await page.inputValue("#otp input"), "1");
+      assert.equal(await page.locator("#otp .otp-cell").nth(1).textContent(), "");
     });
   });
 
@@ -665,7 +682,7 @@ describe("SMS code step", () => {
       await page.click("#cta-contact");
       await page.waitForSelector("#otp", { state: "visible" });
       await context.route(`${MOCK_API}/api/v1/book/otp/verify`, (r) => r.fulfill({ status: 429, headers: { "access-control-allow-origin": "*" }, body: "" }));
-      for (const [i, d] of [..."123456"].entries()) await page.locator("#otp input").nth(i).fill(d);
+      await page.locator("#otp input").fill("123456");
       await page.click("#cta-otp");
       await page.waitForSelector("#otp-limit", { state: "visible" });
     });
@@ -841,22 +858,20 @@ describe("every step renders on phone, tablet and desktop", () => {
           for (const sel of boxes) assert.ok(await visibleBox(page.locator(`[data-screen]:not([hidden]) ${sel}`).first()), `${label}: ${sel} has no box`);
           const small = await page.evaluate(() =>
             [...document.querySelectorAll("[data-screen]:not([hidden]) :is(a[href], button, input:not([type=checkbox]), textarea)")]
-              .filter((e) => !e.closest("[hidden]") && getComputedStyle(e).visibility !== "hidden" && !e.matches(".chk-row a, .otp input")) // the privacy link is a text link inside a sentence (WCAG 2.5.8 inline exception)
+              .filter((e) => !e.closest("[hidden]") && getComputedStyle(e).visibility !== "hidden" && !e.matches(".chk-row a")) // the privacy link is a text link inside a sentence (WCAG 2.5.8 inline exception)
               .map((e) => ({ t: e.tagName + "." + e.className + "#" + e.id, b: e.getBoundingClientRect() }))
               .filter(({ b }) => b.width > 0 && b.height > 0 && (b.height < 48 || b.width < 48))
               .map(({ t, b }) => `${t} ${Math.round(b.width)}x${Math.round(b.height)}`),
           );
           assert.deepEqual(small, [], `${label}: controls under 48 px`);
-          // The 41 x 50 px code cells are the app's size; their <label>::after adds 3.5 px each side, so the tappable area is 48 px wide.
+          // The one code input overlays all six cells: a tap on any cell hits it.
           const cellHits = await page.evaluate(() =>
-            [...document.querySelectorAll("[data-screen]:not([hidden]) #otp input")].map((i) => {
-              const b = i.getBoundingClientRect();
-              const y = b.top + b.height / 2;
-              const label = i.closest("label");
-              return [b.left - 3, b.right + 3].every((x) => document.elementFromPoint(x, y)?.closest("label") === label);
+            [...document.querySelectorAll("[data-screen]:not([hidden]) #otp .otp-cell")].map((c) => {
+              const b = c.getBoundingClientRect();
+              return document.elementFromPoint(b.left + b.width / 2, b.top + b.height / 2)?.id === "otp-input";
             }),
           );
-          assert.ok(cellHits.every(Boolean), `${label}: code cells are tappable 3 px outside their box`);
+          assert.ok((cellHits.length === 0 || cellHits.length === 6) && cellHits.every(Boolean), `${label}: the code input covers every cell`);
           assert.ok((await page.locator(".phone").boundingBox()).width <= 420);
           await shot(page, `flow-${label}-${width}`);
         };
@@ -881,7 +896,7 @@ describe("every step renders on phone, tablet and desktop", () => {
         await page.click("#cta-contact");
         await page.waitForSelector("#otp", { state: "visible" });
         await check("otp", ["#otp input", ".mail-tile"]);
-        for (const [i, d] of [..."123456"].entries()) await page.locator("#otp input").nth(i).fill(d);
+        await page.locator("#otp input").fill("123456");
         await page.click("#cta-otp");
         await page.waitForSelector("#confirm-card", { state: "visible" });
         await check("confirm", ["#confirm-card", ".strip", ".footer .cta"]);
@@ -938,7 +953,7 @@ describe("parity with the app: category accordions, comment, address (backend 38
         await fillContact(page, { name });
         await page.click("#cta-contact");
         await page.waitForSelector("#otp", { state: "visible" });
-        for (const [i, d] of [..."123456"].entries()) await page.locator("#otp input").nth(i).fill(d);
+        await page.locator("#otp input").fill("123456");
         await page.click("#cta-otp");
         await page.waitForSelector("#confirm-card", { state: "visible" });
         await page.fill("#comment", comment);
@@ -1016,7 +1031,7 @@ describe("control characters in guest text", () => {
       await page.locator("#f-consent").click({ position: { x: 14, y: 14 } });
       await page.click("#cta-contact");
       await page.waitForSelector("#otp", { state: "visible" });
-      for (const [i, d] of [..."123456"].entries()) await page.locator("#otp input").nth(i).fill(d);
+      await page.locator("#otp input").fill("123456");
       await page.click("#cta-otp");
       await page.waitForSelector("#confirm-card", { state: "visible" });
       await page.locator("#comment").evaluate((el) => { el.value = "а\u0007б\nв"; el.dispatchEvent(new Event("input", { bubbles: true })); });

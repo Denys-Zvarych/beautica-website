@@ -50,7 +50,7 @@ export const POST: APIRoute = async ({ request }) => {
 };
 
 /** Reads the body through a counting stream: null = more than MAX_BODY bytes (Content-Length can be absent or a lie, e.g. chunked). */
-async function readCapped(request: Request): Promise<Uint8Array | null> {
+async function readCapped(request: Request): Promise<Uint8Array<ArrayBuffer> | null> {
   if (!request.body) return new Uint8Array();
   const reader = request.body.getReader();
   const chunks: Uint8Array[] = [];
@@ -63,7 +63,7 @@ async function readCapped(request: Request): Promise<Uint8Array | null> {
       // Answering while the client is still uploading makes workerd reset the connection, so the 413 body never arrives.
       // Discard (never buffer) up to DRAIN_LIMIT more bytes so a normal client finishes and reads it, then give up on the rest.
       while (total <= DRAIN_LIMIT) {
-        const next = await reader.read().catch(() => ({ done: true, value: undefined }));
+        const next = await reader.read().catch(() => ({ done: true as const, value: undefined }));
         if (next.done) break;
         total += next.value.byteLength;
       }

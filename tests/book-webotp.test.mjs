@@ -45,14 +45,14 @@ async function toOtp(mode, phone) {
 const verifies = async (phone) => callsTo(await mockLog((e) => e.path.includes("/otp/") && e.body?.phone === phone), "POST", "/otp/verify");
 
 describe("code input attributes", () => {
-  test("first cell: one-time-code + numeric; pattern / maxlength kept", async () => {
+  test("the single code input: one-time-code + numeric; pattern / maxlength kept", async () => {
     const env = await toOtp("none", "500000031");
     try {
       const a = (n, name) => env.page.locator("#otp input").nth(n).getAttribute(name);
       assert.equal(await a(0, "autocomplete"), "one-time-code");
       assert.equal(await a(0, "inputmode"), "numeric");
       assert.equal(await a(0, "pattern"), "[0-9]*");
-      assert.equal(await a(0, "maxlength"), "1");
+      assert.equal(await a(0, "maxlength"), "6");
     } finally {
       await env.context.close();
     }
@@ -95,7 +95,7 @@ describe("WebOTP", () => {
       await env.page.click("#otp-resend-btn");
       await env.page.waitForFunction(() => window.__otp.calls.length === 2);
       assert.deepEqual(await env.page.evaluate(() => window.__otp.calls.map((c) => c.aborted)), [true, false]);
-      for (const [i, d] of [..."654321"].entries()) await env.page.locator("#otp input").nth(i).fill(d);
+      await env.page.locator("#otp input").fill("654321");
       await env.page.click("#cta-otp");
       await env.page.waitForSelector("#confirm-card", { state: "visible" });
       assert.deepEqual(await env.page.evaluate(() => window.__otp.calls.map((c) => c.aborted)), [true, true]);
@@ -211,7 +211,7 @@ describe("WebOTP", () => {
       await env.page.waitForTimeout(150);
       assert.equal(await env.page.locator("[data-screen=otp]").isVisible(), true);
       assert.deepEqual(env.problems, []);
-      for (const [i, d] of [..."123456"].entries()) await env.page.locator("#otp input").nth(i).fill(d);
+      await env.page.locator("#otp input").fill("123456");
       await env.page.click("#cta-otp");
       await env.page.waitForSelector("#confirm-card", { state: "visible" });
     } finally {

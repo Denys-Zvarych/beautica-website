@@ -65,7 +65,7 @@ export async function verifyOtp(page, phone) {
   await fillContact(page, { phone });
   await page.click("#cta-contact");
   await page.waitForSelector("#otp", { state: "visible" });
-  for (let i = 0; i < 6; i++) await page.locator("#otp input").nth(i).fill("123456"[i]);
+  await page.locator("#otp input").fill("123456");
   await page.click("#cta-otp");
   await page.waitForSelector("#salon-cards", { state: "visible" });
 }

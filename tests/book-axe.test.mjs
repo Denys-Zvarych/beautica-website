@@ -84,7 +84,7 @@ describe("axe: master and salon pages, every tab", () => {
       await page.click("#cta-contact");
       await page.waitForSelector("#otp", { state: "visible" });
       await sweep(page, "code");
-      for (const [i, d] of [..."123456"].entries()) await page.locator("#otp input").nth(i).fill(d);
+      await page.locator("#otp input").fill("123456");
       await page.click("#cta-otp");
       await page.waitForSelector("#confirm-card", { state: "visible" });
       await page.fill("#comment", "Коментар");
@@ -193,13 +193,13 @@ describe("touch targets: consent row and code cells are at least 48 x 48 px (eff
         await env.context.close();
       }
     });
-    test(`code step @${width}: every cell's hit area (the label's extension included) and the resend button`, async () => {
+    test(`code step @${width}: the code input's hit area (the label's extension included) and the resend button`, async () => {
       const env = await bookPage(browser, "oksana-ab12", { width, height: 900 });
       try {
         const { page } = env;
         await driveTo(page, "otp", { code: "" });
         const cells = await hitAreas(page, "#otp input");
-        assert.equal(cells.length, 6);
+        assert.equal(cells.length, 1);
         for (const [w, h] of cells) assert.ok(w >= HIT && h >= HIT, `an OTP cell's hit area is ${w}x${h} at ${width}px`);
         const b = await page.locator("#cta-otp").boundingBox();
         assert.ok(b.height >= HIT);
