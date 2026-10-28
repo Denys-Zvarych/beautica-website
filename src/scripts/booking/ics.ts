@@ -60,8 +60,13 @@ export function buildIcs(e: IcsEvent, now: Date = new Date()): string {
   return lines.map(fold).join("\r\n") + "\r\n";
 }
 
-export function downloadIcs(text: string, filename: string): void {
-  const url = URL.createObjectURL(new Blob([text], { type: "text/calendar;charset=utf-8" }));
+/** iPhone / iPad (iPadOS reports "Macintosh" with touch). iOS Safari ignores `<a download>` on blob URLs, so it needs its own route. */
+export const isIos = (): boolean => /iP(hone|ad|od)/.test(navigator.userAgent) || (/Macintosh/.test(navigator.userAgent) && navigator.maxTouchPoints > 1);
+
+const MIME = "text/calendar;charset=utf-8";
+
+function blobDownload(text: string, filename: string): void {
+  const url = URL.createObjectURL(new Blob([text], { type: MIME }));
   const a = document.createElement("a");
   a.href = url;
   a.download = filename;
@@ -69,4 +74,28 @@ export function downloadIcs(text: string, filename: string): void {
   a.click();
   a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 60000);
+}
+
+/**
+ * Hands the .ics to the device. Client-side only (the text carries the cancel-link bearer token: never sent, logged or tracked).
+ * iOS: the share sheet with the file (offers "Add to Calendar"), else a `data:text/calendar` navigation, which iOS opens in the
+ * system Calendar "Add event" sheet. Everything else keeps the blob download. Must be called from the click handler (user activation).
+ */
+export function downloadIcs(text: string, filename: string): void {
+  if (!isIos()) return blobDownload(text, filename);
+  const dataNav = (): void => {
+    location.assign(`data:text/calendar;charset=utf-8,${encodeURIComponent(text)}`); // assign (not replace): adds a history entry, so Back returns to the confirmation
+  };
+  try {
+    const file = new File([text], filename, { type: "text/calendar" });
+    if (typeof navigator.canShare === "function" && typeof navigator.share === "function" && navigator.canShare({ files: [file] })) {
+      void navigator.share({ files: [file] }).catch((err: unknown) => {
+        if ((err as { name?: string } | null)?.name !== "AbortError") dataNav(); // a dismissed sheet is not a failure
+      });
+      return;
+    }
+  } catch {
+    /* File / share unavailable: fall through */
+  }
+  dataNav();
 }

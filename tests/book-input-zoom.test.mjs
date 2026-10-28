@@ -28,7 +28,7 @@ describe("booking flow: no focus zoom on mobile", () => {
       assert.ok(!/maximum-scale|user-scalable/i.test(meta), `viewport blocks zoom: ${meta}`);
       await driveTo(page, "otp", { code: "" });
       const all = await sizes(page);
-      assert.ok(all.length >= 10, `contact fields + 6 code cells + comment (got ${all.length})`);
+      assert.ok(all.length >= 5, `contact fields + code input + comment (got ${all.length})`);
       for (const f of all) assert.ok(f.px >= 16, `${f.id} is ${f.px}px (< 16px zooms on focus)`);
     } finally {
       await env.context.close();
@@ -42,7 +42,7 @@ describe("booking flow: no focus zoom on mobile", () => {
       // toConfirm walks services -> masters -> time -> contact -> OTP -> the confirm cards, so every field of the wizard is in the DOM.
       await toConfirm(page, "501110061");
       const all = await sizes(page);
-      assert.ok(all.length >= 10, `contact fields + 6 code cells + 2 comments (got ${all.length})`);
+      assert.ok(all.length >= 6, `contact fields + code input + 2 comments (got ${all.length})`);
       assert.equal(await page.locator("#salon-cards textarea").count(), 2, "both per-master comment fields are among them");
       for (const f of all) assert.ok(f.px >= 16, `${f.id} is ${f.px}px (< 16px zooms on focus)`);
     } finally {
