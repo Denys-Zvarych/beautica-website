@@ -328,6 +328,8 @@
   background: transparent;
   padding: 0 var(--vt-space-md);
   font: var(--vt-fw-input) var(--vt-fs-input) / normal var(--vt-font-body);
+  /* iOS Safari (and some Android browsers) zoom the page on focus when a control's font-size is under 16px; the app's 13px input size is lifted to the prose token. */
+  font-size: max(var(--vt-fs-prose), var(--vt-fs-input));
   color: var(--vt-color-text);
   caret-color: var(--vt-color-accent);
 }
@@ -342,7 +344,7 @@
   padding: var(--vt-space-sm) var(--vt-space-md);
   resize: none;
   line-height: 1.5;
-  font-size: var(--vt-fs-label);
+  font-size: max(var(--vt-fs-prose), var(--vt-fs-label)); /* >= 16px: no focus zoom on mobile */
   font-weight: 700;
 }
 .field .box.ta {

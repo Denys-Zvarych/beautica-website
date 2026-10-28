@@ -1149,7 +1149,8 @@ describe("audit cycle 3: a booking of unknown outcome survives a reload (session
       const raw = await stored(page, slug);
       const m = JSON.parse(raw);
       assert.deepEqual(Object.keys(m).sort(), ["at", "label", "slotStartIso"]);
-      assert.ok(Math.abs(Date.now() - m.at) < 60_000 && /T\d\d:\d\d/.test(m.slotStartIso));
+      assert.ok(Math.abs((await page.evaluate(() => Date.now())) - m.at) < 60_000 && // the browser's clock (bookPage fixes it at TEST_NOW), not node's
+         /T\d\d:\d\d/.test(m.slotStartIso));
       for (const secret of ["501234567", "+380", "Іванна", "Тестова", "Секретна", "guest-token", "123456", "654321"]) assert.equal(raw.includes(secret), false, `the marker must not contain «${secret}»`);
       await page.reload({ waitUntil: "load" });
       await page.locator("#unsure-note").waitFor();

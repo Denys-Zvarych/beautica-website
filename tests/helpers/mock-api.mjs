@@ -16,6 +16,7 @@
 //   phone          ...0503 -> 503, ...0429 -> 429, ...0400 -> 400 "Verification failed"; anything else sends.   code 000000 = wrong, else ok
 //   GET /__mock/log -> every request seen (method, path, headers, body), newest last.   POST /__mock/reset clears it.
 import { createServer } from "node:http";
+import { TEST_NOW } from "./env.mjs";
 
 export const MASTER_ID = "5b6a7c8d-1111-4222-8333-944455556666";
 export const SVC = [
@@ -333,7 +334,7 @@ export async function startMockApi() {
       const from = url.searchParams.get("from") ?? "";
       const to = url.searchParams.get("to") ?? "";
       if (!/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to) || from > to) return err(res, 400, "Bad request");
-      const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Kyiv" }).format(new Date());
+      const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Kyiv" }).format(new Date(TEST_NOW));
       const iso = (d) => d.toISOString().slice(0, 10);
       const max = iso(new Date(new Date(`${today}T12:00:00Z`).getTime() + 60 * 86400000));
       if (from < today || to > max) return err(res, 400, "Window out of range");
@@ -356,7 +357,7 @@ export async function startMockApi() {
       const to = url.searchParams.get("to") ?? "";
       const ids = url.searchParams.getAll("serviceId");
       if (!/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to) || ids.length === 0 || ids.length > 10 || from > to) return err(res, 400, "Bad request");
-      const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Kyiv" }).format(new Date());
+      const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Kyiv" }).format(new Date(TEST_NOW));
       const iso = (d) => d.toISOString().slice(0, 10);
       const max = iso(new Date(new Date(`${today}T12:00:00Z`).getTime() + 60 * 86400000));
       if (from < today || to > max) return err(res, 400, "Window out of range");

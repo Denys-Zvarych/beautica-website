@@ -11,7 +11,7 @@ import { join } from "node:path";
 import { startMockApi, SVC, WIZ, wizAssign } from "./helpers/mock-api.mjs";
 import { backendGate, javaInt } from "./helpers/backend.mjs";
 import { componentsOf, pathProblem, validate } from "./helpers/dto-schema.mjs";
-import { ROOT } from "./helpers/env.mjs";
+import { ROOT, TEST_NOW } from "./helpers/env.mjs";
 import { parseMasterInfo, parseSalonInfo, parseReviewsPage } from "../src/lib/booking/types.ts";
 import { getAvailability, getBookableDays, sendOtp, verifyOtp, createBooking } from "../src/scripts/booking/api.ts";
 import { PRIVACY_POLICY_VERSION } from "../src/config/legal.mjs";
@@ -38,13 +38,13 @@ describe("1. the mock backend only serves what the real DTOs allow", gate, () =>
     assert.deepEqual(validate(slots, "List<AvailableSlotResponse>"), []);
   });
   test("GET /bookable-days is a List<MasterWorkingDayResponse>", async () => {
-    const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Kyiv" }).format(new Date());
+    const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Kyiv" }).format(new Date(TEST_NOW));
     const days = await get(`/api/v1/book/oksana-ab12/bookable-days?from=${today}&to=${today}&serviceId=${SVC[0].id}`);
     assert.equal(days.length, 1);
     assert.deepEqual(validate(days, "List<MasterWorkingDayResponse>"), []);
   });
   test("salon wizard routes (backend 392/393): availability and bookable-days are the master-slug DTOs, the booking is a GuestBookingResponse", async () => {
-    const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Kyiv" }).format(new Date());
+    const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Kyiv" }).format(new Date(TEST_NOW));
     const base = `/api/v1/book/s/wiz-contract-0001/masters/${WIZ.masters[0].id}`;
     const slots = await get(`${base}/availability?date=2030-01-02&serviceId=${wizAssign(1, 2)}`);
     assert.ok(slots.length > 0);
@@ -157,7 +157,7 @@ describe("2. every field the site reads exists in the real DTO", gate, () => {
   });
   test("getBookableDays reads only MasterWorkingDayResponse fields", async () => {
     const real = globalThis.fetch;
-    const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Kyiv" }).format(new Date());
+    const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Kyiv" }).format(new Date(TEST_NOW));
     const payload = await get(`/api/v1/book/oksana-ab12/bookable-days?from=${today}&to=${today}&serviceId=${SVC[0].id}`);
     const reads = new Set();
     try {

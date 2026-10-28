@@ -2,6 +2,9 @@
 // single-use, so it is cleared after every send and the widget reset.
 const SRC = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";
 
+/** Must equal the backend's `app.turnstile.expected-action` (application-prod.yml): the verifier rejects a token with any other action (400). */
+export const TURNSTILE_ACTION = "otp_send";
+
 interface TurnstileApi {
   render(el: HTMLElement, opts: Record<string, unknown>): string;
   reset(id: string): void;
@@ -53,6 +56,7 @@ export async function mountTurnstile(el: HTMLElement, siteKey: string): Promise<
     sitekey: siteKey,
     theme: "light",
     language: "uk",
+    action: TURNSTILE_ACTION,
     callback: (t: string) => settle(t),
     "expired-callback": () => settle(null),
     "error-callback": () => settle(null),

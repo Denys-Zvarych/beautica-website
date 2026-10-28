@@ -98,12 +98,18 @@ const canBook = info.bookable && info.services.length > 0;
       <div data-panels>
         <div class="tabpanel" id="panel-0" data-panel="0">
           <div class="sect">
-            <h2 class="t-section sect-label">{t("book.master.aboutLabel")}</h2>
             {
               info.bio ? (
-                <NeuInset class="bio"><p class="t-strong">{info.bio}</p></NeuInset>
+                <>
+                  {/* The tab is already named «Про майстра»: the heading stays for the outline/panel name only. */}
+                  <h2 class="sr-only">{t("book.master.aboutLabel")}</h2>
+                  <NeuInset class="bio"><p class="t-strong">{info.bio}</p></NeuInset>
+                </>
               ) : (
-                <p class="t-fb muted muted-note">{t("book.master.noAbout")}</p>
+                <>
+                  <h2 class="t-section sect-label">{t("book.master.aboutLabel")}</h2>
+                  <p class="t-fb muted muted-note">{t("book.master.noAbout")}</p>
+                </>
               )
             }
           </div>
