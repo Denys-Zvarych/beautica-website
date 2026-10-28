@@ -105,12 +105,14 @@ const masterInfo = (over = {}) => ({
 });
 
 const wizBooked = new Set();
+const reviewSpent = new Set();
 const MASTERS = {
   "oksana-ab12": () => masterInfo(),
   "sparse-0001": () => masterInfo({ masterName: "Нова Майстриня", avatarUrl: null, bio: null, professionalTitle: null, city: null, region: null, avgRating: null, reviewCount: 0, categories: [], ratingDistribution: DIST.map((b) => ({ ...b, count: 0 })), street: null, buildingNo: null, locationNote: null, portfolio: [], latestReviews: [] }),
   "closed-aaaa": () => masterInfo({ bookable: false }),
   "conflict-9999": () => masterInfo(),
   "bookdown-7777": () => masterInfo(),
+  "blocked-4098": () => masterInfo(), // phase 020: the booking POST answers 409 BOOKING_UNAVAILABLE
   "ambig-0001": () => masterInfo(),
   "ambig-5041": () => masterInfo(),
   "sortv-0001": () => masterInfo(),
@@ -254,6 +256,8 @@ const json = (res, status, body, headers = {}) => {
 const err = (res, status, message, headers) => json(res, status, { success: false, data: null, message }, headers);
 /** The backend's retired-link answer (GoneException.BOOKING_LINK_RETIRED): 410 with a stable code under data.code. */
 const gone = (res) => json(res, 410, { success: false, data: { code: "BOOKING_LINK_RETIRED" }, message: "Booking link is no longer valid" });
+/** TODO(backend-398): the neutral «blocked phone» answer at booking create: 409 with the stable code under data.code (BookingUnavailableException). */
+const unavailable = (res) => json(res, 409, { success: false, data: { code: "BOOKING_UNAVAILABLE" }, message: "Booking is not available" });
 const readBody = (req) => new Promise((resolve) => {
   const chunks = [];
   req.on("data", (c) => chunks.push(c));
@@ -313,6 +317,7 @@ export async function startMockApi() {
         const r = wizResolve(masterId, b.masterServiceIds);
         if (!r) return err(res, 404, "Not found");
         if (b.clientComment !== undefined && (typeof b.clientComment !== "string" || b.clientComment.length > 1000)) return err(res, 400, "Comment must be at most 1000 characters");
+        if (slug.includes("blk") && r.master.n === 1) return unavailable(res);
         if (slug.includes("c409") && r.master.n === 2 && /T09:00:00/.test(b.startsAt)) return err(res, 409, "Slot not available");
         if (slug.includes("c401") && r.master.n === 2) return err(res, 401, "Unauthorized");
         // A booking exists once accepted: the same master and time again is a conflict (what the real backend answers), which is how the
@@ -391,6 +396,7 @@ export async function startMockApi() {
       if (b.privacyAccepted !== true || !b.privacyPolicyVersion || !b.name || !b.surname || !b.startsAt || ids.length === 0 || (b.serviceId && b.masterServiceIds)) return err(res, 400, "Validation failed");
       if (b.clientComment !== undefined && (typeof b.clientComment !== "string" || b.clientComment.length > 1000 || /[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/.test(b.clientComment))) return err(res, 400, "Comment must be at most 1000 characters");
       if (slug === "conflict-9999") return err(res, 409, "Slot not available");
+      if (slug.startsWith("blocked-")) return unavailable(res);
       if (slug === "bookdown-7777") return err(res, 503, "Service unavailable");
       // A slug containing "ambig": a booking exists once accepted, the same time again is a conflict (the "answer lost, then resent" case).
       if (slug.includes("ambig")) {
@@ -401,6 +407,40 @@ export async function startMockApi() {
       const names = ids.map((id) => SVC.find((s) => s.id === id)?.name).filter(Boolean);
       const minutes = ids.reduce((a, id) => a + (SVC.find((s) => s.id === id)?.durationMinutes ?? 0), 0);
       return json(res, 201, { bookingId: "b0b0b0b0-1111-4222-8333-944455556666", appointmentId: ids.length > 1 ? "a0a0a0a0-1111-4222-8333-944455556666" : null, startsAt: b.startsAt, masterName: "Оксана Коваленко", serviceName: names.join(", "), durationMinutes: minutes, cancelUrl: slug === "nocancel-8888" ? null : slug === "foreigncancel-4242" ? FOREIGN_CANCEL_URL : CANCEL_URL });
+    }
+    // TODO(backend-401): guest review invites (phase 401 contract + the 019 design input). Tokens by prefix (16+ chars, [A-Za-z0-9_-]):
+    //   rvopen...   one service (master)      rvmulti...  two services (master)      rvsalon...  two services, two masters (salon)
+    //   rvdone...   200 {state: ALREADY_REVIEWED} (consumed)      rvlimit... GET 429      rvdown... GET 503      anything else = 404 (unknown / expired alike)
+    //   opt-out: 404 for rvoptgone... (an open form whose token dies before the opt-out)
+    //   submit: 404 for rvgone... (spent meanwhile), 409 for rvconf..., 429 for rvslow..., 400 for rvbad..., 201 otherwise (each token is single-use: a 2nd submit = 404)
+    if ((m = /^\/api\/v1\/public\/review-invites\/([A-Za-z0-9_-]+)(\/reviews|\/opt-out)?$/.exec(path))) {
+      const [, tok, tail] = m;
+      if (!tail && req.method === "GET") {
+        if (tok.startsWith("rvdone")) return json(res, 200, { state: "ALREADY_REVIEWED" });
+        if (tok.startsWith("rvlimit")) return err(res, 429, "Too many requests", { "retry-after": "20" });
+        if (tok.startsWith("rvdown")) return err(res, 503, "Service unavailable", { "retry-after": "9" });
+        const o = { providerName: "Оксана Коваленко", providerType: "MASTER", visitDate: "2026-10-24", displayName: "Олена К.", avatarUrl: null, avgRating: 4.9, reviewCount: 128, professionalTitle: "Манікюр та педикюр" };
+        if (tok.startsWith("rvsalon")) return json(res, 200, { ...o, providerName: "Салон «Лаванда»", providerType: "SALON", professionalTitle: null, items: [{ bookingId: uid("5", 1), serviceName: "Манікюр+гель лак", masterName: "Оксана Коваленко" }, { bookingId: uid("5", 2), serviceName: "Педикюр класичний", masterName: "Ірина Мельник" }] });
+        if (tok.startsWith("rvmulti")) return json(res, 200, { ...o, items: [{ bookingId: uid("5", 1), serviceName: "Манікюр+гель лак", masterName: "Оксана Коваленко" }, { bookingId: uid("5", 2), serviceName: "Педикюр класичний", masterName: "Оксана Коваленко" }] });
+        if (tok.startsWith("rvopen") || tok.startsWith("rv") && /^rv(gone|conf|slow|bad|opt|blk)/.test(tok)) return json(res, 200, { data: { ...o, items: [{ bookingId: uid("5", 1), serviceName: "Манікюр+гель лак", masterName: "Оксана Коваленко" }] } }); // wrapped: both shapes are read
+        return err(res, 404, "Not found");
+      }
+      if (req.method !== "POST" || !tail) return err(res, 404, "Not found");
+      if (tail === "/reviews") {
+        if (tok.startsWith("rvgone") || reviewSpent.has(tok)) return err(res, 404, "Not found");
+        if (tok.startsWith("rvconf")) return err(res, 409, "Already reviewed");
+        if (tok.startsWith("rvblk")) return unavailable(res); // 409 + BOOKING_UNAVAILABLE on a REVIEW call: must stay a plain conflict (the code is booking-create only)
+        if (tok.startsWith("rvslow")) return err(res, 429, "Too many requests", { "retry-after": "60" });
+        const b = body ?? {};
+        if (tok.startsWith("rvbad") || !Array.isArray(b.items) || b.items.length === 0 || b.items.some((i) => !(i.rating >= 1 && i.rating <= 5) || (i.comment !== undefined && (typeof i.comment !== "string" || i.comment.length > 2000)))) return err(res, 400, "Validation failed");
+        if (!b.turnstileToken) return err(res, 400, "Verification failed");
+        reviewSpent.add(tok);
+        return json(res, 201, { created: b.items.length });
+      }
+      if (tok.startsWith("rvoptgone")) return err(res, 404, "Not found"); // opt-out: the token was spent / expired meanwhile
+      if (!(body ?? {}).turnstileToken) return err(res, 400, "Verification failed");
+      if (tok.startsWith("rvslow")) return err(res, 429, "Too many requests", { "retry-after": "60" });
+      return json(res, 204, undefined);
     }
     return err(res, 404, "Not found");
   });

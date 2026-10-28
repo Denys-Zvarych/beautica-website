@@ -1,0 +1,82 @@
+/* Guest review page /r/{token} (phase 019): the few rules the booking pages do not have. Everything else is book.css + book-flow.css.
+   Star control = the profile's filled star (.stars, Icons.star_rounded) enlarged to a 48 px target. Transcribed from the approved preview
+   (docs/signup-designs/Website/review.css); the preview's spring is --vt-ease-spring / --vt-dur-spring (web-only tokens, no raw curves in components). */
+.starrow {
+  display: flex;
+  justify-content: space-between;
+  max-width: calc(var(--vt-touch-min) * 5 + var(--vt-space-md) * 2);
+}
+.starbtn {
+  display: grid;
+  place-items: center;
+  width: var(--vt-touch-min);
+  height: var(--vt-touch-min);
+  border: 0;
+  padding: 0;
+  background: none;
+  cursor: pointer;
+  border-radius: var(--vt-radius-field);
+  color: var(--vt-color-faint);
+  --icon-size: var(--vt-app-icon-34);
+  --icon-gap: 0;
+}
+.starbtn .icon {
+  transition: transform var(--vt-dur-spring) var(--vt-ease-spring);
+}
+.starbtn[data-on="true"] {
+  color: var(--vt-color-accent);
+}
+.starbtn[aria-checked="true"] .icon {
+  transform: scale(1.12);
+}
+.starbtn:focus-visible {
+  outline: medium solid var(--vt-color-accent-deep);
+  outline-offset: var(--vt-space-xs);
+}
+.stile.rv {
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--vt-space-xs);
+  cursor: default;
+}
+.stile.rv:active {
+  box-shadow: var(--vt-shadow-extruded-small);
+}
+.rv .starline {
+  display: flex;
+  align-items: center;
+  gap: var(--vt-space-sm);
+}
+.rv .starline .t-fb {
+  flex: 1;
+  min-width: 0;
+  text-align: right;
+}
+.rv .info .name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.optout {
+  text-align: center;
+  padding-top: var(--vt-space-md);
+}
+.optout .link-btn {
+  min-height: var(--vt-touch-min);
+  padding-inline: var(--vt-space-md);
+  text-decoration: underline;
+}
+.err-tile {
+  color: var(--vt-color-error);
+}
+.rv-note {
+  margin: 0;
+}
+.rv-banner {
+  margin-top: var(--vt-space-md);
+}
+@media (prefers-reduced-motion: reduce) {
+  .starbtn .icon {
+    transition: none;
+  }
+}

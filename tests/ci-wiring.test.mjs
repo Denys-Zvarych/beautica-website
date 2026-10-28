@@ -62,7 +62,7 @@ describe("every spec runs on pull requests", () => {
     assert.ok(heavy.length >= 8, `found ${heavy.length} heavy steps: the parser is broken`);
     for (const s of heavy) {
       const t = Number(/timeout-minutes:\s*(\d+)/.exec(s.text)?.[1]);
-      const limit = /lhci autorun/.test(s.text) ? 14 : 5; // lhci over 10 pages x 3 runs takes ~5.5 min on a runner; its job allows 15
+      const limit = /lhci autorun/.test(s.text) ? 14 : 5; // lhci over 10 pages x 3 runs takes ~5.5 min on a runner; its job allows 15; lighthouse-ssr is split in two steps (3 + 2 pages) to stay within 5
       assert.ok(t >= 1 && t <= limit, `step "${s.text.split("\n")[0]}" has timeout-minutes ${t || "none"}`);
     }
   });
@@ -87,14 +87,17 @@ describe("every route is under Lighthouse", () => {
       assert.ok(lhci.ci.assert.assertMatrix.some((a) => new RegExp(a.matchingUrlPattern).test(`http://localhost${r}.html`) && a.aggregationMethod === "median"), `${r} matches no median assertion block`);
     });
   test("the SSR routes (no built HTML for LHCI) are covered by scripts/lighthouse-ssr.mjs: master, 12-photo rail, salon, sorted view; run in CI with 3 runs", () => {
-    assert.deepEqual(dynamicRoutes.sort(), ["/book/[slug]", "/book/cancel/[token]", "/book/s/[slug]"]);
+    assert.deepEqual(dynamicRoutes.sort(), ["/book/[slug]", "/book/cancel/[token]", "/book/s/[slug]", "/r/[token]"]);
     const script = read("scripts/lighthouse-ssr.mjs");
     const pages = JSON.parse(/const PAGES = (\[.*?\]);/.exec(script)[1]);
     assert.ok(pages.some((p) => /^\/book\/[a-z0-9-]+$/.test(p)), "a master page");
     assert.ok(pages.includes("/book/rail-8888"), "the 12-photo rail");
     assert.ok(pages.some((p) => p.startsWith("/book/s/")), "a salon page");
     assert.ok(pages.some((p) => p.includes("?sort=")), "a sorted view");
-    assert.match(ci, /node scripts\/lighthouse-ssr\.mjs --runs 3/);
+    assert.ok(pages.some((p) => p.startsWith("/r/")), "the guest review form (phase 019)");
+    // CI splits the pages over two steps (each <= 5 min) with LH_PAGES: together they must cover every page of the script, 3 runs each.
+    const ciPages = [...ci.matchAll(/LH_PAGES='(\[.*?\])' node scripts\/lighthouse-ssr\.mjs --runs 3/g)].flatMap((m) => JSON.parse(m[1]));
+    assert.deepEqual([...ciPages].sort(), [...pages].sort(), "the CI steps cover exactly the pages of lighthouse-ssr.mjs");
     assert.ok(existsSync(join(ROOT, "tests/helpers/mock-api.mjs")));
   });
   test("the only catch-all routes are the listed 404 re-servers (their page, /404, is under Lighthouse)", () => {
@@ -102,6 +105,34 @@ describe("every route is under Lighthouse", () => {
     assert.ok(lhciUrls.includes("/404"));
   });
   test("the guest-cancel token route is measured through its static shell /l/cancel", () => assert.ok(lhciUrls.includes("/l/cancel")));
+});
+
+describe("phases 019 / 020 (guest review page, blocked-phone banner) are guarded on every PR", () => {
+  test("review-page and book-blocked specs run in the e2e job by default (never in TEST_EXCLUDE, never run only by name in a skipped job)", () => {
+    for (const f of ["review-page.test.mjs", "book-blocked.test.mjs"]) {
+      assert.ok(specs.includes(f), `${f} exists`);
+      assert.equal(excluded.some((x) => f.includes(x)), false, `${f} must not be excluded from npm test (TEST_EXCLUDE: ${excluded})`);
+    }
+    assert.equal(steps.find((x) => /run: npm test\b/.test(x.text))?.job, "e2e");
+  });
+  test("the /r/ route is also under the HTML validator and axe (they enumerate the route in their own sources)", () => {
+    assert.match(read("tests/ssr-html-valid.test.mjs"), /\/r\//, "ssr-html-valid covers /r/");
+    assert.match(read("tests/book-axe.test.mjs"), /\/r\//, "book-axe covers /r/");
+  });
+  test("lighthouse-ssr fails the build below Perf 90 (README § 8) on every SSR page, /r/ included", () => {
+    const script = read("scripts/lighthouse-ssr.mjs");
+    assert.match(script, /PERF_MIN = Number\(process\.env\.PERF_MIN \?\? 90\)/);
+    assert.match(script, /if \(!\(m\.perf >= PERF_MIN\)\) bad\.push/);
+    assert.match(script, /PAGES = \[[^\]]*"\/r\/rv/);
+  });
+});
+
+describe("phase 018 (legal bump, legal fonts) is guarded on every PR", () => {
+  test("legal-bump.test.mjs runs in the server-less site job (npm run test:static, after the build) and in npm test", () => {
+    assert.match(pkg.scripts["test:static"], /tests\/legal-bump\.test\.mjs/);
+    assert.equal(steps.find((x) => /npm run test:static/.test(x.text))?.job, "site");
+    assert.equal(excluded.some((x) => "legal-bump.test.mjs".includes(x)), false, "legal-bump must not be in TEST_EXCLUDE");
+  });
 });
 
 describe("the shared mock backend", () => {

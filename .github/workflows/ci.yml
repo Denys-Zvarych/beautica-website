@@ -168,7 +168,7 @@ jobs:
   # backend. A job of its own so the two e2e jobs run side by side (both are required checks).
   e2e_booking:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
     env:
       CHROMIUM_PATH: /usr/bin/google-chrome
     steps:
@@ -200,9 +200,10 @@ jobs:
         env:
           AXE_WIDTHS: "768,1280"
 
-      # Lighthouse (mobile) on the SSR link pages against wrangler dev + the mock backend: master, 12-photo rail, salon, sorted view; 3 runs each.
-      # Budgets (median of the runs): LCP < 2400 ms (target 2000, warns above it), TBT < 50 ms, CLS < 0.02, JS <= 20 KB.
-      - name: Lighthouse - SSR link pages
+      # Lighthouse (mobile) on the SSR link pages against wrangler dev + the mock backend: master, 12-photo rail, salon, sorted view, guest review form /r/; 3 runs each.
+      # Budgets (median of the runs): Perf >= 90, LCP < 2400 ms (target 2000, warns above it), TBT < 50 ms, CLS < 0.02, JS <= 20 KB.
+      # Two steps (LH_PAGES splits the list of scripts/lighthouse-ssr.mjs) so each stays within 5 minutes: 3 pages x 3 runs, then 2 pages x 3 runs.
+      - name: Lighthouse - SSR link pages (master, salon, review form)
         timeout-minutes: 5
         run: |
           # Deterministic browser: the runner's Chrome (google-chrome, else chromium); fail loudly when there is none.
@@ -210,7 +211,15 @@ jobs:
           test -n "$CHROME_PATH" || { echo "no Chrome on the runner"; exit 1; }
           export CHROME_PATH
           "$CHROME_PATH" --version
-          node scripts/lighthouse-ssr.mjs --runs 3
+          LH_PAGES='["/book/oksana-ab12","/book/s/lavanda-1111","/r/rvmulti-lhci-00000001"]' node scripts/lighthouse-ssr.mjs --runs 3
+
+      - name: Lighthouse - SSR link pages (photo rail, sorted view)
+        timeout-minutes: 5
+        run: |
+          CHROME_PATH="$(command -v google-chrome || command -v google-chrome-stable || command -v chromium || command -v chromium-browser)"
+          test -n "$CHROME_PATH" || { echo "no Chrome on the runner"; exit 1; }
+          export CHROME_PATH
+          LH_PAGES='["/book/rail-8888","/book/oksana-ab12?sort=OLDEST"]' node scripts/lighthouse-ssr.mjs --runs 3
 
   # Lighthouse over every page (3 runs, median): perf >= 95, a11y 100, SEO 100 (0.66 on the noindex pages, where only
   # is-crawlable fails by design), CLS/LCP/TBT, and resource budgets. Own job: ~4 min of Chrome runs stay off the critical path.

@@ -1,0 +1,194 @@
+---
+// Guest review page /r/{token} (phase 019): every screen is in the HTML, one visible (`initial`); the island (src/scripts/review) only toggles
+// them. Without an `invite` (an already-used or unusable link) only the matching notice screen exists. Transcribed from the approved preview
+// docs/signup-designs/Website/review.html onto the booking components: MasterStrip, ServiceTile-style rows (.stile), the booking field/banner/CTA.
+// Exactly one real <h1>: the heading of the screen shown first; the others are h2 with aria-level=1 (the booking flow's pattern).
+import CtaButton from "../CtaButton.astro";
+import NeuCard from "../NeuCard.astro";
+import Icon from "../Icon.astro";
+import BookTopBar from "./BookTopBar.astro";
+import MasterStrip from "./MasterStrip.astro";
+import { t } from "../../i18n/t";
+import { safeJson } from "../../lib/safeJson";
+import { formatVisitDate, type ReviewInvite } from "../../lib/review/invite";
+
+interface Props {
+  initial: "form" | "already" | "invalid";
+  invite?: ReviewInvite;
+  api?: string;
+  siteKey?: string;
+}
+const { initial, invite, api = "", siteKey = "" } = Astro.props;
+const MAX = 2000;
+const salon = invite?.providerType === "SALON";
+const when = invite ? formatVisitDate(invite.visitDate) : "";
+const services = invite ? [...new Set(invite.items.map((i) => i.serviceName))] : [];
+const strip = invite
+  ? { name: invite.providerName, subtitle: invite.professionalTitle ?? services.join(", "), avatarUrl: invite.avatarUrl, rating: invite.avgRating, reviewCount: invite.reviewCount, salonMaster: false, label: t(salon ? "review.stripSalon" : "review.stripMaster"), showRating: invite.avgRating !== null }
+  : null;
+const hidden = (screen: string) => (screen === initial ? undefined : "");
+const js = safeJson({
+  sending: t("review.sending"), cta: t("review.cta"), counter: t("review.counter", { n: "{n}", max: MAX }),
+  words: ["", t("review.word1"), t("review.word2"), t("review.word3"), t("review.word4"), t("review.word5")],
+  errNetwork: t("review.errNetwork"), errLimit: t("review.errLimit"), errValidation: t("review.errValidation"), errTurnstile: t("review.errTurnstile"), errGeneric: t("review.errGeneric"), optoutErr: t("review.optoutErr"),
+});
+---
+
+<div data-review-root data-api={invite ? api : undefined} data-site-key={invite ? siteKey : undefined} data-max={MAX}>
+  {
+    invite && strip && (
+      <section class="screen" data-screen="form" hidden={hidden("form")}>
+        <BookTopBar title={t("review.topbar")} noBack heading h1 />
+        <div class="body">
+          <div class="pad-h pt-md pb-md">
+            <p class="t-body11 rv-note">{t("review.intro")}</p>
+            <div class="g-lg"></div>
+            <MasterStrip {...strip} />
+            <div class="g-md"></div>
+            <h2 class="t-sub13 rv-note">{t("review.services")}</h2>
+            <div class="g-md"></div>
+            <div class="stack form-stack" id="svcs">
+              {
+                invite.items.map((i) => (
+                  <div class="stile rv" data-svc data-id={i.bookingId} role="radiogroup" aria-label={t("review.rateAria", { service: i.serviceName })}>
+                    <span class="info">
+                      <span class="t-strong name">{i.serviceName}</span>
+                      {salon && i.masterName && <span class="meta"><span class="t-fb muted">{i.masterName}</span></span>}
+                    </span>
+                    <div class="starline">
+                      <!-- [html-validate-disable prefer-native-element -- the ARIA radio-group pattern on buttons: a 48 px custom star target with roving tabindex] -->
+                      <div class="starrow">
+                        {[1, 2, 3, 4, 5].map((n) => (
+                          <button type="button" class="starbtn" role="radio" aria-checked="false" aria-label={t("review.starAria", { n })} data-v={n} data-on="false" tabindex={n === 1 ? 0 : -1} disabled>
+                            <Icon name="star" />
+                          </button>
+                        ))}
+                      </div>
+                      <!-- [html-validate-enable prefer-native-element] -->
+                      <span class="t-fb muted" data-word aria-hidden="true"></span>
+                    </div>
+                  </div>
+                ))
+              }
+            </div>
+            <div class="g-lg"></div>
+            <div>
+              <label class="t-label block-label" for="comment">{t("review.commentLabel")}</label>
+              <div class="field"><div class="box ta"><textarea id="comment" name="comment" rows="4" maxlength={MAX} placeholder={t("review.commentPh")}></textarea></div></div>
+              <div class="counter t-fb muted" id="counter" aria-hidden="true">{t("review.counter", { n: 0, max: MAX })}</div>
+            </div>
+            <div class="g-md"></div>
+            <NeuCard bordered pad="sm"><p class="t-body11 rv-note">{t("review.publishedPre")} <span class="t-strong11">{invite.displayName}</span>{invite.displayName.endsWith(".") ? "" : "."} {t("review.publishedPost")}</p></NeuCard>
+            <div class="g-md"></div>
+            <div class="turn" id="ts-form" role="group" aria-label={t("review.turnstile")}></div>
+            <div class="banner rv-banner" role="alert" id="rv-error" hidden><Icon name="error-outline" /><span class="t-fb" id="rv-error-text"></span></div>
+            <noscript><div class="banner rv-banner"><Icon name="error-outline" /><span class="t-fb">{t("review.noscript")}</span></div></noscript>
+            <div class="optout"><button type="button" class="link-btn t-link link-hit" id="rv-optout">{t("review.optOut")}</button></div>
+          </div>
+        </div>
+        <div class="footer"><CtaButton type="button" id="rv-submit" icon="check-circle" spinner>{t("review.cta")}</CtaButton></div>
+      </section>
+    )
+  }
+
+  {
+    invite && (
+      <section class="screen" data-screen="success" hidden>
+        <div class="body pt-lg">
+          <div class="pad-h">
+            <div class="reveal"><div class="medallion"><span><Icon name="done" /></span></div></div>
+            <div class="g-xs"></div>
+            <h2 class="t-heading-lg centered reveal" data-step-heading tabindex="-1" aria-level="1">{t("review.successH")}</h2>
+            <div class="g-sm"></div>
+            <p class="t-body11 centered reveal">{t("review.successSub")}</p>
+            <div class="g-lg"></div>
+            <NeuCard bordered pad="sm" class="reveal">
+              <div class="lrow"><span class="lbl t-label">{t(salon ? "review.successSalon" : "review.successMaster")}</span><span class="val t-value-12">{invite.providerName}</span><span class="det t-fb muted w600">{[when, services.join(", ")].filter(Boolean).join(" · ")}</span></div>
+            </NeuCard>
+            <div class="g-xl"></div>
+            <a class="cta2" href="/"><span class="vt-cta">{t("review.home")}</span></a>
+            <div class="g-xl"></div>
+          </div>
+        </div>
+      </section>
+    )
+  }
+
+  <section class="screen" data-screen="already" hidden={hidden("already")}>
+    <BookTopBar title={t("review.topbarShort")} noBack />
+    <div class="body">
+      <div class="pad-h pt-lg">
+        <div class="g-lg"></div>
+        <div class="mail-tile"><Icon name="check-circle" /></div>
+        <div class="g-lg"></div>
+        <div role="status">{initial === "already" ? <h1 class="t-heading centered" data-step-heading tabindex="-1">{t("review.alreadyH")}</h1> : <h2 class="t-heading centered" data-step-heading tabindex="-1" aria-level="1">{t("review.alreadyH")}</h2>}</div>
+        <div class="g-sm"></div>
+        <p class="t-body centered">{t("review.alreadyText")}</p>
+        <div class="g-xl"></div>
+        <a class="cta2" href="/"><span class="vt-cta">{t("review.home")}</span></a>
+        <div class="g-xl"></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="screen" data-screen="invalid" hidden={hidden("invalid")}>
+    <BookTopBar title={t("review.topbarShort")} noBack />
+    <div class="body">
+      <div class="pad-h pt-lg">
+        <div class="g-lg"></div>
+        <div class="mail-tile err-tile"><Icon name="error-outline" /></div>
+        <div class="g-lg"></div>
+        <div role="status">{initial === "invalid" ? <h1 class="t-heading centered" data-step-heading tabindex="-1">{t("review.invalidH")}</h1> : <h2 class="t-heading centered" data-step-heading tabindex="-1" aria-level="1">{t("review.invalidH")}</h2>}</div>
+        <div class="g-sm"></div>
+        <p class="t-body centered">{t("review.invalidText")}</p>
+        <div class="g-xl"></div>
+      </div>
+    </div>
+  </section>
+
+  {
+    invite && (
+      <section class="screen" data-screen="optout-confirm" hidden>
+        <BookTopBar title={t("review.topbarShort")} noBack />
+        <div class="body">
+          <div class="pad-h pt-lg">
+            <div class="g-lg"></div>
+            <h2 class="t-heading centered" data-step-heading tabindex="-1" aria-level="1">{t("review.optoutH")}</h2>
+            <div class="g-sm"></div>
+            <p class="t-body centered">{t("review.optoutText")}</p>
+            <div class="g-xl"></div>
+            <div class="turn" id="ts-optout" role="group" aria-label={t("review.turnstile")}></div>
+            <div class="banner rv-banner" role="alert" id="rv-optout-error" hidden><Icon name="error-outline" /><span class="t-fb">{t("review.optoutErr")}</span></div>
+            <div class="g-lg"></div>
+            <div class="stack tight">
+              <CtaButton type="button" id="rv-optout-yes" spinner>{t("review.optoutYes")}</CtaButton>
+              <button type="button" class="cta2" id="rv-optout-back"><span class="vt-cta">{t("review.optoutBack")}</span></button>
+            </div>
+            <div class="g-xl"></div>
+          </div>
+        </div>
+      </section>
+    )
+  }
+
+  {
+    invite && (
+      <section class="screen" data-screen="optout-done" hidden>
+        <BookTopBar title={t("review.topbarShort")} noBack />
+        <div class="body">
+          <div class="pad-h pt-lg">
+            <div class="g-lg"></div>
+            <div class="mail-tile"><Icon name="check-circle" /></div>
+            <div class="g-lg"></div>
+            <div role="status"><h2 class="t-heading centered" data-step-heading tabindex="-1" aria-level="1">{t("review.optoutDoneH")}</h2></div>
+            <div class="g-sm"></div>
+            <p class="t-body centered">{t("review.optoutDoneText")}</p>
+            <div class="g-xl"></div>
+          </div>
+        </div>
+      </section>
+    )
+  }
+
+  <script type="application/json" id="review-i18n" set:html={js}></script>
+</div>

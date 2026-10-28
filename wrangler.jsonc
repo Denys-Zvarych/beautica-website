@@ -15,9 +15,10 @@
     // navigation to an unknown path with the static 404 page and never invokes the Worker.
     // /book/cancel/{token} is served by the Worker too (src/pages/book/cancel/[token].ts): it returns the static shell /l/cancel with the
     // runtime API origin in data-api and in the CSP. Its trailing-slash variant stays an asset (the 307 rule in _redirects).
+    // /r/{token} (guest review, phase 019) is rendered by the Worker as well; its trailing-slash variant and the bare /r/ (where history.replaceState leaves the address after a review) are the 307 rules in _redirects.
     // /api/* is listed too: once this array exists the asset layer no longer lets a GET to a path without an asset reach the Worker, and
     // /api/delete-request must keep answering 405 to a GET (tests/headers-seo.test.mjs).
-    "run_worker_first": ["/book/*", "!/book/cancel/*/", "/api/*"]
+    "run_worker_first": ["/book/*", "!/book/cancel/*/", "/r/*", "!/r/*/", "!/r/", "/api/*"]
   },
   // Booking-link pages (phases 008/009), read at run time by src/lib/booking/config.ts. Public values only; the Worker key is a secret.
   //   API_ORIGIN               prod API. Previews (dev branch, staging) override it below; local dev: .dev.vars (see .dev.vars.example).

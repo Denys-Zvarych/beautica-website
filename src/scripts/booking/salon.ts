@@ -418,7 +418,7 @@ export function createSalon(core: Core, info: SalonInfo) {
     $("#submit-error").hidden = true;
   }
 
-  const failText = (fail: Fail): string => (fail === "conflict" ? S.conflict! : fail === "validation" ? S.invalid! : fail === "rate-limited" ? S.limit! : fail === "unavailable" ? fmt(S.unavailable!, { email: S.supportEmail! }) : S.error!);
+  const failText = (fail: Fail): string => (fail === "provider-unavailable" ? S.blockedSalon! : fail === "conflict" ? S.conflict! : fail === "validation" ? S.invalid! : fail === "rate-limited" ? S.limit! : fail === "unavailable" ? fmt(S.unavailable!, { email: S.supportEmail! }) : S.error!);
 
   /** One POST per master, in order, with the same guest token. Stops at the first failure; masters already booked stay booked. */
   async function submit(btn: HTMLButtonElement): Promise<void> {
@@ -472,7 +472,7 @@ export function createSalon(core: Core, info: SalonInfo) {
         core.lockContact();
         cardError(a, fmt(S.uncertain!, { master: g.name }));
       } else {
-        cardError(a, `${fmt(S.failedFor!, { master: g.name })} ${failText(r.fail)}`);
+        cardError(a, r.fail === "provider-unavailable" ? failText(r.fail) : `${fmt(S.failedFor!, { master: g.name })} ${failText(r.fail)}`);
         if (r.fail === "conflict") a.querySelector<HTMLElement>("[data-appt-change]")!.hidden = false;
         // A rejected request will not succeed by repeating it: drop the token, the next try verifies the phone again.
         if (r.fail === "validation" || r.fail === "not-found") st.guestToken = null;

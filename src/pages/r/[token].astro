@@ -1,0 +1,55 @@
+---
+// Guest review link /r/{token} (phase 019): on-demand (Worker) render of GET /api/v1/public/review-invites/{token}. A token route: TOKEN_CSP family
+// (no analytics origins), no-store, no-referrer, noindex, never edge-cached (the middleware's link-page cache does not match /r/), no analytics tag.
+// States: open (form) | already reviewed (200, distinct) | invalid (404: unknown, expired, malformed: ONE identical page) | 429 | 503.
+export const prerender = false;
+
+import Layout from "../../components/Layout.astro";
+import "../../styles/book.css"; // after Layout: its @font-face latin core must come after the full faces of fonts.css (the later rule wins)
+import "../../styles/book-flow.css";
+import "../../styles/review.css";
+import BookNotice from "../../components/book/BookNotice.astro";
+import ReviewFlow from "../../components/book/ReviewFlow.astro";
+import { t } from "../../i18n/t";
+import { bookingConfig } from "../../lib/booking/config";
+import { fetchInvite } from "../../lib/review/invite";
+import { imageOrigins, noticeResponse } from "../../lib/booking/respond";
+import { reviewCsp } from "../../lib/securityHeaders";
+
+// Only GET/HEAD read the invite: any other method is refused BEFORE the upstream call (a POST must not cost a backend request).
+if (Astro.request.method !== "GET" && Astro.request.method !== "HEAD") {
+  return new Response(null, { status: 405, headers: { Allow: "GET, HEAD", "Cache-Control": "no-store", "Referrer-Policy": "no-referrer", "X-Robots-Tag": "noindex, nofollow" } });
+}
+const cfg = bookingConfig();
+const ip = Astro.request.headers.get("cf-connecting-ip") ?? undefined;
+const result = await fetchInvite(cfg, Astro.params.token ?? "", ip);
+
+// Every answer: private. The token is in the URL, so nothing about this response may be stored or sent on.
+Astro.response.headers.set("Cache-Control", "no-store");
+Astro.response.headers.set("Referrer-Policy", "no-referrer");
+Astro.response.headers.set("X-Robots-Tag", "noindex, nofollow");
+if (result.kind === "invalid") noticeResponse(Astro.response, 404);
+else if (result.kind === "rate-limited") noticeResponse(Astro.response, 429, result.retryAfter);
+else if (result.kind === "unavailable") noticeResponse(Astro.response, 503, result.retryAfter);
+if (result.kind === "open") {
+  Astro.response.headers.set("Content-Security-Policy", reviewCsp({ apiOrigin: cfg.apiOrigin, imgOrigins: imageOrigins([result.data.avatarUrl]), turnstile: cfg.turnstileSiteKey !== "" }));
+}
+// A same-document reload ("?"): the token is never repeated in the markup.
+const retry = { href: "?", label: t("review.unavailableCta") };
+---
+
+<Layout title={t("review.metaTitle")} canonicalPath="/r" description={t("review.metaDescription")} noindex noReferrer analytics={false} hideHeader hideFooter preloadLatin={false}>
+  {
+    result.kind === "rate-limited" || result.kind === "unavailable" ? (
+      <BookNotice topbar={t("review.topbar")} title={t("review.unavailableTitle")} text={t("review.unavailableText")} cta={retry} />
+    ) : (
+      <main class="phone" id="main">
+        <ReviewFlow initial={result.kind === "open" ? "form" : result.kind} invite={result.kind === "open" ? result.data : undefined} api={cfg.apiOrigin} siteKey={cfg.turnstileSiteKey} />
+      </main>
+    )
+  }
+</Layout>
+
+<script>
+  import "../../scripts/review/main";
+</script>

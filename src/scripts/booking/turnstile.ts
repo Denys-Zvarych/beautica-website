@@ -4,6 +4,8 @@ const SRC = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explic
 
 /** Must equal the backend's `app.turnstile.expected-action` (application-prod.yml): the verifier rejects a token with any other action (400). */
 export const TURNSTILE_ACTION = "otp_send";
+/** Guest review page (/r/{token}): submit and opt-out. TODO(backend-401): `app.turnstile.expected-action` must accept this value for the review-invite routes. */
+export const REVIEW_TURNSTILE_ACTION = "review_submit";
 
 interface TurnstileApi {
   render(el: HTMLElement, opts: Record<string, unknown>): string;
@@ -39,7 +41,7 @@ export interface Widget {
   reset(): void;
 }
 
-export async function mountTurnstile(el: HTMLElement, siteKey: string): Promise<Widget | null> {
+export async function mountTurnstile(el: HTMLElement, siteKey: string, action: string = TURNSTILE_ACTION): Promise<Widget | null> {
   let api: TurnstileApi;
   try {
     api = await load();
@@ -56,7 +58,7 @@ export async function mountTurnstile(el: HTMLElement, siteKey: string): Promise<
     sitekey: siteKey,
     theme: "light",
     language: "uk",
-    action: TURNSTILE_ACTION,
+    action,
     callback: (t: string) => settle(t),
     "expired-callback": () => settle(null),
     "error-callback": () => settle(null),

@@ -122,7 +122,9 @@
      --vt-max-width: web content column; the app has no desktop layout.
      --vt-touch-min: 48 px minimum touch target (WCAG / Play guidance).
      --vt-dur-fast / --vt-dur-base / --vt-ease / --vt-lift: web hover + focus micro-interaction motion (transform/opacity/
-       box-shadow only). 150 ms matches the app's AnimatedContainer press timing; the app has no hover. */
+       box-shadow only). 150 ms matches the app's AnimatedContainer press timing; the app has no hover.
+     --vt-dur-spring / --vt-ease-spring: web-only star press/select overshoot of the guest review page (approved preview review.css;
+       the app has no spring curve, only Curves.easeOutCubic); transform only, off under prefers-reduced-motion. */
   --vt-fs-prose: 16px;
   --vt-fw-prose: 400;
   --vt-lh-prose: 1.6;
@@ -135,6 +137,8 @@
   --vt-dur-fast: 150ms;
   --vt-dur-base: 280ms;
   --vt-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --vt-dur-spring: 220ms;
+  --vt-ease-spring: cubic-bezier(0.68, -0.6, 0.32, 1.6);
   --vt-lift: 2px;
 
   /* --- App widget values (--vt-app-*, allow-listed): copied from beautica-mobile WIDGET code, not the three theme files, so the

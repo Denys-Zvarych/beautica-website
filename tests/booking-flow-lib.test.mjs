@@ -5,6 +5,11 @@ import { addDays, inWindow, kyivToday, maxMonthOffset, monthView, partOfDay, wee
 import { failFor, cancelPath } from "../src/scripts/booking/api.ts";
 import { buildIcs } from "../src/scripts/booking/ics.ts";
 import { formatPhoneGrouped, nationalDigits } from "../src/lib/phone.ts";
+import { build } from "esbuild";
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { pathToFileURL } from "node:url";
 import { cleanName, cleanComment, typingName } from "../src/lib/booking/text.ts";
 
 describe("calendar (Europe/Kyiv)", () => {
@@ -47,6 +52,11 @@ describe("calendar (Europe/Kyiv)", () => {
 describe("API error mapping", () => {
   test("statuses -> UI outcome", () => {
     assert.deepEqual([400, 401, 403, 404, 409, 422, 429, 500, 502, 503, 504].map(failFor), ["validation", "unauthorized", "unauthorized", "not-found", "conflict", "validation", "rate-limited", "error", "unavailable", "unavailable", "unavailable"]);
+  });
+  test("409 BOOKING_UNAVAILABLE (backend 398) is its own outcome; any other 409 body stays a conflict", () => {
+    assert.equal(failFor(409, "BOOKING_UNAVAILABLE"), "provider-unavailable");
+    for (const code of [undefined, null, "SLOT_TAKEN", "booking_unavailable", {}]) assert.equal(failFor(409, code), "conflict");
+    assert.equal(failFor(400, "BOOKING_UNAVAILABLE"), "validation", "only a 409 is mapped by code");
   });
   test("the cancel link is reduced to this site's /book/cancel/{uuid} path", () => {
     const id = "123e4567-e89b-42d3-a456-426614174000";
@@ -173,4 +183,47 @@ describe("guest text is cleaned to the backend's rules (no control characters in
     assert.equal(cleanComment("\u000Bx\u000C\u001Fy\u007F"), "xy");
     assert.equal(cleanComment("   "), "");
   });
+});
+
+// info.ts / invite.ts use extensionless imports, so bundle them for node.
+const bundle = async (entry) => {
+  const outfile = join(mkdtempSync(join(tmpdir(), "bt-")), "m.mjs");
+  await build({ entryPoints: [new URL(entry, import.meta.url).pathname], bundle: true, format: "esm", platform: "node", outfile, logLevel: "silent" });
+  return import(pathToFileURL(outfile).href);
+};
+const { fetchMasterInfo } = await bundle("../src/lib/booking/info.ts");
+const { fetchInvite } = await bundle("../src/lib/review/invite.ts");
+
+describe("X-Beautica-Client-IP is sent only together with the Worker key", () => {
+  const TOKEN = "a".repeat(43);
+  const capture = async (run) => {
+    const real = globalThis.fetch;
+    let headers;
+    globalThis.fetch = async (_u, init) => {
+      headers = init.headers;
+      return new Response("{}", { status: 404 });
+    };
+    try {
+      await run();
+    } finally {
+      globalThis.fetch = real;
+    }
+    return headers;
+  };
+  for (const [name, call] of [
+    ["info", (cfg) => fetchMasterInfo(cfg, "x-1111", "203.0.113.9")],
+    ["invite", (cfg) => fetchInvite(cfg, TOKEN, "203.0.113.9")],
+  ]) {
+    test(`${name}: no key -> no key and no IP header`, async () => {
+      const h = await capture(() => call({ apiOrigin: "http://x.test", workerKey: "" }));
+      assert.ok(h, "fetch was called");
+      assert.equal(h["X-Beautica-Client-IP"], undefined);
+      assert.equal(h["X-Beautica-Worker-Key"], undefined);
+    });
+    test(`${name}: with key -> both headers`, async () => {
+      const h = await capture(() => call({ apiOrigin: "http://x.test", workerKey: "k" }));
+      assert.equal(h["X-Beautica-Client-IP"], "203.0.113.9");
+      assert.equal(h["X-Beautica-Worker-Key"], "k");
+    });
+  }
 });

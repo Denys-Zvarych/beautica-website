@@ -6,6 +6,8 @@ import nunitoCyr from "@fontsource-variable/nunito/files/nunito-cyrillic-wght-no
 import nunitoLat from "@fontsource-variable/nunito/files/nunito-latin-wght-normal.woff2?url";
 import comfortaaCyr from "@fontsource-variable/comfortaa/files/comfortaa-cyrillic-wght-normal.woff2?url";
 import comfortaaLat from "@fontsource-variable/comfortaa/files/comfortaa-latin-wght-normal.woff2?url";
+import nunitoBasic from "../fonts/nunito-latin-basic-wght-normal.woff2?url";
+import comfortaaBasic from "../fonts/comfortaa-latin-basic-wght-normal.woff2?url";
 import Seo from "./Seo.astro";
 import Header from "./Header.astro";
 import Footer from "./Footer.astro";
@@ -30,6 +32,8 @@ interface Props {
   hideFooter?: boolean;
   /** Preload the two Latin font files too (default true). The link pages skip them: their Latin glyphs are digits and punctuation, which their small Latin core (book.css) covers, so the big files are never requested there. */
   preloadLatin?: boolean;
+  /** Legal pages: preload the small "latin basic" files (fonts-legal.css, ~44 KB for both) instead of the full Latin faces (~72 KB). The page must import fonts-legal.css after Layout. Default false. */
+  basicLatin?: boolean;
   /** `<meta name="referrer" content="no-referrer">` so sub-resource requests never carry a token URL (token routes). Default false. */
   noReferrer?: boolean;
   /** An origin to open a connection to early (the booking API on the link pages). Default none. */
@@ -38,7 +42,7 @@ interface Props {
   analytics?: boolean;
 }
 
-const { hideHeader = false, hideFooter = false, noReferrer = false, preloadLatin = true, preconnect, analytics = true, ...seo } = Astro.props;
+const { hideHeader = false, hideFooter = false, noReferrer = false, preloadLatin = true, basicLatin = false, preconnect, analytics = true, ...seo } = Astro.props;
 const withAnalytics = analytics && !noReferrer; // a token route (noReferrer) must never carry analytics, even if a caller forgets the prop
 ---
 
@@ -53,12 +57,12 @@ const withAnalytics = analytics && !noReferrer; // a token route (noReferrer) mu
     <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <link rel="preload" as="font" type="font/woff2" href={nunitoCyr} crossorigin />
-    {preloadLatin && <link rel="preload" as="font" type="font/woff2" href={nunitoLat} crossorigin />}
+    {preloadLatin && <link rel="preload" as="font" type="font/woff2" href={basicLatin ? nunitoBasic : nunitoLat} crossorigin />}
     <!-- Latin too: « » digits and brand names inside Ukrainian prose use it, and a late arrival reflowed lines (CLS). -->
     <link rel="preload" as="font" type="font/woff2" href={comfortaaCyr} crossorigin />
     <!-- Comfortaa Latin: the "Beautica" wordmark/headings render with it on every route, so it arrives with the first paint
          (a lazy fetch swapped the face after layout; token pages also need it preloaded so no fetch carries the page URL as Referer). -->
-    {preloadLatin && <link rel="preload" as="font" type="font/woff2" href={comfortaaLat} crossorigin />}
+    {preloadLatin && <link rel="preload" as="font" type="font/woff2" href={basicLatin ? comfortaaBasic : comfortaaLat} crossorigin />}
     <Seo {...seo} />
     {withAnalytics && <Analytics />}
   </head>

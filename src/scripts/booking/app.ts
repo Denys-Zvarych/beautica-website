@@ -783,7 +783,7 @@ export async function initBooking(root: HTMLElement): Promise<{ open(): void }> 
       return;
     }
     if (fail === "unauthorized") return sessionExpired();
-    const msg = fail === "validation" ? S.invalid : fail === "rate-limited" ? S.limit : fail === "unavailable" ? fmt(S.unavailable, { email: S.supportEmail }) : S.error;
+    const msg = fail === "provider-unavailable" ? S.blockedMaster : fail === "validation" ? S.invalid : fail === "rate-limited" ? S.limit : fail === "unavailable" ? fmt(S.unavailable, { email: S.supportEmail }) : S.error;
     $("#submit-error-text").textContent = msg;
     view("#submit-error", true);
   }
