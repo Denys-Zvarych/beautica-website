@@ -105,7 +105,7 @@ export async function driveTo(page, step, { services = [SVC_ID.classic], slotInd
   if (step === "contact") return day;
   await page.click("#cta-contact");
   await page.waitForSelector("#otp", { state: "visible" });
-  for (let i = 0; i < code.length; i++) await page.locator("#otp input").nth(i).fill(code[i]);
+  if (code) await page.locator("#otp input").fill(code);
   if (step === "otp") return day;
   await page.click("#cta-otp");
   await page.waitForSelector("#confirm-card", { state: "visible" });

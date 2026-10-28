@@ -778,14 +778,20 @@ describe("audit cycle 3: the uncertain booking survives a reload (sessionStorage
   test("salon: the notice is laid over the page (CLS <= 0.005 at 360 and 1280 px), «Зрозуміло» moves the focus to the heading, a 10 KB label shows nothing and the key goes", async () => {
     const slug = "wiz-mark-0005";
     const seed = (label) => `try { if (!sessionStorage.getItem("seeded")) { sessionStorage.setItem("seeded", "1"); sessionStorage.setItem(${JSON.stringify(KEY(slug))}, JSON.stringify({ masterId: ${JSON.stringify(M2.id)}, slotStartIso: "2030-01-02T10:00:00+02:00", label: ${JSON.stringify(label)}, at: Date.now() - 1000 })); } } catch {}`;
-    const CLS = `window.__cls = 0; new PerformanceObserver((l) => { for (const e of l.getEntries()) if (!e.hadRecentInput) window.__cls += e.value; }).observe({ type: "layout-shift", buffered: true });`;
+    // Counts only the shifts from the moment the notice is inserted: what the notice itself causes. A font swap while the page is still
+// loading (before the script that shows the notice has even run) is the page's own load shift, not the notice's, and depends on machine load.
+    const CLS = `window.__cls = 0; window.__noteAt = Infinity; new MutationObserver(() => { if (window.__noteAt === Infinity && document.getElementById("unsure-note")) window.__noteAt = performance.now(); }).observe(document, { childList: true, subtree: true }); new PerformanceObserver((l) => { for (const e of l.getEntries()) if (!e.hadRecentInput && e.startTime >= window.__noteAt) window.__cls += e.value; }).observe({ type: "layout-shift", buffered: true });`;
     for (const width of [360, 1280]) {
       const env = await salonPage(browser, slug, { width, init: CLS + seed("вівторок, 2 січня, 10:00, Ірина Мельник") });
       try {
         const { page } = env;
         await page.locator("#unsure-note").waitFor();
-        await page.evaluate(() => document.fonts.ready);
         await page.waitForLoadState("networkidle");
+        // settle: fonts loaded, then two painted frames, so any late layout-shift entry is already queued before it is read (threshold unchanged)
+        await page.evaluate(async () => {
+          await document.fonts.ready;
+          await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+        });
         await page.waitForTimeout(300);
         assert.ok((await page.evaluate(() => window.__cls)) <= 0.005, `CLS at ${width}px`);
         if (width === 360) {

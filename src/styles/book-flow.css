@@ -364,39 +364,50 @@
   text-align: right;
   margin-top: var(--vt-space-xs);
 }
+/* One real input (autofill / paste / WebOTP target) laid transparently over six decorative cells; the cells only mirror its value. */
 .otp {
+  --otp-gap: calc(var(--vt-space-sm) + var(--vt-space-xs) / 2);
+  position: relative;
   display: flex;
   justify-content: center;
-  gap: calc(var(--vt-space-sm) + var(--vt-space-xs) / 2);
+  gap: var(--otp-gap);
+  max-width: calc(var(--vt-app-otp-w) * 6 + var(--otp-gap) * 5);
+  margin-inline: auto;
 }
-.otp label {
+.otp-cell {
   position: relative;
   flex: 1 1 0;
   min-width: 0;
   max-width: var(--vt-app-otp-w);
-  display: block;
-}
-.otp label::after {
-  content: "";
-  position: absolute;
-  inset: calc(var(--vt-space-xs) * -1) calc(var(--vt-space-xs) * -0.875);
-}
-.otp input {
-  display: block;
-  width: 100%;
   height: var(--vt-app-otp-h);
-  padding: 0;
-  text-align: center;
-  border: 0;
+  display: grid;
+  place-items: center;
   border-radius: var(--vt-radius-field);
   background: var(--vt-color-base);
-  outline: 0;
   font: var(--vt-fw-heading) var(--vt-fs-heading) / normal var(--vt-font-display);
   color: var(--vt-color-accent-deep); /* the app's digit is accent (2:1 on the base, fails AA); accentDeep keeps the hue */
-  caret-color: var(--vt-color-accent);
 }
-/* The cell's shadow lives on the label's pseudo-element and fades out (opacity) while the cell has focus or the code is wrong. */
-.otp label::before {
+.otp-input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: transparent; /* the cells draw the digits */
+  caret-color: transparent;
+  font: var(--vt-fw-heading) var(--vt-fs-heading) / normal var(--vt-font-display); /* >= 16px: no iOS focus zoom */
+  text-align: center;
+  -webkit-text-fill-color: transparent;
+}
+.otp-input::selection {
+  background: transparent;
+}
+/* The cell's shadow lives on its pseudo-element and fades out (opacity) while it is the active cell or the code is wrong. */
+.otp-cell::before {
   content: "";
   position: absolute;
   inset: 0;
@@ -405,15 +416,15 @@
   pointer-events: none;
   transition: opacity var(--vt-dur-fast) var(--vt-ease);
 }
-.otp label:focus-within::before,
-.otp.invalid label::before {
+.otp:focus-within .otp-cell.on::before,
+.otp.invalid .otp-cell::before {
   opacity: 0;
 }
-.otp input:focus {
+.otp:focus-within .otp-cell.on {
   outline: var(--vt-app-line-2) solid var(--vt-color-accent);
   outline-offset: calc(var(--vt-app-line-2) * -1);
 }
-.otp.invalid input {
+.otp.invalid .otp-cell {
   outline: var(--vt-app-line-2) solid var(--vt-color-error);
   outline-offset: calc(var(--vt-app-line-2) * -1);
 }

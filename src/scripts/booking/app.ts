@@ -167,11 +167,11 @@ export async function initBooking(root: HTMLElement): Promise<{ open(): void }> 
     if (step === "otp") {
       $("#otp-phone").textContent = formatPhoneGrouped(st.phone);
       hideBanners();
-      $$<HTMLInputElement>("#otp input").forEach((i) => (i.value = ""));
+      setOtp("");
       $("#otp").classList.remove("invalid");
       paintCooldown();
       syncOtpButton();
-      $<HTMLInputElement>("#otp input").focus();
+      otpInput.focus();
     }
     if (step === "confirm") renderConfirm();
   }
@@ -576,41 +576,42 @@ export async function initBooking(root: HTMLElement): Promise<{ open(): void }> 
   consent.addEventListener("change", () => $("#f-consent").classList.contains("invalid") && validateContact());
 
   // ------------------------------------------------------------------ otp (OtpCodeField, resend row)
-  const cells = $$<HTMLInputElement>("#otp input");
-  const code = () => cells.map((c) => c.value).join("");
+  // ONE real input is the focus / iOS one-time-code autofill / paste / WebOTP target; the six cells are aria-hidden mirrors of its value.
+  const otpInput = $<HTMLInputElement>("#otp-input");
+  const otpCells = $$("#otp .otp-cell");
+  const code = () => otpInput.value;
   function syncOtpButton(): void {
     $<HTMLButtonElement>("#cta-otp").disabled = code().length !== 6;
   }
-  cells.forEach((c, i) => {
-    c.addEventListener("input", () => {
-      const d = c.value.replace(/\D/g, "");
-      if (d.length > 1) {
-        // Autofill / SMS suggestion puts the whole code into one cell.
-        d.slice(0, 6)
-          .split("")
-          .forEach((ch, k) => (cells[k]!.value = ch));
-        cells[Math.min(d.length, 5)]!.focus();
-      } else {
-        c.value = d;
-        if (d && cells[i + 1]) cells[i + 1]!.focus();
-      }
-      $("#otp").classList.remove("invalid");
-      $("#otp-wrong").hidden = true;
-      syncOtpButton();
+  /** Writes a (sanitised, <= 6 digits) code into the input and repaints the cells. */
+  function setOtp(v: string): void {
+    const d = v.replace(/\D/g, "").slice(0, 6);
+    if (otpInput.value !== d) otpInput.value = d;
+    const active = Math.min(d.length, 5);
+    otpCells.forEach((c, k) => {
+      const ch = d[k] ?? "";
+      if (c.textContent !== ch) c.textContent = ch;
+      c.classList.toggle("on", k === active);
     });
-    c.addEventListener("keydown", (e) => {
-      if (e.key === "Backspace" && !c.value && cells[i - 1]) cells[i - 1]!.focus();
-    });
-    c.addEventListener("paste", (e) => {
-      const d = (e.clipboardData?.getData("text") ?? "").replace(/\D/g, "").slice(0, 6);
-      if (d.length > 1) {
-        e.preventDefault();
-        cells.forEach((x, k) => (x.value = d[k] ?? ""));
-        cells[Math.min(d.length, 5)]!.focus();
-        syncOtpButton();
-      }
-    });
+  }
+  const otpEdited = (): void => {
+    $("#otp").classList.remove("invalid");
+    $("#otp-wrong").hidden = true;
+    syncOtpButton();
+  };
+  otpInput.addEventListener("input", () => {
+    setOtp(otpInput.value);
+    otpEdited();
   });
+  otpInput.addEventListener("paste", (e) => {
+    // maxlength would cut "123 456" to "123 45" before sanitising: take the digits ourselves.
+    const d = (e.clipboardData?.getData("text") ?? "").replace(/\D/g, "");
+    if (!d) return;
+    e.preventDefault();
+    setOtp(d);
+    otpEdited();
+  });
+  setOtp("");
   function startCooldown(): void {
     cooldown = 60;
     clearInterval(cooldownTimer);
@@ -646,12 +647,10 @@ export async function initBooking(root: HTMLElement): Promise<{ open(): void }> 
         .then((cred) => {
           const d = String((cred as { code?: string } | null)?.code ?? "").replace(/\D/g, "");
           if (ac.signal.aborted || otpAbort !== ac || st.step !== "otp" || d.length !== 6) return;
-          if (st.busy) return void (otpRearm = window.setTimeout(startWebOtp, 300)); // a request is in flight: keep the cells, listen again shortly
+          if (st.busy) return void (otpRearm = window.setTimeout(startWebOtp, 300)); // a request is in flight: keep the code, listen again shortly
           otpAbort = undefined;
-          cells.forEach((x, k) => (x.value = d[k] ?? ""));
-          $("#otp").classList.remove("invalid");
-          $("#otp-wrong").hidden = true;
-          syncOtpButton();
+          setOtp(d);
+          otpEdited();
           void submitOtp();
         })
         .catch(() => {});
