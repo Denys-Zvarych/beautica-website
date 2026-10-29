@@ -5,7 +5,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { ROOT } from "./helpers/env.mjs";
 import { isValidSlug } from "../src/lib/booking/slug.ts";
-import { parseMasterInfo, parseSalonInfo, parseReviewsPage, safeImageUrl } from "../src/lib/booking/types.ts";
+import { parseMasterInfo, parseSalonInfo, parseReviewsPage, safeImageUrl, imageOrigin } from "../src/lib/booking/types.ts";
 import { groupByCategory, parseSort, streetLine, formatPriceFrom, formatDuration, pluralServices, pluralReviews, formatRating, fitTitle, fitDescription, relativeUk } from "../src/lib/booking/format.ts";
 import { upstreamTtl } from "../src/lib/booking/cache.ts";
 import { categoryIconUrl } from "../src/lib/categoryIcon.ts";
@@ -37,6 +37,20 @@ describe("API parsing is defensive", () => {
     assert.equal(parseMasterInfo("x-1", { masterName: "A" }), null);
     assert.equal(parseMasterInfo("x-1", "nope"), null);
     assert.equal(parseSalonInfo("x-1", { name: "S" }), null);
+  });
+  test("free-text address fields are capped (locationNote 1000 = backend @Size, street/city 200), control chars stripped", () => {
+    const s = parseSalonInfo("s-1", { name: "S", salonId: "1", locationNote: "x".repeat(5000), street: "y".repeat(5000), city: " Київ\u0000 " });
+    assert.equal(s.locationNote.length, 1000);
+    assert.equal(s.street.length, 200);
+    assert.equal(s.city, "Київ");
+    const m = parseMasterInfo("m-1", { masterName: "M", masterId: "1", locationNote: "x".repeat(5000), buildingNo: "z".repeat(900) });
+    assert.equal(m.locationNote.length, 1000);
+    assert.equal(m.buildingNo.length, 200);
+  });
+  test("imageOrigin: origin of the first usable URL, undefined when none", () => {
+    assert.equal(imageOrigin(null, "https://pub-1.r2.dev/a/b.jpg?x=1"), "https://pub-1.r2.dev");
+    assert.equal(imageOrigin(null, undefined), undefined);
+    assert.equal(imageOrigin("http://x"), undefined);
   });
   test("salon masters: a slug is kept when there is one, a master without one is kept with masterSlug null (backend 391), one without an id cannot be booked and is dropped", () => {
     const s = parseSalonInfo("s-1", {

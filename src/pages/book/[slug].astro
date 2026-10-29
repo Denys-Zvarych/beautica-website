@@ -12,6 +12,7 @@ import BookingFlow from "../../components/book/BookingFlow.astro";
 import { t } from "../../i18n/t";
 import { isValidSlug } from "../../lib/booking/slug";
 import { bookingConfig } from "../../lib/booking/config";
+import { imageOrigin } from "../../lib/booking/types";
 import { fetchMasterInfo, fetchReviewsFirstPage } from "../../lib/booking/info";
 import { imageOrigins, noticeResponse, okResponse } from "../../lib/booking/respond";
 import { fitDescription, fitTitle, formatPriceFrom, parseSort, streetLine } from "../../lib/booking/format";
@@ -78,7 +79,7 @@ const canBook = !!info && info.services.length > 0;
 ---
 
 {/* preloadLatin stays false: better FCP, no LCP gain from preloading the Latin fonts, and the salon page gets worse. */}
-<Layout title={title} description={description} noindex={!info} image={info?.avatarUrl ?? undefined} imageAlt={name || undefined} robots={info && sort !== "NEWEST" ? "noindex, follow" : undefined} twitterCard="summary" ogType="profile" jsonLd={jsonLd} hideHeader hideFooter preloadLatin={false} preconnect={info ? cfg.apiOrigin : undefined}>
+<Layout title={title} description={description} noindex={!info} image={info?.avatarUrl ?? undefined} imageAlt={name || undefined} robots={info && sort !== "NEWEST" ? "noindex, follow" : undefined} twitterCard="summary" ogType="profile" jsonLd={jsonLd} hideHeader hideFooter preloadLatin={false} preconnect={info ? cfg.apiOrigin : undefined} preconnectImage={imageOrigin(info?.avatarUrl)}>
   {
     info ? (
       <main

@@ -105,11 +105,25 @@ export interface SalonInfo {
 type Json = Record<string, unknown>;
 const isObj = (v: unknown): v is Json => typeof v === "object" && v !== null && !Array.isArray(v);
 const str = (v: unknown): string | null => (typeof v === "string" && v.trim() !== "" ? v : null);
+/** Trimmed, length-capped text (control chars except tab/LF removed); null when empty. Caps API strings that are rendered. */
+const strCap = (v: unknown, max: number): string | null => {
+  const s = typeof v === "string" ? v.replace(/[\u0000-\u0008\u000b-\u001f\u007f]/g, "").trim().slice(0, max) : "";
+  return s === "" ? null : s;
+};
 const num = (v: unknown): number | null => {
   const n = typeof v === "number" ? v : typeof v === "string" ? Number(v) : NaN;
   return Number.isFinite(n) ? n : null;
 };
 const arr = (v: unknown): unknown[] => (Array.isArray(v) ? v : []);
+
+/** Origin of an already-sanitised image URL (for a preconnect hint); undefined when there is no image. */
+export function imageOrigin(...urls: (string | null | undefined)[]): string | undefined {
+  for (const u of urls) {
+    if (!u) continue;
+    try { const o = new URL(u); if (o.protocol !== "https:") continue; return o.origin; } catch { /* next */ }
+  }
+  return undefined;
+}
 
 /** Only https image URLs are ever rendered (also what the CSP img-src is derived from). */
 export function safeImageUrl(v: unknown): string | null {
@@ -178,16 +192,16 @@ export function parseMasterInfo(slug: string, raw: unknown): MasterInfo | null {
     }),
     masterId,
     professionalTitle: str(raw.professionalTitle),
-    city: str(raw.city),
-    region: str(raw.region),
+    city: strCap(raw.city, 200),
+    region: strCap(raw.region, 200),
     salon,
     avgRating: num(raw.avgRating),
     reviewCount: Math.max(0, num(raw.reviewCount) ?? 0),
     categories: arr(raw.categories).flatMap((c) => (isObj(c) && str(c.id) && str(c.name) ? [{ id: str(c.id) as string, name: str(c.name) as string, key: str(c.key) }] : [])),
     ratingDistribution: parseBuckets(raw.ratingDistribution),
-    street: str(raw.street),
-    buildingNo: str(raw.buildingNo),
-    locationNote: str(raw.locationNote),
+    street: strCap(raw.street, 200),
+    buildingNo: strCap(raw.buildingNo, 200),
+    locationNote: strCap(raw.locationNote, 1000),
     portfolio: arr(raw.portfolio).flatMap((m) => {
       const u = isObj(m) ? safeImageUrl(m.url) : null;
       return u ? [u] : [];
@@ -207,10 +221,10 @@ export function parseSalonInfo(slug: string, raw: unknown): SalonInfo | null {
     slug,
     salonId,
     name,
-    city: str(raw.city),
-    region: str(raw.region),
-    street: str(raw.street),
-    buildingNo: str(raw.buildingNo),
+    city: strCap(raw.city, 200),
+    region: strCap(raw.region, 200),
+    street: strCap(raw.street, 200),
+    buildingNo: strCap(raw.buildingNo, 200),
     avatarUrl: safeImageUrl(raw.avatarUrl),
     coverImageUrl: safeImageUrl(raw.coverImageUrl),
     avgRating: num(raw.avgRating),
@@ -225,7 +239,7 @@ export function parseSalonInfo(slug: string, raw: unknown): SalonInfo | null {
     }),
     updatedAt: str(raw.updatedAt),
     description: str(raw.description),
-    locationNote: str(raw.locationNote),
+    locationNote: strCap(raw.locationNote, 1000),
     portfolio: arr(raw.portfolio).flatMap((m) => {
       const u = isObj(m) ? safeImageUrl(m.url) : null;
       return u ? [u] : [];

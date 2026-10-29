@@ -38,11 +38,13 @@ interface Props {
   noReferrer?: boolean;
   /** An origin to open a connection to early (the booking API on the link pages). Default none. */
   preconnect?: string;
+  /** Origin of a cross-origin hero image (cover/avatar on R2). Plain preconnect, no `crossorigin`: image fetches are no-cors and would not reuse a CORS connection. Emitted even when it equals `preconnect`: the API hint is a CORS connection and cannot serve no-cors image fetches. Default none. */
+  preconnectImage?: string;
   /** Cloudflare Web Analytics + Umami (phase 007). Token routes pass `false` and get neither tag; `noReferrer` pages never get them either. Default true. */
   analytics?: boolean;
 }
 
-const { hideHeader = false, hideFooter = false, noReferrer = false, preloadLatin = true, basicLatin = false, preconnect, analytics = true, ...seo } = Astro.props;
+const { hideHeader = false, hideFooter = false, noReferrer = false, preloadLatin = true, basicLatin = false, preconnect, preconnectImage, analytics = true, ...seo } = Astro.props;
 const withAnalytics = analytics && !noReferrer; // a token route (noReferrer) must never carry analytics, even if a caller forgets the prop
 ---
 
@@ -53,6 +55,7 @@ const withAnalytics = analytics && !noReferrer; // a token route (noReferrer) mu
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     {noReferrer && <meta name="referrer" content="no-referrer" />}
     {preconnect && <link rel="preconnect" href={preconnect} crossorigin />}
+    {preconnectImage && <link rel="preconnect" href={preconnectImage} />}
     <link rel="icon" href="/favicon.ico" sizes="48x48" />
     <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
