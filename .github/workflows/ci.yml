@@ -51,6 +51,19 @@ jobs:
       - name: HTML validation
         run: npx html-validate 'dist/client/**/*.html'
 
+      # Cross-repo features land as same-named branches in the sibling repos: pin the ledger and the contract to that branch while it
+      # exists, else dev. The head ref goes through env (never interpolated into the script).
+      - name: Resolve sibling refs (same-named feature branch, else dev)
+        id: refs
+        env:
+          HEAD_REF: ${{ github.head_ref }}
+        run: |
+          for r in backend mobile; do
+            ref=dev
+            if [ -n "$HEAD_REF" ] && git ls-remote --exit-code --heads "https://github.com/Denys-Zvarych/beautica-$r" "refs/heads/$HEAD_REF" >/dev/null 2>&1; then ref="$HEAD_REF"; fi
+            echo "$r=$ref" >> "$GITHUB_OUTPUT"
+          done
+
       # Token parity needs the app theme. The mobile repo is public until release; if the checkout
       # fails (repo made private, no token) the step below is skipped and the owner is warned.
       - name: Checkout mobile theme (token source)
@@ -59,7 +72,7 @@ jobs:
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           repository: Denys-Zvarych/beautica-mobile
-          ref: dev
+          ref: ${{ steps.refs.outputs.mobile }}
           path: beautica-mobile
           sparse-checkout: |
             lib/core/theme
@@ -90,7 +103,7 @@ jobs:
 
       # Site <-> backend contract (phases 008/009): the mock backend, the parsers and every request body are compared with the backend's
       # Java records, and the numbers the pages state (2 h cancel, 60 days, 10 services) with the backend constants. The backend repo is
-      # public until release; its ref defaults to dev (repo variable BACKEND_CONTRACT_REF pins another branch while a backend PR is open).
+      # public until release; its ref is the PR's same-named branch when it exists, else dev (repo variable BACKEND_CONTRACT_REF overrides).
       # No server, no browser: ~1 s. When the checkout fails the backend-dependent specs skip and a warning is printed.
       - name: Checkout backend sources (contract source)
         id: backend
@@ -98,7 +111,7 @@ jobs:
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           repository: Denys-Zvarych/beautica-backend
-          ref: ${{ vars.BACKEND_CONTRACT_REF || 'dev' }}
+          ref: ${{ vars.BACKEND_CONTRACT_REF || steps.refs.outputs.backend }}
           path: beautica-backend
           sparse-checkout: src/main/java/com/beautica
 
