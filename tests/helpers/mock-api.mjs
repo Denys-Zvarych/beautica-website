@@ -230,7 +230,22 @@ function wizResolve(masterId, ids) {
   }
   return { master: m, services: out };
 }
-const SALONS = { "evilsalon-0666": () => salonInfo({ description: EVIL.salon }), "lavanda-1111": () => salonInfo(), "salonhdr-4444": () => salonInfo(), "chans-6002": () => salonInfo(), "shut-2222": () => salonInfo({ bookable: false, masters: [] }) };
+// Hero-card fixtures (slug -> salon): rating line, address rule, note placement, image preconnect.
+//   salonnew-7001   0 reviews, no rating, no street (city only), no cover/avatar, has a locationNote
+//   salonbare-7002  nothing: no rating, no street, no city, no note, no images (no address row, no note)
+//   salonrc{1,2,5,11}-70xx  4.8 with 1 / 2 / 5 / 11 reviews (the Ukrainian plural forms)
+//   salonrated-7012 4.8 with 12 reviews, avatar on another origin than the cover (cover wins the preconnect)
+const rc = (n, over = {}) => () => salonInfo({ avgRating: 4.8, reviewCount: n, ...over });
+const HERO_SALONS = {
+  "salonnew-7001": () => salonInfo({ avgRating: null, reviewCount: 0, street: null, buildingNo: null, city: "Львів", coverImageUrl: null, avatarUrl: null, locationNote: "Вхід з двору" }),
+  "salonbare-7002": () => salonInfo({ avgRating: null, reviewCount: 0, street: null, buildingNo: null, city: null, region: null, coverImageUrl: null, avatarUrl: null, locationNote: null }),
+  "salonrc1-7021": rc(1),
+  "salonrc2-7022": rc(2),
+  "salonrc5-7025": rc(5),
+  "salonrc11-7031": rc(11),
+  "salonrated-7012": rc(12, { coverImageUrl: "https://cover.beautica.test/c.jpg", avatarUrl: "https://avatar.beautica.test/a.jpg" }),
+};
+const SALONS = { ...HERO_SALONS, "evilsalon-0666": () => salonInfo({ description: EVIL.salon }), "lavanda-1111": () => salonInfo(), "salonhdr-4444": () => salonInfo(), "chans-6002": () => salonInfo(), "shut-2222": () => salonInfo({ bookable: false, masters: [] }) };
 
 /** UTC offset of Europe/Kyiv on a calendar date, "+02:00" / "+03:00". */
 function kyivOffset(date) {

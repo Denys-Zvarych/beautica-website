@@ -74,6 +74,26 @@
 .addr-line .icon {
   margin-top: var(--vt-app-hair);
 }
+.addr-lines {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.addr-l {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* The location note rides on the hero card under the address (app phase 224); two lines, plain text. */
+.hero-note {
+  margin: var(--vt-space-xs) 0 0;
+  padding-left: calc(var(--vt-app-salon-logo) + var(--vt-space-md));
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+}
 .mgrid {
   display: grid;
   grid-template-columns: 1fr 1fr;

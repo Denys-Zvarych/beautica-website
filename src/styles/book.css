@@ -1154,10 +1154,6 @@ a.tab {
   margin: 0;
   white-space: pre-line;
 }
-.addr-note-row {
-  margin: var(--vt-space-md) 0 0;
-  white-space: pre-line;
-}
 .tabpanel .sect:not(:first-child),
 .tabpanel > p + .sect {
   margin-top: var(--vt-space-xl);
