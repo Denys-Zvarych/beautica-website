@@ -159,11 +159,16 @@ jobs:
         timeout-minutes: 5
         run: npm test
         env:
-          TEST_EXCLUDE: booking-flow.test,book-axe,booking-privacy,book-salon-wizard,review-page
+          TEST_EXCLUDE: booking-flow.test,book-axe,booking-privacy,book-salon-wizard,review-page,book-blocked
 
       - name: Tests - guest booking flow (browser, mock backend)
         timeout-minutes: 5
         run: node scripts/run-tests.mjs tests/booking-flow.test.mjs
+
+      # Phase 020 blocked-phone banner (browser, mock backend): its own step; the default step sat at 4m55s of its 5 minutes.
+      - name: Tests - blocked-phone banner (browser, mock backend)
+        timeout-minutes: 5
+        run: node scripts/run-tests.mjs tests/book-blocked.test.mjs
 
       # Where the Turnstile token, phone, SMS code, guest token and name may go (per request, storage, analytics funnel). ~30 s.
       - name: Tests - guest booking privacy (data flow + analytics funnel)
