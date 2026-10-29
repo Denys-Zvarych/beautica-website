@@ -453,7 +453,7 @@ export function createSalon(core: Core, info: SalonInfo) {
         a.querySelector<HTMLElement>("[data-appt-ok]")!.hidden = false;
         continue;
       }
-      track("booking_error", { code: r.fail === "conflict" ? 409 : r.fail === "rate-limited" ? 429 : r.fail === "unavailable" ? 503 : "other" });
+      track("booking_error", { code: r.fail === "conflict" ? 409 : r.fail === "rate-limited" ? 429 : r.fail === "unavailable" ? 503 : r.fail === "provider-unavailable" ? "blocked" : "other" });
       stopped = true;
       if (r.fail === "unauthorized") {
         st.guestToken = null;

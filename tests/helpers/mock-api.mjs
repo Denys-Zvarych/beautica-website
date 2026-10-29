@@ -112,6 +112,7 @@ const MASTERS = {
   "closed-aaaa": () => masterInfo({ bookable: false }),
   "conflict-9999": () => masterInfo(),
   "bookdown-7777": () => masterInfo(),
+  "generic-4095": () => masterInfo(), // the booking POST answers a plain 400
   "blocked-4098": () => masterInfo(), // phase 020: the booking POST answers 409 BOOKING_UNAVAILABLE
   "blocked-4097": () => masterInfo(), // phase 020: same, a second page for the form-state / axe specs
   "conflictcode-4096": () => masterInfo(), // phase 020: the booking POST answers 409 with ANOTHER data.code: must stay a slot conflict
@@ -399,6 +400,7 @@ export async function startMockApi() {
       if (b.privacyAccepted !== true || !b.privacyPolicyVersion || !b.name || !b.surname || !b.startsAt || ids.length === 0 || (b.serviceId && b.masterServiceIds)) return err(res, 400, "Validation failed");
       if (b.clientComment !== undefined && (typeof b.clientComment !== "string" || b.clientComment.length > 1000 || /[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/.test(b.clientComment))) return err(res, 400, "Comment must be at most 1000 characters");
       if (slug === "conflict-9999") return err(res, 409, "Slot not available");
+      if (slug.startsWith("generic-")) return err(res, 400, "Validation failed");
       if (slug.startsWith("blocked-")) return unavailable(res);
       if (slug.startsWith("conflictcode-")) return json(res, 409, { success: false, data: { code: "SLOT_TAKEN" }, message: "Slot not available" });
       if (slug === "bookdown-7777") return err(res, 503, "Service unavailable");

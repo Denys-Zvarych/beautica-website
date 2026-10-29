@@ -18,7 +18,63 @@ const REVEALS = /заблок|блок|block|ban|чорн|обмеж|забор�
 const text = (loc) => loc.innerText().then((s) => s.replace(/\s+/g, " ").trim());
 const quiet = (env) => assert.deepEqual(env.problems.filter((p) => !/status of (409|401)/.test(p)), [], "no console / page errors");
 
+const SPY = () => {
+  window.__events = [];
+  window.umami = { track: (e, p) => window.__events.push({ e, p }) };
+};
+const errEvents = async (page) => (await page.evaluate(() => window.__events)).filter((x) => x.e === "booking_error");
+
 describe("020: BOOKING_UNAVAILABLE", () => {
+  test("analytics: a blocked booking reports booking_error code «blocked» (master + salon); a generic failure stays «other»; nothing else rides along", async () => {
+    let env = await bookPage(browser, "blocked-4098", { init: SPY });
+    try {
+      await driveTo(env.page, "confirm", { contact: { name: "Заблокована", phone: "501290197" } });
+      await env.page.click("#cta-confirm");
+      await env.page.waitForSelector("#submit-error", { state: "visible" });
+      assert.deepEqual((await errEvents(env.page)).map((x) => x.p), [{ code: "blocked", kind: "master", source: "none" }]);
+    } finally {
+      await env.context.close();
+    }
+    env = await salonPage(browser, "wiz-blk-0003");
+    try {
+      const { page } = env;
+      await page.evaluate(SPY);
+      await pickServices(page, S2);
+      await page.click("#cta-services");
+      await toggleMaster(page, M1);
+      await clickAndLoadDays(page, "#cta-masters");
+      await scheduleMaster(page, 1);
+      await page.click("#cta-time");
+      await verifyOtp(page, "501290198");
+      await page.click("#cta-confirm");
+      await page.locator("#salon-cards [data-appt-error]:not([hidden])").first().waitFor();
+      assert.deepEqual((await errEvents(page)).map((x) => x.p), [{ code: "blocked", kind: "salon", source: "none" }]);
+    } finally {
+      await env.context.close();
+    }
+  });
+
+  test("analytics: a 409 with another data.code is not «blocked» (409), and a non-409/429/503 failure is «other»", async () => {
+    const env = await bookPage(browser, "conflictcode-4096", { init: SPY });
+    try {
+      await driveTo(env.page, "confirm", { contact: { phone: "501290196" } });
+      await env.page.click("#cta-confirm");
+      await env.page.locator("#time-conflict").waitFor({ state: "visible" });
+      assert.deepEqual((await errEvents(env.page)).map((x) => x.p.code), [409]);
+    } finally {
+      await env.context.close();
+    }
+    const g = await bookPage(browser, "generic-4095", { init: SPY });
+    try {
+      await driveTo(g.page, "confirm", { contact: { phone: "501290195" } });
+      await g.page.click("#cta-confirm");
+      await g.page.waitForSelector("#submit-error", { state: "visible" });
+      assert.deepEqual((await errEvents(g.page)).map((x) => x.p.code), ["other"]);
+    } finally {
+      await g.context.close();
+    }
+  });
+
   test("master link: the neutral banner on the confirm step; no slot reload, no conflict message, a visible box", async () => {
     const env = await bookPage(browser, "blocked-4098");
     try {
