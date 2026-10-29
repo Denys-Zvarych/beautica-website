@@ -108,12 +108,12 @@ describe("every route is under Lighthouse", () => {
 });
 
 describe("phases 019 / 020 (guest review page, blocked-phone banner) are guarded on every PR", () => {
-  test("review-page and book-blocked specs run in the e2e job by default (never in TEST_EXCLUDE, never run only by name in a skipped job)", () => {
-    for (const f of ["review-page.test.mjs", "book-blocked.test.mjs"]) {
-      assert.ok(specs.includes(f), `${f} exists`);
-      assert.equal(excluded.some((x) => f.includes(x)), false, `${f} must not be excluded from npm test (TEST_EXCLUDE: ${excluded})`);
-    }
+  test("book-blocked runs in the e2e job by default; review-page is excluded from it and runs by name in the e2e_booking job (its own step)", () => {
+    for (const f of ["review-page.test.mjs", "book-blocked.test.mjs"]) assert.ok(specs.includes(f), `${f} exists`);
+    assert.equal(excluded.some((x) => "book-blocked.test.mjs".includes(x)), false, `book-blocked must not be excluded from npm test (TEST_EXCLUDE: ${excluded})`);
+    assert.equal(excluded.some((x) => "review-page.test.mjs".includes(x)), true, "review-page has a step of its own, so npm test skips it");
     assert.equal(steps.find((x) => /run: npm test\b/.test(x.text))?.job, "e2e");
+    assert.equal(steps.find((x) => x.text.includes("tests/review-page.test.mjs"))?.job, "e2e_booking");
   });
   test("the /r/ route is also under the HTML validator and axe (they enumerate the route in their own sources)", () => {
     assert.match(read("tests/ssr-html-valid.test.mjs"), /\/r\//, "ssr-html-valid covers /r/");

@@ -73,17 +73,11 @@ describe("the ledger rows added for the booking pages still point at the line th
 });
 
 // Phase 018: the numbers the legal bump states about reports, blocks and guest-review invites, compared with where they live.
-// 395-399 are built (backend code is the source); 400-402 are not built yet, so their numbers are pinned to the phase docs
-// (../docs/backend-phases) until the code exists: then repoint these to the constants and the ledger rows to not-live -> live.
+// 395-402 are built: the backend code and config are the source.
 describe("legal bump (phase 018): stated numbers equal the backend's", gate, () => {
   const privacy = read("src/content/legal/uk/privacy.md");
   const terms = read("src/content/legal/uk/terms.md");
   const be = (rel) => readFileSync(join(BACKEND_DIR, "src/main/java/com/beautica", rel), "utf8");
-  const doc = (name) => {
-    const dir = resolve(ROOT, "..", "docs", "backend-phases");
-    const f = existsSync(dir) ? readdirSync(dir).find((n) => n.startsWith(name)) : undefined;
-    return f ? readFileSync(join(dir, f), "utf8") : undefined;
-  };
   test("report comment limit: privacy says 500, CreateReportRequest.MAX_COMMENT_LENGTH is 500", () => {
     assert.match(privacy, /необов'язковий коментар \(до 500 символів\)/);
     assert.equal(javaInt("CreateReportRequest", "MAX_COMMENT_LENGTH"), 500);
@@ -108,23 +102,24 @@ describe("legal bump (phase 018): stated numbers equal the backend's", gate, () 
     assert.match(privacy, /Для клієнта із застосунку це ще й його акаунт\. Для гостя/);
     assert.match(be("../../../resources/db/migration/V211__client_blocks_identity_per_type.sql"), /phone_last4 IS NULL OR phone_hash IS NOT NULL/);
   });
-  test("guest-review invite numbers (backend 400-402 docs, code not built yet): 2 h, 21:00-09:00, 10:00, 72 h, 14 d, 30 d", (t) => {
-    const d400 = doc("phase-400");
-    const d401 = doc("phase-401");
-    const d402 = doc("phase-402");
-    if (!d400 || !d401 || !d402) return t.skip("docs/backend-phases not checked out");
+  test("guest-review invite numbers (backend code: application.yml app.booking.review-invite.*, retention + opt-out constants): 2 h, 21:00-09:00, 10:00, 72 h, 14 d, 30 d", () => {
+    const yml = readFileSync(join(BACKEND_DIR, "src/main/resources/application.yml"), "utf8");
+    const block = yml.slice(yml.indexOf("    review-invite:"));
+    const key = (k) => new RegExp(`^\\s+${k}:\\s*"?([^"\\n#]+?)"?\\s*$`, "m").exec(block)?.[1];
     assert.match(privacy, /Через 2 години після того/);
-    assert.match(d400, /send_after = completedAt \+ 2h/);
+    assert.equal(key("delay"), "2h");
     assert.match(privacy, /з 21:00 до 09:00 за київським часом: у такому разі воно надійде о 10:00/);
-    assert.match(d400, /\[21:00, 09:00\)[^\n]*10:00/);
+    assert.equal(key("quiet-start"), "21:00");
+    assert.equal(key("quiet-end"), "09:00");
+    assert.equal(key("send-at"), "10:00");
     assert.match(privacy, /протягом 3 діб після запланованого часу/);
-    assert.match(d400, /72 h after `send_after`/);
+    assert.equal(key("stale-after"), "72h");
     assert.match(privacy, /Посилання діє 14 днів від надсилання/);
-    assert.match(d400, /`expires_at = sent_at \+ 14 d`|expires_at = sent_at \+ 14 d/);
+    assert.equal(key("ttl"), "14d");
     assert.match(privacy, /Кнопка працює 30 днів після надсилання SMS/);
-    assert.match(d401, /for 30 days after sending/);
+    assert.match(be("review/invite/service/GuestReviewService.java"), /OPT_OUT_WINDOW\s*=\s*Duration\.ofDays\(30\)/);
     assert.match(privacy, /видаляється через 30 днів після закінчення дії посилання/);
-    assert.match(d402, /30 days after `expires_at`/);
+    assert.match(be("review/invite/service/GuestReviewRetentionService.java"), /INVITE_RETENTION\s*=\s*Duration\.ofDays\(30\)/);
   });
   test("review-page button text in the policy equals uk.json review.optOut", () => {
     assert.ok(privacy.includes(`«${uk.review.optOut}»`), "privacy quotes a button text that is not the page's");

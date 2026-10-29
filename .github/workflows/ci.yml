@@ -113,7 +113,9 @@ jobs:
           repository: Denys-Zvarych/beautica-backend
           ref: ${{ vars.BACKEND_CONTRACT_REF || steps.refs.outputs.backend }}
           path: beautica-backend
-          sparse-checkout: src/main/java/com/beautica
+          sparse-checkout: |
+            src/main/java/com/beautica
+            src/main/resources
 
       - name: Contract - site vs backend DTOs, claim numbers, policy version, CI wiring
         if: steps.backend.outcome == 'success'
@@ -157,7 +159,7 @@ jobs:
         timeout-minutes: 5
         run: npm test
         env:
-          TEST_EXCLUDE: booking-flow.test,book-axe,booking-privacy,book-salon-wizard
+          TEST_EXCLUDE: booking-flow.test,book-axe,booking-privacy,book-salon-wizard,review-page
 
       - name: Tests - guest booking flow (browser, mock backend)
         timeout-minutes: 5
@@ -200,6 +202,12 @@ jobs:
       - name: Tests - salon booking wizard (browser, mock backend)
         timeout-minutes: 5
         run: node scripts/run-tests.mjs tests/book-salon-wizard.test.mjs
+
+      # Phase 019 guest review page /r/{token}: SSR headers + the island in a real browser (~494 lines of flows), a step of its own so the e2e job's
+      # default step stays under 5 minutes.
+      - name: Tests - guest review page (browser, mock backend)
+        timeout-minutes: 5
+        run: node scripts/run-tests.mjs tests/review-page.test.mjs
 
       - name: Tests - axe sweep of the link pages (360 px)
         timeout-minutes: 5
