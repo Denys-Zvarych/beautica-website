@@ -5,6 +5,11 @@ import { addDays, inWindow, kyivToday, maxMonthOffset, monthView, partOfDay, wee
 import { failFor, cancelPath } from "../src/scripts/booking/api.ts";
 import { buildIcs } from "../src/scripts/booking/ics.ts";
 import { formatPhoneGrouped, nationalDigits } from "../src/lib/phone.ts";
+import { build } from "esbuild";
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { pathToFileURL } from "node:url";
 import { cleanName, cleanComment, typingName } from "../src/lib/booking/text.ts";
 
 describe("calendar (Europe/Kyiv)", () => {
@@ -47,6 +52,11 @@ describe("calendar (Europe/Kyiv)", () => {
 describe("API error mapping", () => {
   test("statuses -> UI outcome", () => {
     assert.deepEqual([400, 401, 403, 404, 409, 422, 429, 500, 502, 503, 504].map(failFor), ["validation", "unauthorized", "unauthorized", "not-found", "conflict", "validation", "rate-limited", "error", "unavailable", "unavailable", "unavailable"]);
+  });
+  test("409 BOOKING_UNAVAILABLE (backend 398) is its own outcome; any other 409 body stays a conflict", () => {
+    assert.equal(failFor(409, "BOOKING_UNAVAILABLE"), "provider-unavailable");
+    for (const code of [undefined, null, "SLOT_TAKEN", "booking_unavailable", {}]) assert.equal(failFor(409, code), "conflict");
+    assert.equal(failFor(400, "BOOKING_UNAVAILABLE"), "validation", "only a 409 is mapped by code");
   });
   test("the cancel link is reduced to this site's /book/cancel/{uuid} path", () => {
     const id = "123e4567-e89b-42d3-a456-426614174000";
@@ -172,5 +182,102 @@ describe("guest text is cleaned to the backend's rules (no control characters in
     assert.equal(cleanComment("  рядок1\r\nрядок2\tкінець\u0007\u0000  "), "рядок1\nрядок2\tкінець");
     assert.equal(cleanComment("\u000Bx\u000C\u001Fy\u007F"), "xy");
     assert.equal(cleanComment("   "), "");
+  });
+});
+
+// info.ts / invite.ts use extensionless imports, so bundle them for node.
+const bundle = async (entry) => {
+  const outfile = join(mkdtempSync(join(tmpdir(), "bt-")), "m.mjs");
+  // config.ts reads the Worker env from `cloudflare:workers`: an empty stand-in is enough for the pure normalizers.
+  const workersStub = { name: "workers-stub", setup: (b) => (b.onResolve({ filter: /^cloudflare:workers$/ }, () => ({ path: "w", namespace: "w" })), b.onLoad({ filter: /.*/, namespace: "w" }, () => ({ contents: "export const env = {};", loader: "js" }))) };
+  await build({ entryPoints: [new URL(entry, import.meta.url).pathname], bundle: true, format: "esm", platform: "node", outfile, logLevel: "silent", plugins: [workersStub] });
+  return import(pathToFileURL(outfile).href);
+};
+const { fetchMasterInfo } = await bundle("../src/lib/booking/info.ts");
+const { fetchInvite, parseInvite } = await bundle("../src/lib/review/invite.ts");
+const { normalizeMediaOrigin } = await bundle("../src/lib/booking/config.ts");
+
+describe("X-Beautica-Client-IP is sent only together with the Worker key", () => {
+  const TOKEN = "a".repeat(43);
+  const capture = async (run) => {
+    const real = globalThis.fetch;
+    let headers;
+    globalThis.fetch = async (_u, init) => {
+      headers = init.headers;
+      return new Response("{}", { status: 404 });
+    };
+    try {
+      await run();
+    } finally {
+      globalThis.fetch = real;
+    }
+    return headers;
+  };
+  for (const [name, call] of [
+    ["info", (cfg) => fetchMasterInfo(cfg, "x-1111", "203.0.113.9")],
+    ["invite", (cfg) => fetchInvite(cfg, TOKEN, "203.0.113.9")],
+  ]) {
+    test(`${name}: no key -> no key and no IP header`, async () => {
+      const h = await capture(() => call({ apiOrigin: "http://x.test", workerKey: "" }));
+      assert.ok(h, "fetch was called");
+      assert.equal(h["X-Beautica-Client-IP"], undefined);
+      assert.equal(h["X-Beautica-Worker-Key"], undefined);
+    });
+    test(`${name}: with key -> both headers`, async () => {
+      const h = await capture(() => call({ apiOrigin: "http://x.test", workerKey: "k" }));
+      assert.equal(h["X-Beautica-Client-IP"], "203.0.113.9");
+      assert.equal(h["X-Beautica-Worker-Key"], "k");
+    });
+  }
+});
+
+describe("review invite hardening (F2-F4)", () => {
+  const TOKEN = "a".repeat(43);
+  test("X-Beautica-Client-IP: only an IP literal is forwarded (CRLF / junk dropped, IPv6 ok)", async () => {
+    const sent = async (ip) => {
+      const real = globalThis.fetch;
+      let h;
+      globalThis.fetch = async (_u, init) => ((h = init.headers), new Response("{}", { status: 404 }));
+      try {
+        await fetchInvite({ apiOrigin: "http://x.test", workerKey: "k" }, TOKEN, ip);
+      } finally {
+        globalThis.fetch = real;
+      }
+      return h["X-Beautica-Client-IP"];
+    };
+    assert.equal(await sent("1.2.3.4\r\nX: y"), undefined);
+    assert.equal(await sent("evil, 1.2.3.4"), undefined);
+    assert.equal(await sent("2001:db8::1"), "2001:db8::1");
+    assert.equal(await sent("1.2.3.4"), "1.2.3.4");
+  });
+  const ID = "50000001-1111-4222-8333-944455556666";
+  const base = (o = {}) => ({ state: "OPEN", providerName: "P", visitDate: "2026-10-24", displayName: "D", items: [{ bookingId: ID, serviceName: "S", masterName: "M" }], ...o });
+  const MEDIA = "https://media.beautica.app";
+  test("avatar: media origin only", () => {
+    assert.equal(parseInvite(base({ avatarUrl: `${MEDIA}/a.png` }), MEDIA).data.avatarUrl, `${MEDIA}/a.png`);
+    assert.equal(parseInvite(base({ avatarUrl: "https://evil.example/a.png" }), MEDIA).data.avatarUrl, null);
+    assert.equal(parseInvite(base({ avatarUrl: `${MEDIA}.evil.example/a.png` }), MEDIA).data.avatarUrl, null);
+    assert.equal(parseInvite(base({ avatarUrl: `${MEDIA}/a.png` })).data.avatarUrl, null, "no configured origin -> no avatar");
+  });
+  test("bookingId must be a UUID: bad items dropped, none left -> unparseable", () => {
+    const r = parseInvite(base({ items: [{ bookingId: "../x", serviceName: "S" }, { bookingId: ID, serviceName: "S2" }] }), MEDIA);
+    assert.deepEqual(r.data.items.map((i) => i.serviceName), ["S2"]);
+    assert.equal(parseInvite(base({ items: [{ bookingId: "nope", serviceName: "S" }] }), MEDIA), null);
+  });
+  test("strings are capped at 200 chars", () => {
+    const r = parseInvite(base({ providerName: "x".repeat(5000) }), MEDIA);
+    assert.equal(r.data.providerName.length, 200);
+  });
+});
+
+describe("MEDIA_ORIGIN normalisation (the only origin an avatar may come from)", () => {
+  const PROD = "https://media.beautica.app";
+  test("https origin kept, path/query dropped", () => {
+    assert.equal(normalizeMediaOrigin("https://media.beautica.test/some/path?x=1"), "https://media.beautica.test");
+  });
+  test("http, junk, blank and non-strings fall back to the prod media host (never to an attacker-chosen origin)", () => {
+    for (const bad of ["http://media.beautica.test", "javascript:alert(1)", "not a url", "", "   ", undefined, null, 42]) {
+      assert.equal(normalizeMediaOrigin(bad), PROD, String(bad));
+    }
   });
 });

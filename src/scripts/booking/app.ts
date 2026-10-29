@@ -767,7 +767,7 @@ export async function initBooking(root: HTMLElement): Promise<{ open(): void }> 
   }
   function bookingFailed(r: { fail: Fail; status?: number }, slot: Slot): void {
     const fail = r.fail;
-    track("booking_error", { code: fail === "conflict" ? 409 : fail === "rate-limited" ? 429 : fail === "unavailable" ? 503 : "other" });
+    track("booking_error", { code: fail === "conflict" ? 409 : fail === "rate-limited" ? 429 : fail === "unavailable" ? 503 : fail === "provider-unavailable" ? "blocked" : "other" });
     // A dropped answer / 502 / 504 (or any failure of the resend after one, e.g. 409 «probably booked by you»): never offer another time.
     if (mayExist(r, unsure.has(""))) {
       if (!unsure.has("")) {
@@ -783,7 +783,7 @@ export async function initBooking(root: HTMLElement): Promise<{ open(): void }> 
       return;
     }
     if (fail === "unauthorized") return sessionExpired();
-    const msg = fail === "validation" ? S.invalid : fail === "rate-limited" ? S.limit : fail === "unavailable" ? fmt(S.unavailable, { email: S.supportEmail }) : S.error;
+    const msg = fail === "provider-unavailable" ? S.blockedMaster : fail === "validation" ? S.invalid : fail === "rate-limited" ? S.limit : fail === "unavailable" ? fmt(S.unavailable, { email: S.supportEmail }) : S.error;
     $("#submit-error-text").textContent = msg;
     view("#submit-error", true);
   }

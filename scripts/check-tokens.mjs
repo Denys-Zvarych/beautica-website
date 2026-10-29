@@ -39,8 +39,8 @@ const ALLOW = [
   /^--vt-bp-[a-z]+$/,
   /^--vt-max-width$/,
   /^--vt-touch-min$/,
-  /^--vt-dur-(fast|base)$/,
-  /^--vt-ease$/,
+  /^--vt-dur-(fast|base|spring)$/,
+  /^--vt-ease(-spring)?$/,
   /^--vt-lift$/,
   /^--vt-app-[a-z0-9-]+$/, // widget-level values copied from beautica-mobile widget code (named per line in tokens.css); booking-link pages only
 ];

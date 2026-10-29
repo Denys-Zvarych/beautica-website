@@ -10,9 +10,11 @@ interface Props {
   heading?: boolean;
   /** No back button (link-landing profile pages: the visitor came from a link, there is nothing to go back to). */
   noBack?: boolean;
+  /** With `heading`: a real <h1> instead of the h2 aria-level=1 (the one screen that is the page's first view, e.g. /r/{token}). Default off. */
+  h1?: boolean;
 }
-const { title, href, heading = false, noBack = false } = Astro.props;
-const Title = heading ? "h2" : "p";
+const { title, href, heading = false, noBack = false, h1 = false } = Astro.props;
+const Title = heading ? (h1 ? "h1" : "h2") : "p";
 ---
 
 <header class="topbar">
@@ -24,7 +26,7 @@ const Title = heading ? "h2" : "p";
         <button class="nib" type="button" data-back aria-label={t("book.back")}><Icon name="arrow-back-ios" /></button>
       )
     }
-    <Title class="title t-title ellipsis" data-step-heading={heading ? "" : undefined} tabindex={heading ? -1 : undefined} aria-level={heading ? 1 : undefined}>{title}</Title>
+    <Title class="title t-title ellipsis" data-step-heading={heading ? "" : undefined} tabindex={heading ? -1 : undefined} aria-level={heading && !h1 ? 1 : undefined}>{title}</Title>
     {noBack ? null : <span class="nib-spacer"></span>}
   </div>
 </header>

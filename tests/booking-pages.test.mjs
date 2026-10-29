@@ -172,16 +172,15 @@ describe("states that are not a profile", () => {
 });
 
 describe("backend contract from the Worker", () => {
-  test("every info request carries the Worker key and the visitor IP (CF-Connecting-IP); the key never reaches the browser", async () => {
+  test("every info request carries the Worker key and the visitor IP (X-Beautica-Client-IP); the key never reaches the browser", async () => {
     const ip = freshIp();
     const res = await get("/book/headers-3333", { "cf-connecting-ip": ip });
     assert.equal(res.status, 200);
     const calls = callsTo(await mockLog(), "GET", "/api/v1/book/headers-3333/info");
     assert.equal(calls.length, 1);
     assert.equal(calls[0].headers["x-beautica-worker-key"], WORKER_KEY);
-    // The page forwards the IP in CF-Connecting-IP (what the backend reads). Local workerd drops that header on outbound
-    // subrequests, so it can only be asserted where the runtime keeps it; staging must confirm it (see the phase doc).
-    if (calls[0].headers["cf-connecting-ip"] !== undefined) assert.equal(calls[0].headers["cf-connecting-ip"], ip);
+    // CF-Connecting-IP does not survive a Workers subrequest, so the visitor IP travels in the custom X-Beautica-Client-IP.
+    assert.equal(calls[0].headers["x-beautica-client-ip"], ip);
     assert.equal(calls[0].headers["accept"], "application/json");
     assert.equal(res.body.includes(WORKER_KEY), false);
     assert.equal(JSON.stringify(res.headers).includes(WORKER_KEY), false);

@@ -3,10 +3,10 @@
 // proves the line still says what the page says, and that every page copy of the number agrees with the backend value.
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { ROOT, uk } from "./helpers/env.mjs";
-import { backendGate, javaInt, mobileGate, siblingPath } from "./helpers/backend.mjs";
+import { BACKEND_DIR, backendGate, javaInt, mobileGate, siblingPath } from "./helpers/backend.mjs";
 
 const gate = backendGate();
 const read = (rel) => readFileSync(join(ROOT, rel), "utf8");
@@ -69,5 +69,59 @@ describe("the ledger rows added for the booking pages still point at the line th
       const text = readFileSync(file, "utf8").split("\n")[Number(m[2]) - 1];
       assert.ok(text && !/^\s*(\/\/|\*|\/\*|\}|$)/.test(text), `${r[0].slice(0, 50)}: ${m[1]}:${m[2]} is blank or a comment`);
     }
+  });
+});
+
+// Phase 018: the numbers the legal bump states about reports, blocks and guest-review invites, compared with where they live.
+// 395-402 are built: the backend code and config are the source.
+describe("legal bump (phase 018): stated numbers equal the backend's", gate, () => {
+  const privacy = read("src/content/legal/uk/privacy.md");
+  const terms = read("src/content/legal/uk/terms.md");
+  const be = (rel) => readFileSync(join(BACKEND_DIR, "src/main/java/com/beautica", rel), "utf8");
+  test("report comment limit: privacy says 500, CreateReportRequest.MAX_COMMENT_LENGTH is 500", () => {
+    assert.match(privacy, /необов'язковий коментар \(до 500 символів\)/);
+    assert.equal(javaInt("CreateReportRequest", "MAX_COMMENT_LENGTH"), 500);
+  });
+  test("guest review comment limit: privacy says 2000, CreateReviewRequest allows 2000", () => {
+    assert.match(privacy, /коментар \(до 2000 символів\)/);
+    assert.match(be("review/dto/CreateReviewRequest.java"), /max = 2000/);
+  });
+  test("auto-hide threshold: terms say «троє», app.moderation.auto-hide-threshold is 3", () => {
+    assert.match(terms, /\(зараз — троє\)/);
+    assert.match(be("../../../resources/application.yml"), /auto-hide-threshold:\s*3\b/);
+  });
+  test("report retention: privacy says 1 year, ContentReportRetentionService.RETENTION_YEARS is 1", () => {
+    assert.match(privacy, /скарги зберігаємо ще 1 рік/);
+    assert.match(be("moderation/service/ContentReportRetentionService.java"), /RETENTION_YEARS\s*=\s*1\s*;/);
+  });
+  test("anonymised name: privacy says «Гість», GuestPii.ANONYMISED_NAME is «Гість»", () => {
+    assert.match(be("booking/retention/GuestPii.java"), /ANONYMISED_NAME\s*=\s*"Гість"/);
+    assert.match(privacy, /змінюються на «Гість»/);
+  });
+  test("blocks: the registered client keeps no phone (V211 CHECK), the guest keeps hash + last 4", () => {
+    assert.match(privacy, /Для клієнта із застосунку це ще й його акаунт\. Для гостя/);
+    assert.match(be("../../../resources/db/migration/V211__client_blocks_identity_per_type.sql"), /phone_last4 IS NULL OR phone_hash IS NOT NULL/);
+  });
+  test("guest-review invite numbers (backend code: application.yml app.booking.review-invite.*, retention + opt-out constants): 2 h, 21:00-09:00, 10:00, 72 h, 14 d, 30 d", () => {
+    const yml = readFileSync(join(BACKEND_DIR, "src/main/resources/application.yml"), "utf8");
+    const block = yml.slice(yml.indexOf("    review-invite:"));
+    const key = (k) => new RegExp(`^\\s+${k}:\\s*"?([^"\\n#]+?)"?\\s*$`, "m").exec(block)?.[1];
+    assert.match(privacy, /Через 2 години після того/);
+    assert.equal(key("delay"), "2h");
+    assert.match(privacy, /з 21:00 до 09:00 за київським часом: у такому разі воно надійде о 10:00/);
+    assert.equal(key("quiet-start"), "21:00");
+    assert.equal(key("quiet-end"), "09:00");
+    assert.equal(key("send-at"), "10:00");
+    assert.match(privacy, /протягом 3 діб після запланованого часу/);
+    assert.equal(key("stale-after"), "72h");
+    assert.match(privacy, /Посилання діє 14 днів від надсилання/);
+    assert.equal(key("ttl"), "14d");
+    assert.match(privacy, /Кнопка працює 30 днів після надсилання SMS/);
+    assert.match(be("review/invite/service/GuestReviewService.java"), /OPT_OUT_WINDOW\s*=\s*Duration\.ofDays\(30\)/);
+    assert.match(privacy, /видаляється через 30 днів після закінчення дії посилання/);
+    assert.match(be("review/invite/service/GuestReviewRetentionService.java"), /INVITE_RETENTION\s*=\s*Duration\.ofDays\(30\)/);
+  });
+  test("review-page button text in the policy equals uk.json review.optOut", () => {
+    assert.ok(privacy.includes(`«${uk.review.optOut}»`), "privacy quotes a button text that is not the page's");
   });
 });

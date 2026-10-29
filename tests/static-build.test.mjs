@@ -102,7 +102,9 @@ describe("size budgets (README § 4: JS <= 5 KB gz static, CSS <= 25 KB gz, font
       assert.ok(fontBytes <= 110 * KB, `preloaded fonts are ${fontBytes} B`);
       // A lost preload makes the webfont arrive after first paint and reflow wrapped text (CLS 0.06 on / when the Nunito preload was dropped).
       // Token pages also preload Comfortaa Latin: a lazily fetched font would send the token URL as Referer.
-      const required = ["nunito-cyrillic-wght", "nunito-latin-wght", "comfortaa-cyrillic-wght", ...(name(file).startsWith("/l/") ? ["comfortaa-latin-wght"] : [])];
+      // The legal pages preload the small "latin basic" files instead of the full Latin faces (fonts-legal.css); the other pages preload the full ones.
+      const legal = ["/privacy.html", "/terms.html", "/support.html", "/delete-account.html"].includes(name(file));
+      const required = ["nunito-cyrillic-wght", legal ? "nunito-latin-basic-wght" : "nunito-latin-wght", "comfortaa-cyrillic-wght", ...(name(file).startsWith("/l/") ? ["comfortaa-latin-wght"] : legal ? ["comfortaa-latin-basic-wght"] : [])];
       for (const r of required) assert.ok(fonts.some((f) => f.includes(r)), `${r} is no longer preloaded (${fonts.join(", ")})`);
     });
   }
@@ -143,4 +145,21 @@ describe("security headers: public/_headers (static assets) == src/lib/securityH
     const r = readFileSync(join(DIST, "_redirects"), "utf8");
     for (const line of ["/invite/accept /l/invite 200", "/bookings/:id/review /l/review 200", "/bookings/:id /l/booking 200", "/book/cancel/:token /l/cancel 200"]) assert.ok(r.split("\n").includes(line), line);
   });
+});
+
+test("the legal pages load the small Latin basic subset, not the full Latin face (font budget headroom)", async () => {
+  const { BASIC_RANGE } = await import("../scripts/subset-fonts.mjs");
+  const css = readFileSync(join(ROOT, "src", "styles", "fonts-legal.css"), "utf8");
+  assert.equal([...css.matchAll(/unicode-range: ([^;]+);/g)].map((m) => m[1]).join("|"), `${BASIC_RANGE}|${BASIC_RANGE}`, "fonts-legal.css range must equal BASIC_RANGE of scripts/subset-fonts.mjs");
+  for (const p of ["privacy", "terms", "support", "delete-account"]) {
+    const html = readFileSync(join(DIST, `${p}.html`), "utf8");
+    const preloads = [...html.matchAll(/<link rel="preload" as="font"[^>]*href="([^"]+)"/g)].map((m) => m[1]);
+    assert.ok(preloads.some((h) => /nunito-latin-basic-/.test(h)) && preloads.some((h) => /comfortaa-latin-basic-/.test(h)), `/${p} preloads the basic subsets: ${preloads}`);
+    assert.ok(!preloads.some((h) => /(nunito|comfortaa)-latin-wght-/.test(h)), `/${p} must not preload the full Latin faces`);
+    // every Latin-range character of the visible text must be inside the basic range (otherwise the full face is requested on top)
+    const text = html.replace(/<(script|style)[\s\S]*?<\/\1>/g, "").replace(/<head>[\s\S]*?<\/head>/, "").replace(/<[^>]+>/g, " ");
+    const ok = (c) => c <= 0xa0 || c === 0xa9 || c === 0xab || c === 0xb7 || c === 0xbb;
+    const outside = [...new Set([...text].filter((ch) => { const c = ch.codePointAt(0); return c < 0x100 && !ok(c); }))];
+    assert.deepEqual(outside, [], `/${p} renders Latin characters outside the basic subset: ${outside}`);
+  }
 });

@@ -51,6 +51,19 @@ jobs:
       - name: HTML validation
         run: npx html-validate 'dist/client/**/*.html'
 
+      # Cross-repo features land as same-named branches in the sibling repos: pin the ledger and the contract to that branch while it
+      # exists, else dev. The head ref goes through env (never interpolated into the script).
+      - name: Resolve sibling refs (same-named feature branch, else dev)
+        id: refs
+        env:
+          HEAD_REF: ${{ github.head_ref }}
+        run: |
+          for r in backend mobile; do
+            ref=dev
+            if [ -n "$HEAD_REF" ] && git ls-remote --exit-code --heads "https://github.com/Denys-Zvarych/beautica-$r" "refs/heads/$HEAD_REF" >/dev/null 2>&1; then ref="$HEAD_REF"; fi
+            echo "$r=$ref" >> "$GITHUB_OUTPUT"
+          done
+
       # Token parity needs the app theme. The mobile repo is public until release; if the checkout
       # fails (repo made private, no token) the step below is skipped and the owner is warned.
       - name: Checkout mobile theme (token source)
@@ -59,7 +72,7 @@ jobs:
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           repository: Denys-Zvarych/beautica-mobile
-          ref: dev
+          ref: ${{ steps.refs.outputs.mobile }}
           path: beautica-mobile
           sparse-checkout: |
             lib/core/theme
@@ -90,7 +103,7 @@ jobs:
 
       # Site <-> backend contract (phases 008/009): the mock backend, the parsers and every request body are compared with the backend's
       # Java records, and the numbers the pages state (2 h cancel, 60 days, 10 services) with the backend constants. The backend repo is
-      # public until release; its ref defaults to dev (repo variable BACKEND_CONTRACT_REF pins another branch while a backend PR is open).
+      # public until release; its ref is the PR's same-named branch when it exists, else dev (repo variable BACKEND_CONTRACT_REF overrides).
       # No server, no browser: ~1 s. When the checkout fails the backend-dependent specs skip and a warning is printed.
       - name: Checkout backend sources (contract source)
         id: backend
@@ -98,9 +111,11 @@ jobs:
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           repository: Denys-Zvarych/beautica-backend
-          ref: ${{ vars.BACKEND_CONTRACT_REF || 'dev' }}
+          ref: ${{ vars.BACKEND_CONTRACT_REF || steps.refs.outputs.backend }}
           path: beautica-backend
-          sparse-checkout: src/main/java/com/beautica
+          sparse-checkout: |
+            src/main/java/com/beautica
+            src/main/resources
 
       - name: Contract - site vs backend DTOs, claim numbers, policy version, CI wiring
         if: steps.backend.outcome == 'success'
@@ -144,11 +159,16 @@ jobs:
         timeout-minutes: 5
         run: npm test
         env:
-          TEST_EXCLUDE: booking-flow.test,book-axe,booking-privacy,book-salon-wizard
+          TEST_EXCLUDE: booking-flow.test,book-axe,booking-privacy,book-salon-wizard,review-page,book-blocked
 
       - name: Tests - guest booking flow (browser, mock backend)
         timeout-minutes: 5
         run: node scripts/run-tests.mjs tests/booking-flow.test.mjs
+
+      # Phase 020 blocked-phone banner (browser, mock backend): its own step; the default step sat at 4m55s of its 5 minutes.
+      - name: Tests - blocked-phone banner (browser, mock backend)
+        timeout-minutes: 5
+        run: node scripts/run-tests.mjs tests/book-blocked.test.mjs
 
       # Where the Turnstile token, phone, SMS code, guest token and name may go (per request, storage, analytics funnel). ~30 s.
       - name: Tests - guest booking privacy (data flow + analytics funnel)
@@ -168,7 +188,7 @@ jobs:
   # backend. A job of its own so the two e2e jobs run side by side (both are required checks).
   e2e_booking:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
     env:
       CHROMIUM_PATH: /usr/bin/google-chrome
     steps:
@@ -188,6 +208,12 @@ jobs:
         timeout-minutes: 5
         run: node scripts/run-tests.mjs tests/book-salon-wizard.test.mjs
 
+      # Phase 019 guest review page /r/{token}: SSR headers + the island in a real browser (~494 lines of flows), a step of its own so the e2e job's
+      # default step stays under 5 minutes.
+      - name: Tests - guest review page (browser, mock backend)
+        timeout-minutes: 5
+        run: node scripts/run-tests.mjs tests/review-page.test.mjs
+
       - name: Tests - axe sweep of the link pages (360 px)
         timeout-minutes: 5
         run: node scripts/run-tests.mjs tests/book-axe.test.mjs
@@ -200,9 +226,10 @@ jobs:
         env:
           AXE_WIDTHS: "768,1280"
 
-      # Lighthouse (mobile) on the SSR link pages against wrangler dev + the mock backend: master, 12-photo rail, salon, sorted view; 3 runs each.
-      # Budgets (median of the runs): LCP < 2400 ms (target 2000, warns above it), TBT < 50 ms, CLS < 0.02, JS <= 20 KB.
-      - name: Lighthouse - SSR link pages
+      # Lighthouse (mobile) on the SSR link pages against wrangler dev + the mock backend: master, 12-photo rail, salon, sorted view, guest review form /r/; 3 runs each.
+      # Budgets (median of the runs): Perf >= 90, LCP < 2400 ms (target 2000, warns above it), TBT < 50 ms, CLS < 0.02, JS <= 20 KB.
+      # Two steps (LH_PAGES splits the list of scripts/lighthouse-ssr.mjs) so each stays within 5 minutes: 3 pages x 3 runs, then 2 pages x 3 runs.
+      - name: Lighthouse - SSR link pages (master, salon, review form)
         timeout-minutes: 5
         run: |
           # Deterministic browser: the runner's Chrome (google-chrome, else chromium); fail loudly when there is none.
@@ -210,7 +237,15 @@ jobs:
           test -n "$CHROME_PATH" || { echo "no Chrome on the runner"; exit 1; }
           export CHROME_PATH
           "$CHROME_PATH" --version
-          node scripts/lighthouse-ssr.mjs --runs 3
+          LH_PAGES='["/book/oksana-ab12","/book/s/lavanda-1111","/r/rvmulti-lhci-00000001"]' node scripts/lighthouse-ssr.mjs --runs 3
+
+      - name: Lighthouse - SSR link pages (photo rail, sorted view)
+        timeout-minutes: 5
+        run: |
+          CHROME_PATH="$(command -v google-chrome || command -v google-chrome-stable || command -v chromium || command -v chromium-browser)"
+          test -n "$CHROME_PATH" || { echo "no Chrome on the runner"; exit 1; }
+          export CHROME_PATH
+          LH_PAGES='["/book/rail-8888","/book/oksana-ab12?sort=OLDEST"]' node scripts/lighthouse-ssr.mjs --runs 3
 
   # Lighthouse over every page (3 runs, median): perf >= 95, a11y 100, SEO 100 (0.66 on the noindex pages, where only
   # is-crawlable fails by design), CLS/LCP/TBT, and resource budgets. Own job: ~4 min of Chrome runs stay off the critical path.

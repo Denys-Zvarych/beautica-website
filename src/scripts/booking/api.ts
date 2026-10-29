@@ -1,6 +1,6 @@
 // Typed calls to the public booking API (PublicBookingController + PhoneOtpController). Credential-less fetches with a timeout;
 // every outcome is mapped to a small union, so the UI never inspects status codes. No PII is ever logged.
-export type Fail = "validation" | "unauthorized" | "conflict" | "rate-limited" | "unavailable" | "not-found" | "network" | "error";
+export type Fail = "validation" | "unauthorized" | "conflict" | "provider-unavailable" | "rate-limited" | "unavailable" | "not-found" | "network" | "error";
 /** `status`: the HTTP status of a failed answer (absent for network / unreadable-body failures). */
 export type Result<T> = { ok: true; data: T } | { ok: false; fail: Fail; status?: number };
 
@@ -32,9 +32,10 @@ export interface BookingRequest {
 
 const TIMEOUT_MS = 15000;
 
-export function failFor(status: number): Fail {
+/** `code`: the stable `data.code` of an error body. 409 + `BOOKING_UNAVAILABLE` (booking create only, backend 398) is the neutral «blocked» answer; every other 409 stays a slot conflict. */
+export function failFor(status: number, code?: unknown): Fail {
   if (status === 401 || status === 403) return "unauthorized";
-  if (status === 409) return "conflict";
+  if (status === 409) return code === "BOOKING_UNAVAILABLE" ? "provider-unavailable" : "conflict";
   if (status === 429) return "rate-limited";
   if (status === 404) return "not-found";
   if (status === 400 || status === 422) return "validation";
@@ -42,14 +43,25 @@ export function failFor(status: number): Fail {
   return "error";
 }
 
-async function call<T>(url: string, init: RequestInit, read: (json: unknown) => T | null): Promise<Result<T>> {
+/** Shared low-level call (also used by the review page script). `mapBlocked`: opt-in to the 409 `BOOKING_UNAVAILABLE` mapping (the booking-create calls only); everywhere else a 409 stays a plain conflict. */
+export async function call<T>(url: string, init: RequestInit, read: (json: unknown) => T | null, mapBlocked = false): Promise<Result<T>> {
   let res: Response;
   try {
     res = await fetch(url, { ...init, credentials: "omit", cache: "no-store", referrerPolicy: "no-referrer", signal: AbortSignal.timeout(TIMEOUT_MS) });
   } catch {
     return { ok: false, fail: "network" };
   }
-  if (!res.ok) return { ok: false, fail: failFor(res.status), status: res.status };
+  if (!res.ok) {
+    let code: unknown;
+    if (mapBlocked && res.status === 409) {
+      try {
+        code = obj(obj(await res.json()).data).code;
+      } catch {
+        /* a 409 without a readable body is a plain conflict */
+      }
+    }
+    return { ok: false, fail: failFor(res.status, code), status: res.status };
+  }
   let json: unknown = null;
   try {
     json = await res.json();
@@ -61,7 +73,7 @@ async function call<T>(url: string, init: RequestInit, read: (json: unknown) => 
 }
 
 const obj = (v: unknown): Record<string, unknown> => (typeof v === "object" && v !== null ? (v as Record<string, unknown>) : {});
-const post = (body: unknown, token?: string): RequestInit => ({
+export const post = (body: unknown, token?: string): RequestInit => ({
   method: "POST",
   headers: { "Content-Type": "application/json", Accept: "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
   body: JSON.stringify(body),
@@ -103,12 +115,17 @@ export function createBooking(api: string, slug: string, guestToken: string, b: 
   // The salon route takes `masterServiceIds` always (1-10); the master link keeps `serviceId` for a single service.
   const ids = b.serviceIds.length === 1 && !masterId ? { serviceId: b.serviceIds[0] } : { masterServiceIds: b.serviceIds };
   const body = { ...ids, startsAt: b.startsAt, name: b.name, surname: b.surname, privacyAccepted: true, privacyPolicyVersion: b.policyVersion, ...(b.clientComment ? { clientComment: b.clientComment } : {}) };
-  return call(`${scope(api, slug, masterId)}/booking`, post(body, guestToken), (j) => {
-    const o = obj(j);
-    return typeof o.startsAt === "string"
-      ? { startsAt: o.startsAt, masterName: String(o.masterName ?? ""), serviceName: String(o.serviceName ?? ""), durationMinutes: Number(o.durationMinutes ?? 0), cancelUrl: typeof o.cancelUrl === "string" ? o.cancelUrl : null }
-      : null;
-  });
+  return call(
+    `${scope(api, slug, masterId)}/booking`,
+    post(body, guestToken),
+    (j) => {
+      const o = obj(j);
+      return typeof o.startsAt === "string"
+        ? { startsAt: o.startsAt, masterName: String(o.masterName ?? ""), serviceName: String(o.serviceName ?? ""), durationMinutes: Number(o.durationMinutes ?? 0), cancelUrl: typeof o.cancelUrl === "string" ? o.cancelUrl : null }
+        : null;
+    },
+    true,
+  );
 }
 
 /** The cancel page lives on this site: keep only the `/book/cancel/{uuid}` path of whatever origin the backend put in the URL. */

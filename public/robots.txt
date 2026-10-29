@@ -4,6 +4,7 @@ Disallow: /l/
 Disallow: /invite/
 Disallow: /bookings/
 Disallow: /book/cancel/
+Disallow: /r/
 Disallow: /api/
 Disallow: /book-steps/
 
