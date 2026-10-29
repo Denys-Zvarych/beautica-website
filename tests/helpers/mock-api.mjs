@@ -113,6 +113,8 @@ const MASTERS = {
   "conflict-9999": () => masterInfo(),
   "bookdown-7777": () => masterInfo(),
   "blocked-4098": () => masterInfo(), // phase 020: the booking POST answers 409 BOOKING_UNAVAILABLE
+  "blocked-4097": () => masterInfo(), // phase 020: same, a second page for the form-state / axe specs
+  "conflictcode-4096": () => masterInfo(), // phase 020: the booking POST answers 409 with ANOTHER data.code: must stay a slot conflict
   "ambig-0001": () => masterInfo(),
   "ambig-5041": () => masterInfo(),
   "sortv-0001": () => masterInfo(),
@@ -256,7 +258,7 @@ const json = (res, status, body, headers = {}) => {
 const err = (res, status, message, headers) => json(res, status, { success: false, data: null, message }, headers);
 /** The backend's retired-link answer (GoneException.BOOKING_LINK_RETIRED): 410 with a stable code under data.code. */
 const gone = (res) => json(res, 410, { success: false, data: { code: "BOOKING_LINK_RETIRED" }, message: "Booking link is no longer valid" });
-/** TODO(backend-398): the neutral «blocked phone» answer at booking create: 409 with the stable code under data.code (BookingUnavailableException). */
+/** Backend 398 (BookingUnavailableException, built): the neutral «blocked phone» answer at booking create: 409 with the stable code under data.code (BookingUnavailableException). */
 const unavailable = (res) => json(res, 409, { success: false, data: { code: "BOOKING_UNAVAILABLE" }, message: "Booking is not available" });
 const readBody = (req) => new Promise((resolve) => {
   const chunks = [];
@@ -385,6 +387,7 @@ export async function startMockApi() {
       if (!/^\+380\d{9}$/.test(b.phone ?? "") || !/^\d{6}$/.test(b.code ?? "")) return err(res, 400, "Validation failed");
       if (b.phone.endsWith("0429")) return err(res, 429, "Too many requests");
       if (b.code === "000000") return err(res, 401, "Invalid or expired code");
+      if (b.phone.endsWith("0409")) return unavailable(res); // phase 020: the code is booking-create only; on OTP verify it must NOT become the blocked banner
       return json(res, 200, { success: true, data: { guestToken: GUEST_TOKEN }, message: null });
     }
     if ((m = /^\/api\/v1\/book\/([a-z0-9-]+)\/booking$/.exec(path)) && req.method === "POST") {
@@ -397,6 +400,7 @@ export async function startMockApi() {
       if (b.clientComment !== undefined && (typeof b.clientComment !== "string" || b.clientComment.length > 1000 || /[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/.test(b.clientComment))) return err(res, 400, "Comment must be at most 1000 characters");
       if (slug === "conflict-9999") return err(res, 409, "Slot not available");
       if (slug.startsWith("blocked-")) return unavailable(res);
+      if (slug.startsWith("conflictcode-")) return json(res, 409, { success: false, data: { code: "SLOT_TAKEN" }, message: "Slot not available" });
       if (slug === "bookdown-7777") return err(res, 503, "Service unavailable");
       // A slug containing "ambig": a booking exists once accepted, the same time again is a conflict (the "answer lost, then resent" case).
       if (slug.includes("ambig")) {
@@ -408,7 +412,7 @@ export async function startMockApi() {
       const minutes = ids.reduce((a, id) => a + (SVC.find((s) => s.id === id)?.durationMinutes ?? 0), 0);
       return json(res, 201, { bookingId: "b0b0b0b0-1111-4222-8333-944455556666", appointmentId: ids.length > 1 ? "a0a0a0a0-1111-4222-8333-944455556666" : null, startsAt: b.startsAt, masterName: "Оксана Коваленко", serviceName: names.join(", "), durationMinutes: minutes, cancelUrl: slug === "nocancel-8888" ? null : slug === "foreigncancel-4242" ? FOREIGN_CANCEL_URL : CANCEL_URL });
     }
-    // TODO(backend-401): guest review invites (phase 401 contract + the 019 design input). Tokens by prefix (16+ chars, [A-Za-z0-9_-]):
+    // Guest review invites, the real backend 401 shapes (bare JSON, state discriminator, null fields omitted). Tokens by prefix (16+ chars, [A-Za-z0-9_-]):
     //   rvopen...   one service (master)      rvmulti...  two services (master)      rvsalon...  two services, two masters (salon)
     //   rvdone...   200 {state: ALREADY_REVIEWED} (consumed)      rvlimit... GET 429      rvdown... GET 503      anything else = 404 (unknown / expired alike)
     //   opt-out: 404 for rvoptgone... (an open form whose token dies before the opt-out)
@@ -419,10 +423,13 @@ export async function startMockApi() {
         if (tok.startsWith("rvdone")) return json(res, 200, { state: "ALREADY_REVIEWED" });
         if (tok.startsWith("rvlimit")) return err(res, 429, "Too many requests", { "retry-after": "20" });
         if (tok.startsWith("rvdown")) return err(res, 503, "Service unavailable", { "retry-after": "9" });
-        const o = { providerName: "Оксана Коваленко", providerType: "MASTER", visitDate: "2026-10-24", displayName: "Олена К.", avatarUrl: null, avgRating: 4.9, reviewCount: 128, professionalTitle: "Манікюр та педикюр" };
-        if (tok.startsWith("rvsalon")) return json(res, 200, { ...o, providerName: "Салон «Лаванда»", providerType: "SALON", professionalTitle: null, items: [{ bookingId: uid("5", 1), serviceName: "Манікюр+гель лак", masterName: "Оксана Коваленко" }, { bookingId: uid("5", 2), serviceName: "Педикюр класичний", masterName: "Ірина Мельник" }] });
+        const o = { state: "OPEN", providerName: "Оксана Коваленко", providerType: "MASTER", visitDate: "2026-10-24", displayName: "Олена К.", avgRating: 4.9, reviewCount: 128, professionalTitle: "Манікюр та педикюр" };
+        if (tok.startsWith("rvavatar")) return json(res, 200, { ...o, avatarUrl: `${MEDIA}/a.png`, items: [{ bookingId: uid("5", 1), serviceName: "Манікюр+гель лак", masterName: "Оксана Коваленко" }] });
+        if (tok.startsWith("rvevil")) return json(res, 200, { ...o, avatarUrl: "https://evil.example/a.png", items: [{ bookingId: uid("5", 1), serviceName: "Манікюр+гель лак", masterName: "Оксана Коваленко" }] });
+        if (tok.startsWith("rvnorate")) { const { avgRating, professionalTitle, ...bare } = o; return json(res, 200, { ...bare, reviewCount: 0, items: [{ bookingId: uid("5", 1), serviceName: "Манікюр+гель лак", masterName: "Оксана Коваленко" }] }); }
+        if (tok.startsWith("rvsalon")) return json(res, 200, { ...o, providerName: "Салон «Лаванда»", providerType: "SALON", professionalTitle: undefined, items: [{ bookingId: uid("5", 1), serviceName: "Манікюр+гель лак", masterName: "Оксана Коваленко" }, { bookingId: uid("5", 2), serviceName: "Педикюр класичний", masterName: "Ірина Мельник" }] });
         if (tok.startsWith("rvmulti")) return json(res, 200, { ...o, items: [{ bookingId: uid("5", 1), serviceName: "Манікюр+гель лак", masterName: "Оксана Коваленко" }, { bookingId: uid("5", 2), serviceName: "Педикюр класичний", masterName: "Оксана Коваленко" }] });
-        if (tok.startsWith("rvopen") || tok.startsWith("rv") && /^rv(gone|conf|slow|bad|opt|blk)/.test(tok)) return json(res, 200, { data: { ...o, items: [{ bookingId: uid("5", 1), serviceName: "Манікюр+гель лак", masterName: "Оксана Коваленко" }] } }); // wrapped: both shapes are read
+        if (tok.startsWith("rvopen") || tok.startsWith("rv") && /^rv(gone|conf|slow|bad|opt|blk)/.test(tok)) return json(res, 200, { ...o, items: [{ bookingId: uid("5", 1), serviceName: "Манікюр+гель лак", masterName: "Оксана Коваленко" }] });
         return err(res, 404, "Not found");
       }
       if (req.method !== "POST" || !tail) return err(res, 404, "Not found");

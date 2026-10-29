@@ -93,6 +93,7 @@ const wrangler = spawn("npx", [
     "--persist-to", join(dirname(logPath), "state"),
     "--var", `API_ORIGIN:${mockApi.origin}`,
     // Cloudflare's always-pass test key: the tests serve a fake Turnstile script, so the whole widget + token path is exercised.
+    "--var", "MEDIA_ORIGIN:https://media.beautica.test",
     "--var", "TURNSTILE_SITE_KEY:1x00000000000000000000AA",
     "--var", "BOOKING_INFO_WORKER_KEY:test-worker-key-0123456789012345678901",
   ], {

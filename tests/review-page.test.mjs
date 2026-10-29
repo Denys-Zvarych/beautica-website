@@ -64,6 +64,15 @@ describe("headers and markup (token route)", () => {
     assert.ok(csp.includes("frame-src https://challenges.cloudflare.com"));
     assert.ok(csp.includes("script-src 'self' https://challenges.cloudflare.com;"));
   });
+  test("avatar: only from the configured media origin (evil origin -> no <img>, not in CSP; media origin -> <img> + img-src)", async () => {
+    const evil = await rawRequest(`/r/${tok("rvevil", 1)}`);
+    assert.equal(evil.status, 200);
+    assert.equal(evil.body.includes("evil.example"), false, "no evil URL in the markup");
+    assert.equal(evil.headers["content-security-policy"].includes("evil.example"), false, "no evil origin in the CSP");
+    const ok = await rawRequest(`/r/${tok("rvavatar", 1)}`);
+    assert.ok(ok.body.includes("https://media.beautica.test/a.png"));
+    assert.ok(ok.headers["content-security-policy"].includes("img-src 'self' data: https://media.beautica.test"));
+  });
   test("unknown, malformed and expired look identical (same status and same body)", async () => {
     const a = await rawRequest(`/r/${tok("zznone", 2)}`);
     const b = await rawRequest("/r/short");
@@ -189,6 +198,22 @@ describe("the form", () => {
       const { page } = env;
       assert.match(await text(page.locator(".strip")), /Ваш візит до салону.*Салон «Лаванда»/);
       assert.match(await text(page.locator("[data-svc]").nth(1)), /Педикюр класичний.*Ірина Мельник/);
+      quiet(env);
+    } finally {
+      await env.context.close();
+    }
+  });
+  test("a provider with no reviews (avgRating absent, reviewCount 0): the card renders cleanly, no rating cluster, no count, no NaN", async () => {
+    const env = await reviewPage(tok("rvnorate", 1));
+    try {
+      const { page } = env;
+      assert.equal(await visibleScreen(page), "form");
+      const strip = await text(page.locator(".strip"));
+      assert.match(strip, /Ваш візит до майстра.*Оксана Коваленко.*Манікюр\+гель лак$/);
+      assert.equal(await page.locator(".strip .rate").count(), 0);
+      assert.equal(/NaN|undefined|null|\(0\)/.test(strip), false, strip);
+      const box = await page.locator(".strip").boundingBox();
+      assert.ok(box && box.width > 0 && box.height > 0);
       quiet(env);
     } finally {
       await env.context.close();

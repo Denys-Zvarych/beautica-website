@@ -24,6 +24,8 @@
   //   API_ORIGIN               prod API. Previews (dev branch, staging) override it below; local dev: .dev.vars (see .dev.vars.example).
   //   TURNSTILE_SITE_KEY       prod: the real site key of the beautica.app widget, set as a plain-text variable in the Cloudflare dashboard
   //                            (never committed; keep_vars stops a deploy from wiping it). Previews: Cloudflare's always-pass test key.
+  //   MEDIA_ORIGIN            optional; image origin allowed in the CSP img-src and used for avatars. Default https://media.beautica.app.
+  //                            Staging photos live on another host: set MEDIA_ORIGIN there, or /r/{token} drops the master avatar.
   //   BOOKING_INFO_WORKER_KEY  secret (wrangler secret put / dashboard Secrets, previews.secrets); same value as the backend env var.
   "keep_vars": true,
   "vars": { "API_ORIGIN": "https://api.beautica.app" },

@@ -4,7 +4,7 @@ const SRC = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explic
 
 /** Must equal the backend's `app.turnstile.expected-action` (application-prod.yml): the verifier rejects a token with any other action (400). */
 export const TURNSTILE_ACTION = "otp_send";
-/** Guest review page (/r/{token}): submit and opt-out. TODO(backend-401): `app.turnstile.expected-action` must accept this value for the review-invite routes. */
+/** Guest review page (/r/{token}): submit and opt-out. The backend checks it via `app.turnstile.review-expected-action` (prod `review_submit`). */
 export const REVIEW_TURNSTILE_ACTION = "review_submit";
 
 interface TurnstileApi {

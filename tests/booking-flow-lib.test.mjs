@@ -188,11 +188,14 @@ describe("guest text is cleaned to the backend's rules (no control characters in
 // info.ts / invite.ts use extensionless imports, so bundle them for node.
 const bundle = async (entry) => {
   const outfile = join(mkdtempSync(join(tmpdir(), "bt-")), "m.mjs");
-  await build({ entryPoints: [new URL(entry, import.meta.url).pathname], bundle: true, format: "esm", platform: "node", outfile, logLevel: "silent" });
+  // config.ts reads the Worker env from `cloudflare:workers`: an empty stand-in is enough for the pure normalizers.
+  const workersStub = { name: "workers-stub", setup: (b) => (b.onResolve({ filter: /^cloudflare:workers$/ }, () => ({ path: "w", namespace: "w" })), b.onLoad({ filter: /.*/, namespace: "w" }, () => ({ contents: "export const env = {};", loader: "js" }))) };
+  await build({ entryPoints: [new URL(entry, import.meta.url).pathname], bundle: true, format: "esm", platform: "node", outfile, logLevel: "silent", plugins: [workersStub] });
   return import(pathToFileURL(outfile).href);
 };
 const { fetchMasterInfo } = await bundle("../src/lib/booking/info.ts");
-const { fetchInvite } = await bundle("../src/lib/review/invite.ts");
+const { fetchInvite, parseInvite } = await bundle("../src/lib/review/invite.ts");
+const { normalizeMediaOrigin } = await bundle("../src/lib/booking/config.ts");
 
 describe("X-Beautica-Client-IP is sent only together with the Worker key", () => {
   const TOKEN = "a".repeat(43);
@@ -226,4 +229,55 @@ describe("X-Beautica-Client-IP is sent only together with the Worker key", () =>
       assert.equal(h["X-Beautica-Worker-Key"], "k");
     });
   }
+});
+
+describe("review invite hardening (F2-F4)", () => {
+  const TOKEN = "a".repeat(43);
+  test("X-Beautica-Client-IP: only an IP literal is forwarded (CRLF / junk dropped, IPv6 ok)", async () => {
+    const sent = async (ip) => {
+      const real = globalThis.fetch;
+      let h;
+      globalThis.fetch = async (_u, init) => ((h = init.headers), new Response("{}", { status: 404 }));
+      try {
+        await fetchInvite({ apiOrigin: "http://x.test", workerKey: "k" }, TOKEN, ip);
+      } finally {
+        globalThis.fetch = real;
+      }
+      return h["X-Beautica-Client-IP"];
+    };
+    assert.equal(await sent("1.2.3.4\r\nX: y"), undefined);
+    assert.equal(await sent("evil, 1.2.3.4"), undefined);
+    assert.equal(await sent("2001:db8::1"), "2001:db8::1");
+    assert.equal(await sent("1.2.3.4"), "1.2.3.4");
+  });
+  const ID = "50000001-1111-4222-8333-944455556666";
+  const base = (o = {}) => ({ state: "OPEN", providerName: "P", visitDate: "2026-10-24", displayName: "D", items: [{ bookingId: ID, serviceName: "S", masterName: "M" }], ...o });
+  const MEDIA = "https://media.beautica.app";
+  test("avatar: media origin only", () => {
+    assert.equal(parseInvite(base({ avatarUrl: `${MEDIA}/a.png` }), MEDIA).data.avatarUrl, `${MEDIA}/a.png`);
+    assert.equal(parseInvite(base({ avatarUrl: "https://evil.example/a.png" }), MEDIA).data.avatarUrl, null);
+    assert.equal(parseInvite(base({ avatarUrl: `${MEDIA}.evil.example/a.png` }), MEDIA).data.avatarUrl, null);
+    assert.equal(parseInvite(base({ avatarUrl: `${MEDIA}/a.png` })).data.avatarUrl, null, "no configured origin -> no avatar");
+  });
+  test("bookingId must be a UUID: bad items dropped, none left -> unparseable", () => {
+    const r = parseInvite(base({ items: [{ bookingId: "../x", serviceName: "S" }, { bookingId: ID, serviceName: "S2" }] }), MEDIA);
+    assert.deepEqual(r.data.items.map((i) => i.serviceName), ["S2"]);
+    assert.equal(parseInvite(base({ items: [{ bookingId: "nope", serviceName: "S" }] }), MEDIA), null);
+  });
+  test("strings are capped at 200 chars", () => {
+    const r = parseInvite(base({ providerName: "x".repeat(5000) }), MEDIA);
+    assert.equal(r.data.providerName.length, 200);
+  });
+});
+
+describe("MEDIA_ORIGIN normalisation (the only origin an avatar may come from)", () => {
+  const PROD = "https://media.beautica.app";
+  test("https origin kept, path/query dropped", () => {
+    assert.equal(normalizeMediaOrigin("https://media.beautica.test/some/path?x=1"), "https://media.beautica.test");
+  });
+  test("http, junk, blank and non-strings fall back to the prod media host (never to an attacker-chosen origin)", () => {
+    for (const bad of ["http://media.beautica.test", "javascript:alert(1)", "not a url", "", "   ", undefined, null, 42]) {
+      assert.equal(normalizeMediaOrigin(bad), PROD, String(bad));
+    }
+  });
 });

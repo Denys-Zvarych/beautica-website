@@ -32,7 +32,7 @@ export interface BookingRequest {
 
 const TIMEOUT_MS = 15000;
 
-/** `code`: the stable `data.code` of an error body. TODO(backend-398): 409 + `BOOKING_UNAVAILABLE` (booking create only) is the neutral «blocked» answer; every other 409 stays a slot conflict. */
+/** `code`: the stable `data.code` of an error body. 409 + `BOOKING_UNAVAILABLE` (booking create only, backend 398) is the neutral «blocked» answer; every other 409 stays a slot conflict. */
 export function failFor(status: number, code?: unknown): Fail {
   if (status === 401 || status === 403) return "unauthorized";
   if (status === 409) return code === "BOOKING_UNAVAILABLE" ? "provider-unavailable" : "conflict";
@@ -43,8 +43,7 @@ export function failFor(status: number, code?: unknown): Fail {
   return "error";
 }
 
-/** `mapBlocked`: opt-in to the 409 `BOOKING_UNAVAILABLE` mapping (the booking-create calls only); everywhere else a 409 stays a plain conflict. */
-/** Shared low-level call (also used by the review page script). */
+/** Shared low-level call (also used by the review page script). `mapBlocked`: opt-in to the 409 `BOOKING_UNAVAILABLE` mapping (the booking-create calls only); everywhere else a 409 stays a plain conflict. */
 export async function call<T>(url: string, init: RequestInit, read: (json: unknown) => T | null, mapBlocked = false): Promise<Result<T>> {
   let res: Response;
   try {
