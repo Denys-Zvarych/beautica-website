@@ -387,6 +387,29 @@ describe("opt-out", () => {
   });
 });
 
+describe("opt-out confirm: button stack spacing", () => {
+  // The accent button's extruded shadow painted over its neighbour when the stack gap was 4px (`stack tight`); the confirm screen uses `form-stack` (--vt-space-md = 16px).
+  for (const width of [360, 1280]) {
+    test(`${width}px: #rv-optout-yes and #rv-optout-back do not overlap, are >= 16px apart and >= 48px tall`, async () => {
+      const env = await reviewPage(tok("rvmulti", 70 + width), { width, height: 900 });
+      try {
+        const { page } = env;
+        await page.click("#rv-optout");
+        assert.equal(await visibleScreen(page), "optout-confirm");
+        const yes = await page.locator("#rv-optout-yes").boundingBox();
+        const back = await page.locator("#rv-optout-back").boundingBox();
+        assert.ok(yes && back && yes.height > 0 && back.height > 0, "both buttons have a box");
+        const gap = back.y - (yes.y + yes.height);
+        assert.ok(gap >= 16, `vertical gap between the buttons is ${gap}px (< 16px: the accent shadow covers the neighbour)`);
+        assert.ok(yes.height >= 48 && back.height >= 48, `targets >= 48px (got ${yes.height} / ${back.height})`);
+        quiet(env);
+      } finally {
+        await env.context.close();
+      }
+    });
+  }
+});
+
 describe("opt-out failure branches", () => {
   const toConfirm = async (token) => {
     const env = await reviewPage(token);

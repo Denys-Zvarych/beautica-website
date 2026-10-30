@@ -16,7 +16,7 @@ Columns:
 | Client, independent master, salon master and salon admin can delete their account in the app (owner cannot) | delete-account#app | `../beautica-mobile/lib/features/auth/presentation/auth_selectors.dart:136` | live |
 | «Акаунт» → «Видалити акаунт» is the last row of the account page | delete-account#app | `../beautica-mobile/lib/features/settings/presentation/settings_screen.dart:411` | live |
 | Row label is «Видалити акаунт» | delete-account#app | `../beautica-mobile/lib/l10n/app_uk.arb:3008` | live |
-| Salon owner has only «Видалити салон» on the account page | delete-account#app | `../beautica-mobile/lib/features/settings/presentation/settings_screen.dart:280` | live |
+| Salon owner has only «Видалити салон» on the account page | delete-account#app | `../beautica-mobile/lib/features/settings/presentation/settings_screen.dart:304` | live |
 | Client path starts at the hub row «Акаунт» | delete-account#app | `../beautica-mobile/lib/features/home/presentation/client_settings_hub_screen.dart:187` | live |
 | Salon admin opens settings from the profile tune button | delete-account#app | `../beautica-mobile/lib/features/salon/presentation/admin_own_profile_screen.dart:347` | live |
 | Client with more than 50 future bookings must cancel some first | delete-account#app | `../beautica-backend/src/main/java/com/beautica/user/ClientAccountDeletionService.java:77` | live |
@@ -26,8 +26,8 @@ Columns:
 | After that window the cancel is refused (422) and the guest is told to contact the master | l/cancel#st-closed | `../beautica-backend/src/main/java/com/beautica/booking/service/BookingCancellationService.java:128` | live |
 | A used or unknown cancel link answers 404 («вже використано або недійсне») | l/cancel#st-notfound | `../beautica-backend/src/main/java/com/beautica/booking/controller/PublicBookingController.java:234` | live |
 | Invite email links to /invite/accept?token= (opens in the app) | l/invite#main | `../beautica-backend/src/main/java/com/beautica/auth/InviteService.java:426` | live |
-| Booking email links to /bookings/{id} (details in the app) | l/booking#main | `../beautica-backend/src/main/java/com/beautica/notification/service/NotificationService.java:425` | live |
-| Review email links to /bookings/{id}/review (review left in the app) | l/review#main | `../beautica-backend/src/main/java/com/beautica/notification/service/NotificationService.java:362` | live |
+| Booking email links to /bookings/{id} (details in the app) | l/booking#main | `../beautica-backend/src/main/java/com/beautica/notification/service/NotificationService.java:483` | live |
+| Review email links to /bookings/{id}/review (review left in the app) | l/review#main | `../beautica-backend/src/main/java/com/beautica/notification/service/NotificationService.java:470` | live |
 | Guest cancel SMS/email links to /book/cancel/{token} | l/cancel#main | `../beautica-backend/src/main/java/com/beautica/booking/service/GuestBookingService.java:678` | live |
 | Guest booking: consent + policy version are stored with the booking | privacy#guest | `../beautica-backend/src/main/java/com/beautica/booking/domain/GuestConsent.java:13` | live |
 | Guest booking: Turnstile bot check before the SMS code is sent | privacy#guest | `../beautica-backend/src/main/java/com/beautica/auth/turnstile/TurnstileVerifier.java:66` | live |
@@ -36,7 +36,7 @@ Columns:
 | Guest booking confirmation: the booking can be cancelled free until 2 hours before the visit | src:src/i18n/uk.json#"cancelRule" | `../beautica-backend/src/main/java/com/beautica/config/BookingSmsProperties.java:29` | live |
 | Guest booking: the calendar offers today up to 60 days ahead (the API refuses later dates) | src:src/scripts/booking/calendar.ts#WINDOW_DAYS = 60 | `../beautica-backend/src/main/java/com/beautica/config/BookingSmsProperties.java:22` | live |
 | Guest booking: at most 10 services can be ticked for one visit (the 11th tap is ignored) | src:src/scripts/booking/app.ts#st.picked.size >= 10 | `../beautica-backend/src/main/java/com/beautica/booking/service/SlotCalculationService.java:90` | live |
-| Guest booking: the optional comment for the master holds at most 500 characters (the app's limit; the API accepts 1000) | src:src/components/book/BookingFlow.astro#maxlength="500" | `../beautica-mobile/lib/features/booking/presentation/booking_confirm_screen.dart:141` | live |
+| Guest booking: the optional comment for the master holds at most 500 characters (the app's limit; the API accepts 1000) | src:src/components/book/BookingFlow.astro#maxlength="500" | `../beautica-mobile/lib/features/booking/presentation/booking_confirm_screen.dart:145` | live |
 | Guest booking: privacy page states the same 2-hour cancel rule | privacy#guest | `../beautica-backend/src/main/java/com/beautica/config/BookingSmsProperties.java:29` | live |
 | Analytics (privacy § 4): the site sets no cookie, also after interactions (guarded by tests/analytics.test.mjs «no cookies, ever») | privacy#analytics | `tests/analytics.test.mjs:182` | live |
 | Analytics (privacy § 4): page addresses are sent without parameters after «?» and without the fragment (Umami `data-exclude-search` / `-hash`; guarded by tests/analytics.test.mjs «loader timing and attributes») | privacy#analytics | `src/scripts/analytics.ts:27` | live |
@@ -66,7 +66,7 @@ Columns:
 | Blocks (terms §6, privacy §2): registered client = blocked by account only; link guest = by keyed phone hash + last 4 digits; no raw phone stored | privacy#data | `../docs/backend-phases/phase-397-user-blocks-api.md:37` | live |
 | Blocks (privacy §2): the block keeps a short label «Ім'я П.» (first name + surname initial) | privacy#data | `../beautica-backend/src/main/java/com/beautica/moderation/dto/BlockDisplayNames.java:28` | live |
 | Blocks (terms §6): the blocked client is not told; the booking attempt answers «Запис до цього майстра/салону зараз недоступний» (409 BOOKING_UNAVAILABLE) | terms#providers | `../beautica-backend/src/main/java/com/beautica/common/exception/BookingUnavailableException.java:17` | live |
-| Blocks (terms §3, §6): a new block declines every future confirmed visit of that client in scope (status «Скасовано»), neutral notice, no reason; past visits and reviews stay | terms#bookings | `../beautica-backend/src/main/java/com/beautica/booking/service/BookingService.java:2249` | live |
+| Blocks (terms §3, §6): a new block declines every future confirmed visit of that client in scope (status «Скасовано»), neutral notice, no reason; past visits and reviews stay | terms#bookings | `../beautica-backend/src/main/java/com/beautica/booking/service/BookingService.java:2252` | live |
 | Blocks (privacy §3, §8): a guest erase request renames the block to «Гість» and keeps the hash; the 12-month anonymisation does not touch blocks | privacy#retention | `../beautica-backend/src/main/java/com/beautica/booking/retention/GuestPiiAnonymisationService.java:234` | live |
 | Blocks (privacy §8): a block disappears on unblock, on deletion of the blocking master/salon or of the blocked account (cascade) | privacy#retention | `../beautica-backend/src/main/resources/db/migration/V210__client_blocks.sql:17` | live |
 | Guest review (terms §4, privacy §2): published name is first name + surname initial, «Гість» when nothing usable is left | privacy#data | `../beautica-backend/src/main/java/com/beautica/booking/retention/GuestPii.java:13` | live |
