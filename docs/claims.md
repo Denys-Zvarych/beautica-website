@@ -21,13 +21,13 @@ Columns:
 | Salon admin opens settings from the profile tune button | delete-account#app | `../beautica-mobile/lib/features/salon/presentation/admin_own_profile_screen.dart:347` | live |
 | Client with more than 50 future bookings must cancel some first | delete-account#app | `../beautica-backend/src/main/java/com/beautica/user/ClientAccountDeletionService.java:77` | live |
 | Master with more than 500 future bookings must cancel some first | delete-account#app | `../beautica-backend/src/main/java/com/beautica/user/StaffAccountSelfDeletionService.java:73` | live |
-| Reply to a deletion request within 30 calendar days (policy commitment, no code behind it) | delete-account#request | `src/content/legal/uk/privacy.md:174` | live |
+| Reply to a deletion request within 30 calendar days (policy commitment, no code behind it) | delete-account#request | `src/content/legal/uk/privacy.md:208` | live |
 | Guest can cancel a booking until 2 hours before it starts | l/cancel#st-closed | `../beautica-backend/src/main/java/com/beautica/config/BookingSmsProperties.java:29` | live |
 | After that window the cancel is refused (422) and the guest is told to contact the master | l/cancel#st-closed | `../beautica-backend/src/main/java/com/beautica/booking/service/BookingCancellationService.java:128` | live |
 | A used or unknown cancel link answers 404 («вже використано або недійсне») | l/cancel#st-notfound | `../beautica-backend/src/main/java/com/beautica/booking/controller/PublicBookingController.java:234` | live |
 | Invite email links to /invite/accept?token= (opens in the app) | l/invite#main | `../beautica-backend/src/main/java/com/beautica/auth/InviteService.java:426` | live |
-| Booking email links to /bookings/{id} (details in the app) | l/booking#main | `../beautica-backend/src/main/java/com/beautica/notification/service/NotificationService.java:483` | live |
-| Review email links to /bookings/{id}/review (review left in the app) | l/review#main | `../beautica-backend/src/main/java/com/beautica/notification/service/NotificationService.java:470` | live |
+| Booking email links to /bookings/{id} (details in the app) | l/booking#main | `../beautica-backend/src/main/java/com/beautica/notification/service/NotificationService.java:512` | live |
+| Review email links to /bookings/{id}/review (review left in the app) | l/review#main | `../beautica-backend/src/main/java/com/beautica/notification/service/NotificationService.java:499` | live |
 | Guest cancel SMS/email links to /book/cancel/{token} | l/cancel#main | `../beautica-backend/src/main/java/com/beautica/booking/service/GuestBookingService.java:678` | live |
 | Guest booking: consent + policy version are stored with the booking | privacy#guest | `../beautica-backend/src/main/java/com/beautica/booking/domain/GuestConsent.java:13` | live |
 | Guest booking: Turnstile bot check before the SMS code is sent | privacy#guest | `../beautica-backend/src/main/java/com/beautica/auth/turnstile/TurnstileVerifier.java:66` | live |
@@ -79,3 +79,12 @@ Columns:
 | Guest review (privacy §4): the review page /r/{token} loads no analytics script | privacy#analytics | `src/components/Layout.astro:42` | live |
 | Guest review erase (privacy §3, §8): names in guest reviews become «Гість» on anonymisation or erase; the opt-out hash stays unless support is asked to lift it (backend 402 not built yet) | privacy#retention | `../docs/backend-phases/phase-402-guest-review-retention.md:17` | not-live |
 | Guest review invite rows (privacy §8): deleted 30 days after expiry, consumption or another final status (backend 402 not built yet) | privacy#retention | `../docs/backend-phases/phase-402-guest-review-retention.md:22` | not-live |
+| Telegram (opt-in, guests): the 24 h reminder can go to Telegram | privacy#guest | `../beautica-backend/src/main/java/com/beautica/notification/channel/GuestMessageKind.java:10` | live |
+| Telegram (opt-in, guests): the 2 h reminder can go to Telegram | privacy#guest | `../beautica-backend/src/main/java/com/beautica/notification/channel/GuestMessageKind.java:11` | live |
+| Telegram (opt-in, guests): a cancellation by the master / salon can go to Telegram | privacy#guest | `../beautica-backend/src/main/java/com/beautica/notification/channel/GuestMessageKind.java:12` | live |
+| Telegram (opt-in, guests): the review invitation can go to Telegram; these four are the ONLY kinds, so the code, the booking confirmation with the cancel link, the guest's own cancellation and the reschedule notice are SMS-only | privacy#guest | `../beautica-backend/src/main/java/com/beautica/notification/channel/GuestMessageKind.java:13` | live |
+| Telegram link is keyed by an HMAC-SHA-256 of the phone | privacy#guest | `../beautica-backend/src/main/java/com/beautica/common/security/PhoneHasher.java:29` | live |
+| Telegram link row holds the phone hash and no raw phone (the number shared in the bot is compared once and discarded) | privacy#guest | `../beautica-backend/src/main/java/com/beautica/notification/telegram/link/TelegramLink.java:42` | live |
+| Telegram link is deleted with the guest data 12 months after the last visit | privacy#retention | `../beautica-backend/src/main/resources/application.yml:612` | live |
+| Telegram link is deleted 12 months after the bot was blocked (phase 409 D2, NOT SHIPPED: release gate) | privacy#retention | `../docs/backend-phases/phase-409-telegram-retention-erasure.md:20` | not-live |
+| Telegram link codes are deleted at most 2 days after they expire: 1 day past expiry, daily job (phase 409 D4, NOT SHIPPED: release gate) | privacy#retention | `../docs/backend-phases/phase-409-telegram-retention-erasure.md:25` | not-live |

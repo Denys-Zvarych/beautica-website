@@ -116,7 +116,7 @@ describe("legal bump (phase 018): stated numbers equal the backend's", gate, () 
     assert.equal(key("stale-after"), "72h");
     assert.match(privacy, /Посилання діє 14 днів від надсилання/);
     assert.equal(key("ttl"), "14d");
-    assert.match(privacy, /Кнопка працює 30 днів після надсилання SMS/);
+    assert.match(privacy, /Кнопка працює 30 днів після надсилання запрошення/);
     assert.match(be("review/invite/service/GuestReviewService.java"), /OPT_OUT_WINDOW\s*=\s*Duration\.ofDays\(30\)/);
     assert.match(privacy, /видаляється через 30 днів після закінчення дії посилання/);
     assert.match(be("review/invite/service/GuestReviewRetentionService.java"), /INVITE_RETENTION\s*=\s*Duration\.ofDays\(30\)/);

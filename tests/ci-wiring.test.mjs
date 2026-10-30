@@ -135,6 +135,14 @@ describe("phase 018 (legal bump, legal fonts) is guarded on every PR", () => {
   });
 });
 
+describe("phase 021 (privacy 1.4, Telegram section) is guarded on every PR", () => {
+  test("privacy-telegram.test.mjs runs after the build in the server-less site job: test:static (dist checks) and test:contract (backend-pinned, REQUIRE_BACKEND)", () => {
+    assert.match(pkg.scripts["test:static"], /tests\/privacy-telegram\.test\.mjs/);
+    assert.match(pkg.scripts["test:contract"], /tests\/privacy-telegram\.test\.mjs/);
+    assert.equal(excluded.some((x) => "privacy-telegram.test.mjs".includes(x)), false);
+  });
+});
+
 describe("the shared mock backend", () => {
   test("no test clears its request log (POST /__mock/reset): files run concurrently against one mock, a reset deletes the other files' requests (use logMark() + mockLog(filter, mark))", () => {
     const offenders = readdirSync(join(ROOT, "tests")).filter((f) => f.endsWith(".test.mjs") && f !== "ci-wiring.test.mjs" && /__mock\/reset/.test(readFileSync(join(ROOT, "tests", f), "utf8")));
