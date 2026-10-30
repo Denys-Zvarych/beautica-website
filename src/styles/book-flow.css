@@ -745,9 +745,13 @@
   align-items: center;
   gap: var(--vt-space-xs);
   margin: var(--vt-space-sm) 0 0;
-  color: var(--vt-color-success);
+  color: var(--vt-color-text);
   --icon-size: var(--vt-app-icon-18);
   --icon-gap: 0;
+}
+/* Success green is for the check glyph only: as 11 px text on the base it is 3.6:1 (axe color-contrast). */
+.okline .icon {
+  color: var(--vt-color-success);
 }
 .appt .calwrap {
   justify-content: stretch;

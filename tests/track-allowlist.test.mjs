@@ -70,7 +70,7 @@ describe("track(): event and prop allow-list (README § 10)", () => {
     const { EVENTS } = await load();
     assert.deepEqual(EVENTS, {
       store_click: ["store", "placement"], link_open: ["referrer_host"], profile_view: ["slug"], service_selected: ["count"], slot_selected: ["days_ahead"],
-      otp_requested: [], otp_verified: [], otp_failed: [], booking_confirmed: ["services_count"], booking_error: ["code"], install_prompt_click: [],
+      otp_requested: [], otp_verified: [], otp_failed: [], booking_confirmed: ["services_count"], booking_error: ["code"], install_prompt_click: [], reminder_channel_telegram_click: [], reminder_channel_unlink: [],
     });
     for (const props of Object.values(EVENTS)) assert.equal(props.some((p) => /phone|name|token|email|booking_?id|comment/i.test(p)), false);
   });

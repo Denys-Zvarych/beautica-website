@@ -19,6 +19,12 @@ export interface BookingCreated {
   serviceName: string;
   durationMinutes: number;
   cancelUrl: string | null;
+  /** Backend 407 D6: the Telegram reminder channel for the booker's phone. `null` = field absent / malformed = no choice is offered. */
+  telegram: TelegramAvailability | null;
+}
+export interface TelegramAvailability {
+  available: boolean;
+  linked: boolean;
 }
 export interface BookingRequest {
   serviceIds: string[];
@@ -121,7 +127,7 @@ export function createBooking(api: string, slug: string, guestToken: string, b: 
     (j) => {
       const o = obj(j);
       return typeof o.startsAt === "string"
-        ? { startsAt: o.startsAt, masterName: String(o.masterName ?? ""), serviceName: String(o.serviceName ?? ""), durationMinutes: Number(o.durationMinutes ?? 0), cancelUrl: typeof o.cancelUrl === "string" ? o.cancelUrl : null }
+        ? { startsAt: o.startsAt, masterName: String(o.masterName ?? ""), serviceName: String(o.serviceName ?? ""), durationMinutes: Number(o.durationMinutes ?? 0), cancelUrl: typeof o.cancelUrl === "string" ? o.cancelUrl : null, telegram: readTelegram(o.telegram) }
         : null;
     },
     true,
@@ -137,4 +143,43 @@ export function cancelPath(cancelUrl: string | null): string | null {
   } catch {
     return null;
   }
+}
+
+/** The `telegram {available, linked}` block of a booking response; anything else (absent, wrong types) is `null` = no choice shown. */
+export function readTelegram(v: unknown): TelegramAvailability | null {
+  const o = obj(v);
+  return typeof o.available === "boolean" && typeof o.linked === "boolean" ? { available: o.available, linked: o.linked } : null;
+}
+
+/** Backend 407: the only shape a deep link may have (a bot username and a start token). Anything else is never followed. */
+export const TELEGRAM_URL = /^https:\/\/t\.me\/[A-Za-z0-9_]{5,32}\?start=[A-Za-z0-9_-]{1,64}$/;
+
+/** The cancel token = the UUID at the end of an already-validated `/book/cancel/{uuid}` path (`cancelPath`). */
+export function cancelToken(path: string | null): string | null {
+  const m = path?.match(/^\/book\/cancel\/([0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12})$/i);
+  return m ? m[1]! : null;
+}
+
+export type LinkToken = { alreadyLinked: true } | { alreadyLinked: false; url: string };
+
+/** POST /api/v1/book/telegram/link-token (404 = not eligible / feature off). Body: the cancel token only. */
+export function telegramLinkToken(api: string, token: string): Promise<Result<LinkToken>> {
+  return call(`${api}/api/v1/book/telegram/link-token`, post({ cancelToken: token }), (j) => {
+    const o = obj(j);
+    if (o.alreadyLinked === true) return { alreadyLinked: true };
+    return typeof o.url === "string" && TELEGRAM_URL.test(o.url) ? { alreadyLinked: false, url: o.url } : null;
+  });
+}
+
+/** POST /api/v1/book/telegram/status. */
+export function telegramStatus(api: string, token: string): Promise<Result<{ available: boolean; linked: boolean; offerChoice: boolean }>> {
+  return call(`${api}/api/v1/book/telegram/status`, post({ cancelToken: token }), (j) => {
+    const o = obj(j);
+    return typeof o.available === "boolean" && typeof o.linked === "boolean" ? { available: o.available, linked: o.linked, offerChoice: o.offerChoice === true } : null;
+  });
+}
+
+/** POST /api/v1/book/telegram/unlink (204, idempotent): the phone goes back to SMS. */
+export function telegramUnlink(api: string, token: string): Promise<Result<true>> {
+  return call(`${api}/api/v1/book/telegram/unlink`, post({ cancelToken: token }), () => true);
 }

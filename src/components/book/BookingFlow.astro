@@ -8,6 +8,7 @@ import CtaButton from "../CtaButton.astro";
 import NeuCard from "../NeuCard.astro";
 import Icon from "../Icon.astro";
 import SlotChip from "../SlotChip.astro";
+import ReminderChannelChoice from "./ReminderChannelChoice.astro";
 import BookTopBar from "./BookTopBar.astro";
 import MasterStrip from "./MasterStrip.astro";
 import ServiceTile from "./ServiceTile.astro";
@@ -311,6 +312,8 @@ const strip = info ? { name: info.masterName, subtitle: info.professionalTitle, 
       <NeuCard bordered pad="sm" class="reveal"><p class="t-body11">{t("book.done.cancelRule")}</p></NeuCard>
       <div class="g-md"></div>
       {!salon && <div class="stack reveal tight"><a class="cta2" id="done-cancel" href="/" hidden><span class="vt-cta">{t("book.done.cancel")}</span></a></div>}
+      <div class="g-md"></div>
+      <ReminderChannelChoice />
       <div class="g-xl"></div>
     </div>
   </div>
