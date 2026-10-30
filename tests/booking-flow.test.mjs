@@ -855,7 +855,17 @@ describe("every step renders on phone, tablet and desktop", () => {
           seen.push(label);
           const overflow = await page.evaluate(() => document.documentElement.scrollWidth - innerWidth);
           assert.ok(overflow <= 0, `${label}: horizontal scroll ${overflow}px`);
-          for (const sel of boxes) assert.ok(await visibleBox(page.locator(`[data-screen]:not([hidden]) ${sel}`).first()), `${label}: ${sel} has no box`);
+          // Polled, not read once: the calendar re-renders its buttons when the bookable-days answer lands (renderCalendar replaces the grid children), and a
+          // boundingBox() read in that instant finds the old, detached button (null). A part that really has no box still fails once the poll runs out.
+          for (const sel of boxes) {
+            const part = page.locator(`[data-screen]:not([hidden]) ${sel}`).first();
+            let drawn = await visibleBox(part);
+            for (let i = 0; !drawn && i < 40; i++) {
+              await page.waitForTimeout(50);
+              drawn = await visibleBox(part);
+            }
+            assert.ok(drawn, `${label}: ${sel} has no box`);
+          }
           const small = await page.evaluate(() =>
             [...document.querySelectorAll("[data-screen]:not([hidden]) :is(a[href], button, input:not([type=checkbox]), textarea)")]
               .filter((e) => !e.closest("[hidden]") && getComputedStyle(e).visibility !== "hidden" && !e.matches(".chk-row a")) // the privacy link is a text link inside a sentence (WCAG 2.5.8 inline exception)
