@@ -226,3 +226,46 @@ describe("axe: the «Можливо, ви вже записані» notice (a ma
         }
       });
 });
+
+describe("axe: the guest review page /r/{token} (every state)", () => {
+  // Tokens are single-use in the mock (a submitted one is spent): the number carries the width so a multi-width run (AXE_WIDTHS=768,1280) never reuses one.
+  const tok = (kind, n, width) => `${kind}-test-${String(n * 10000 + width).padStart(8, "0")}`;
+  const rv = (token, width) => bookPage(browser, token, { path: `/r/${token}`, clock: false, width });
+  for (const width of WIDTHS) {
+    for (const [name, token] of [["already", tok("rvdone", 31, width)], ["invalid", tok("zznone", 31, width)]])
+      test(`${name} @${width}`, async () => {
+        const env = await rv(token, width);
+        try {
+          assert.equal(await env.page.locator("h1:visible").count(), 1, "one visible h1");
+          await sweep(env.page, `/r ${name} @${width}`);
+        } finally {
+          await env.context.close();
+        }
+      });
+    test(`form, 429 notice, opt-out confirm, success @${width}`, async () => {
+      const env = await rv(tok("rvslow", 31, width), width);
+      try {
+        const { page } = env;
+        await sweep(page, `/r form @${width}`);
+        await page.locator(".starbtn[data-v='5']").first().click();
+        await page.click("#rv-submit");
+        await page.waitForSelector("#rv-error", { state: "visible" });
+        await sweep(page, `/r 429 notice @${width}`);
+        await page.click("#rv-optout");
+        await page.waitForSelector("[data-screen=optout-confirm]:not([hidden])");
+        await sweep(page, `/r opt-out confirm @${width}`);
+      } finally {
+        await env.context.close();
+      }
+      const ok = await rv(tok("rvopen", 31, width), width);
+      try {
+        await ok.page.locator(".starbtn[data-v='5']").first().click();
+        await ok.page.click("#rv-submit");
+        await ok.page.waitForSelector("[data-screen=success]:not([hidden])");
+        await sweep(ok.page, `/r success @${width}`);
+      } finally {
+        await ok.context.close();
+      }
+    });
+  }
+});

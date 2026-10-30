@@ -15,8 +15,10 @@ const TIMEOUT_MS = 5000;
 
 async function get<T>(cfg: BookingConfig, path: string, ip: string | undefined, parse: (raw: unknown) => T | null): Promise<InfoResult<T>> {
   const headers: Record<string, string> = { Accept: "application/json" };
-  if (cfg.workerKey) headers["X-Beautica-Worker-Key"] = cfg.workerKey;
-  if (ip) headers["CF-Connecting-IP"] = ip;
+  if (cfg.workerKey) {
+    headers["X-Beautica-Worker-Key"] = cfg.workerKey;
+    if (ip) headers["X-Beautica-Client-IP"] = ip; // CF-Connecting-IP is dropped on a Workers subrequest; the backend reads this one on worker-key requests only
+  }
   let res: Response;
   try {
     res = await fetch(`${cfg.apiOrigin}${path}`, { headers, signal: AbortSignal.timeout(TIMEOUT_MS) });

@@ -16,6 +16,7 @@ import { isValidSlug } from "../../../lib/booking/slug";
 import { bookingConfig } from "../../../lib/booking/config";
 import { fetchReviewsFirstPage, fetchSalonInfo } from "../../../lib/booking/info";
 import { imageOrigins, noticeResponse, okResponse } from "../../../lib/booking/respond";
+import { imageOrigin } from "../../../lib/booking/types";
 import { fitDescription, fitTitle, parseSort } from "../../../lib/booking/format";
 import { breadcrumbList, profileBusiness } from "../../../lib/jsonld";
 
@@ -72,7 +73,7 @@ const jsonLd = info
 ---
 
 {/* preloadLatin stays false: better FCP, no LCP gain from preloading the Latin fonts, and the salon page gets worse. */}
-<Layout title={title} description={description} noindex={!info} image={info?.avatarUrl ?? info?.coverImageUrl ?? undefined} imageAlt={name || undefined} robots={info && sort !== "NEWEST" ? "noindex, follow" : undefined} twitterCard="summary" ogType="website" jsonLd={jsonLd} hideHeader hideFooter preloadLatin={false} preconnect={info ? cfg.apiOrigin : undefined}>
+<Layout title={title} description={description} noindex={!info} image={info?.avatarUrl ?? info?.coverImageUrl ?? undefined} imageAlt={name || undefined} robots={info && sort !== "NEWEST" ? "noindex, follow" : undefined} twitterCard="summary" ogType="website" jsonLd={jsonLd} hideHeader hideFooter preloadLatin={false} preconnect={info ? cfg.apiOrigin : undefined} preconnectImage={imageOrigin(info?.coverImageUrl, info?.avatarUrl)}>
   {
     info ? (
       <main

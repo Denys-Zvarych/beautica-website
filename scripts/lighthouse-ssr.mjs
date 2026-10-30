@@ -15,11 +15,12 @@ import { startMockApi } from "../tests/helpers/mock-api.mjs";
 
 const arg = (k, d) => (process.argv.includes(k) ? process.argv[process.argv.indexOf(k) + 1] : d);
 const RUNS = Number(arg("--runs", 3));
-const PAGES = ["/book/oksana-ab12", "/book/rail-8888", "/book/s/lavanda-1111", "/book/oksana-ab12?sort=OLDEST"];
+const PAGES = ["/book/oksana-ab12", "/book/rail-8888", "/book/s/lavanda-1111", "/book/oksana-ab12?sort=OLDEST", "/r/rvmulti-lhci-00000001"];
 // LCP target is 2000 ms. LCP is network-bound under Lantern (CPU 1x gives the same LCP; paint < 30 ms). The cost is font bytes requested before
 // the observed LCP (Latin subsets are needed for spaces and digits). Shadows are not a factor. The master page measures about 2.2 s locally, so the FAIL line is 2400 ms (LCP_BUDGET to override) and anything between 2000 and 2400 is printed as a warning:
 // ratchet the line down once the prod run (real photos, real network) is checked.
 const TARGET_LCP = 2000;
+const PERF_MIN = Number(process.env.PERF_MIN ?? 90); // median Lighthouse performance score (0-100)
 const BUDGET = { lcp: Number(process.env.LCP_BUDGET ?? 2400), tbt: 50, cls: 0.02, js: 20480 };
 
 if (!existsSync("dist/server/wrangler.json")) {
@@ -54,12 +55,13 @@ if (loadavg()[0] > 2.5) {
 const bad = [];
 // One page = RUNS Lighthouse runs -> medians. Wrapped so a TBT-only breach on a noisy machine can be re-measured once.
 async function measure(path) {
-  const lcp = [], tbt = [], cls = [], js = [];
+  const lcp = [], tbt = [], cls = [], js = [], perf = [];
   for (let i = 0; i < RUNS; i++) {
     const out = join(dirname(state), `lh-${i}.json`);
     await run("npx", ["--no-install", "lighthouse", `http://127.0.0.1:${port}${path}`, "--only-categories=performance", "--chrome-flags=--headless --no-sandbox", "--blocked-url-patterns=https://media.beautica.test/*", ...(process.env.LH_BLOCK ? [`--blocked-url-patterns=${process.env.LH_BLOCK}`] : []), "--output=json", `--output-path=${out}`, "--quiet"], { env: { ...process.env, CHROME_PATH: chrome }, stdio: ["ignore", "ignore", "inherit"] });
     const r = JSON.parse(readFileSync(out, "utf8"));
     lcp.push(r.audits["largest-contentful-paint"].numericValue);
+    perf.push((r.categories.performance.score ?? 0) * 100);
     if (process.env.LH_BREAKDOWN) {
       // Where the LCP time goes (TTFB / load delay / load time / render delay), the LCP element and what was requested before it.
       const el = r.audits["largest-contentful-paint-element"]?.details?.items?.[0]?.items?.[0]?.node;
@@ -73,7 +75,7 @@ async function measure(path) {
     if (process.env.LH_SCRIPTS) console.log(`  scripts: ${JSON.stringify(r.audits["network-requests"].details.items.filter((x) => x.resourceType === "Script").map((x) => [x.url.replace(/^http:\/\/127.0.0.1:\d+/, ""), x.transferSize]))}`);
     js.push(await gzSizeOfUrls(r.audits["network-requests"].details.items.filter((x) => x.resourceType === "Script" && x.url.startsWith(`http://127.0.0.1:${port}/`)).map((x) => x.url)));
   }
-  return { m: { lcp: median(lcp), tbt: median(tbt), cls: median(cls), js: median(js) }, lcp };
+  return { m: { lcp: median(lcp), tbt: median(tbt), cls: median(cls), js: median(js), perf: median(perf) }, lcp };
 }
 
 for (const path of process.env.LH_PAGES ? JSON.parse(process.env.LH_PAGES) : PAGES) { // LH_PAGES (JSON array): measure just these
@@ -84,8 +86,9 @@ for (const path of process.env.LH_PAGES ? JSON.parse(process.env.LH_PAGES) : PAG
     for (let waited = 0; loadavg()[0] > 2.5 && waited < 30; waited += 5) await new Promise((r) => setTimeout(r, 5000));
     ({ m, lcp } = await measure(path));
   }
-  console.log(`${path}: LCP ${Math.round(m.lcp)} ms (runs ${lcp.map(Math.round)}), TBT ${Math.round(m.tbt)} ms, CLS ${m.cls.toFixed(3)}, JS ${m.js} B${noisy ? "  [WARN noisy machine]" : ""}`);
+  console.log(`${path}: Perf ${Math.round(m.perf)}, LCP ${Math.round(m.lcp)} ms (runs ${lcp.map(Math.round)}), TBT ${Math.round(m.tbt)} ms, CLS ${m.cls.toFixed(3)}, JS ${m.js} B${noisy ? "  [WARN noisy machine]" : ""}`);
   if (m.lcp >= TARGET_LCP && m.lcp < BUDGET.lcp) console.warn(`  warning: ${path} LCP ${Math.round(m.lcp)} ms is above the ${TARGET_LCP} ms target`);
+  if (!(m.perf >= PERF_MIN)) bad.push(`${path}: Lighthouse Perf ${Math.round(m.perf)} < ${PERF_MIN}`); // README § 8: Perf >= 90 on every page
   for (const k of Object.keys(BUDGET)) if (!(m[k] < BUDGET[k] || (k === "js" && m[k] <= BUDGET[k]))) bad.push(`${path}: ${k} ${m[k]} >= ${BUDGET[k]}`);
 }
 stop();

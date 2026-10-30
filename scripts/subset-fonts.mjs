@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 // Regenerates the font subsets in src/fonts/ from the @fontsource-variable files (run after a fontsource upgrade or a change of the lists below):
 //   latin-core  src/fonts/{nunito,comfortaa}-latin-core-wght-normal.woff2   (declared in src/styles/book.css)
+//   latin-basic src/fonts/{nunito,comfortaa}-latin-basic-wght-normal.woff2  (declared in src/styles/fonts-legal.css; the legal pages: core + A-Z a-z + ©)
 //   hryvnia     src/fonts/{nunito,comfortaa}-hryvnia-wght-normal.woff2      (declared in src/styles/fonts.css; U+20B4 only)
 //
 // Needs fontTools + brotli for python3. Local install without touching system packages (no venv/pip needed):
@@ -28,10 +29,18 @@ export const HINT_LETTERS = [..."THEZOCQSLUfijkdbhxrescpqgyz"].map((c) => c.code
 /** What book.css must declare as the core's unicode-range (CSS shorthand of CORE_GLYPHS + CORE_CONTROLS). */
 export const CORE_RANGE = "U+0000-0040,U+005B-0060,U+007B-00A0,U+00AB,U+00B7,U+00BB,U+2013-2014,U+2018-201E,U+2022,U+2026";
 
+/** Legal pages (/privacy, /terms, /support, /delete-account): Ukrainian prose with Latin brand names, e-mails, URLs, SMS, and the © of the footer. */
+export const BASIC_GLYPHS = [...range(0x20, 0x7e), 0xa0, 0xa9, 0xab, 0xb7, 0xbb, 0x2013, 0x2014, ...range(0x2018, 0x201e), 0x2022, 0x2026];
+/** What fonts-legal.css must declare as the basic face's unicode-range (BASIC_GLYPHS + the same control characters as the core). */
+export const BASIC_RANGE = "U+0000-00A0,U+00A9,U+00AB,U+00B7,U+00BB,U+2013-2014,U+2018-201E,U+2022,U+2026";
+
 // The shorthand and the lists must agree (the script fails otherwise, so book.css cannot drift from what the file really contains).
 const expand = (r) => r.split(",").flatMap((p) => { const [a, b = a] = p.slice(2).split("-").map((h) => parseInt(h, 16)); return range(a, b); });
 const want = [...new Set([...CORE_GLYPHS, ...CORE_CONTROLS])].sort((a, b) => a - b).join();
 if (expand(CORE_RANGE).sort((a, b) => a - b).join() !== want) throw new Error("subset-fonts: CORE_RANGE does not match CORE_GLYPHS + CORE_CONTROLS");
+
+const wantBasic = [...new Set([...BASIC_GLYPHS, ...CORE_CONTROLS])].sort((a, b) => a - b).join();
+if (expand(BASIC_RANGE).sort((a, b) => a - b).join() !== wantBasic) throw new Error("subset-fonts: BASIC_RANGE does not match BASIC_GLYPHS + CORE_CONTROLS");
 
 const FAMILIES = ["nunito", "comfortaa"];
 const SRC = (family, subset) => join(ROOT, "node_modules/@fontsource-variable", family, "files", `${family}-${subset}-wght-normal.woff2`);
@@ -48,7 +57,8 @@ function subset(input, output, unicodes, features) {
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   for (const f of FAMILIES) {
     subset(SRC(f, "latin"), join(ROOT, "src/fonts", `${f}-latin-core-wght-normal.woff2`), u([...CORE_GLYPHS, ...HINT_LETTERS]), "*");
+    subset(SRC(f, "latin"), join(ROOT, "src/fonts", `${f}-latin-basic-wght-normal.woff2`), u(BASIC_GLYPHS), "*");
     subset(SRC(f, "cyrillic-ext"), join(ROOT, "src/fonts", `${f}-hryvnia-wght-normal.woff2`), "U+20B4", "");
   }
-  console.log("subset-fonts: wrote 4 files to src/fonts/");
+  console.log("subset-fonts: wrote 6 files to src/fonts/");
 }

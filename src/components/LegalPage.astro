@@ -2,6 +2,7 @@
 // Shared layout for /privacy and /terms: H1, version + effective date, table of contents, prose body.
 // Reuses Layout (Seo/Header/Footer) and NeuCard; the Markdown body arrives through the default slot.
 import Layout from "./Layout.astro";
+import "../styles/fonts-legal.css"; // after Layout: its @font-face must come after the full faces of fonts.css (the later rule wins)
 import NeuCard from "./NeuCard.astro";
 import Icon from "./Icon.astro";
 import CtaButton from "./CtaButton.astro";
@@ -35,7 +36,7 @@ const jsonLd = breadcrumbList([
 ]);
 ---
 
-<Layout title={metaTitle} description={description} canonicalPath={path} jsonLd={jsonLd}>
+<Layout title={metaTitle} description={description} canonicalPath={path} jsonLd={jsonLd} basicLatin>
   <main id="main" class="legal">
     <div class="vt-container column">
       <header class="intro">

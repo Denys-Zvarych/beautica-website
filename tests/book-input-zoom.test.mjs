@@ -50,3 +50,20 @@ describe("booking flow: no focus zoom on mobile", () => {
     }
   });
 });
+
+describe("guest review page /r/{token}: no focus zoom on mobile", () => {
+  test("the comment textarea (every text control) computes to >= 16px at 360px; viewport allows zoom", async () => {
+    const token = "rvopen-test-00000088";
+    const env = await bookPage(browser, token, { path: `/r/${token}`, clock: false, width: 360, height: 900 });
+    try {
+      const { page } = env;
+      const meta = await page.getAttribute('meta[name="viewport"]', "content");
+      assert.ok(!/maximum-scale|user-scalable/i.test(meta), `viewport blocks zoom: ${meta}`);
+      const all = await sizes(page);
+      assert.ok(all.some((f) => f.id === "comment"), "the comment textarea is among them");
+      for (const f of all) assert.ok(f.px >= 16, `${f.id} is ${f.px}px (< 16px zooms on focus)`);
+    } finally {
+      await env.context.close();
+    }
+  });
+});

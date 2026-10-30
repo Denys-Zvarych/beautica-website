@@ -48,6 +48,15 @@
   Cache-Control: no-store
   X-Robots-Tag: noindex, nofollow
 
+# /r/{token} (guest review, phase 019) is rendered by the Worker, which sets its own headers; this block covers the asset-layer answers (the trailing-slash 307).
+/r/*
+  ! Referrer-Policy
+  ! Content-Security-Policy
+  Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self' https://api.beautica.app; form-action 'self'; frame-ancestors 'none'; base-uri 'self'; object-src 'none'
+  Referrer-Policy: no-referrer
+  Cache-Control: no-store
+  X-Robots-Tag: noindex, nofollow
+
 /.well-known/assetlinks.json
   Content-Type: application/json
   Cache-Control: public, max-age=3600

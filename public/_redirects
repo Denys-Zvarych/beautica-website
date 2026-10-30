@@ -11,3 +11,6 @@
 /bookings/:id/review/ /bookings/:id/review 307
 /bookings/:id/ /bookings/:id 307
 /book/cancel/:token/ /book/cancel/:token 307
+/r/:token/ /r/:token 307
+/r/ / 307
+/r / 307

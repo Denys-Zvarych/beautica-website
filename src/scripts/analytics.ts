@@ -8,7 +8,7 @@
 import { UMAMI_SCRIPT_SRC, UMAMI_HOST_URL, UMAMI_WEBSITE_ID, UMAMI_DOMAINS, CF_BEACON_SRC, CF_BEACON_TOKEN } from "../config/analytics.mjs";
 
 /** Token prefixes (mirrors TOKEN_PATH in src/lib/securityHeaders.ts). A static 404 shell can be served under them, so the loader checks the address itself. */
-const TOKEN_PATH = /^\/(?:book\/cancel|invite|bookings|l)\//;
+const TOKEN_PATH = /^\/(?:book\/cancel|invite|bookings|l|r)\//;
 
 const AFTER_LOAD_MS = 1500;
 

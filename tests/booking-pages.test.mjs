@@ -172,16 +172,15 @@ describe("states that are not a profile", () => {
 });
 
 describe("backend contract from the Worker", () => {
-  test("every info request carries the Worker key and the visitor IP (CF-Connecting-IP); the key never reaches the browser", async () => {
+  test("every info request carries the Worker key and the visitor IP (X-Beautica-Client-IP); the key never reaches the browser", async () => {
     const ip = freshIp();
     const res = await get("/book/headers-3333", { "cf-connecting-ip": ip });
     assert.equal(res.status, 200);
     const calls = callsTo(await mockLog(), "GET", "/api/v1/book/headers-3333/info");
     assert.equal(calls.length, 1);
     assert.equal(calls[0].headers["x-beautica-worker-key"], WORKER_KEY);
-    // The page forwards the IP in CF-Connecting-IP (what the backend reads). Local workerd drops that header on outbound
-    // subrequests, so it can only be asserted where the runtime keeps it; staging must confirm it (see the phase doc).
-    if (calls[0].headers["cf-connecting-ip"] !== undefined) assert.equal(calls[0].headers["cf-connecting-ip"], ip);
+    // CF-Connecting-IP does not survive a Workers subrequest, so the visitor IP travels in the custom X-Beautica-Client-IP.
+    assert.equal(calls[0].headers["x-beautica-client-ip"], ip);
     assert.equal(calls[0].headers["accept"], "application/json");
     assert.equal(res.body.includes(WORKER_KEY), false);
     assert.equal(JSON.stringify(res.headers).includes(WORKER_KEY), false);
@@ -246,7 +245,7 @@ describe("salon page", async () => {
   });
   test("address, rating and review count are shown", () => {
     const text = strip(h);
-    assert.ok(text.includes("вул. Хрещатик, 22, Київ") && text.includes("4.8") && text.includes("312 відгуків"));
+    assert.ok(text.includes("вул. Хрещатик, 22") && !text.includes("вул. Хрещатик, 22, Київ") && text.includes("4.8") && text.includes("312 відгуків"));
   });
   test("a salon with no bookable master is the noindex «not accepting bookings» page; unknown = 404", async () => {
     const shut = await get("/book/s/shut-2222");
@@ -255,6 +254,77 @@ describe("salon page", async () => {
     assert.ok(strip(shut.body).includes("Салон зараз не приймає записи"));
     assert.equal((await get("/book/s/nosalon-3333")).status, 404);
     assert.equal((await get("/book/s/BAD_slug")).status, 404);
+  });
+});
+
+describe("salon hero card: rating line, address rule, note, image preconnect, cover <img>", async () => {
+  const page = async (slug) => (await get(`/book/s/${slug}`)).body;
+  const ratingLine = (html) => strip(html.match(/<div class="ratingline">[\s\S]*?<\/div>/)?.[0] ?? "").replace(/\s*·/, " ·");
+  const addrLines = (html) => [...html.matchAll(/<span class="addr-l">([^<]*)<\/span>/g)].map((m) => decode(m[1]));
+  const heroNote = (html) => html.match(/<p class="[^"]*\bhero-note\b[^"]*">([^<]*)<\/p>/)?.[1];
+  const aboutPanel = (html) => html.match(/id="panel-0"[\s\S]*?id="panel-1"/)[0];
+  const preconnects = (html) => [...html.matchAll(/<link rel="preconnect"[^>]*>/g)].map((m) => m[0]);
+  const imageHref = (html) => preconnects(html).filter((l) => !/crossorigin/.test(l)).map((l) => l.match(/href="([^"]*)"/)[1]);
+
+  test("0 reviews: the rating line still renders, as «—» and «· 0 відгуків»", async () => {
+    assert.equal(ratingLine(await page("salonnew-7001")), "— · 0 відгуків");
+  });
+  test("rated salon: «4.8» and «· 12 відгуків»", async () => {
+    assert.equal(ratingLine(await page("salonrated-7012")), "4.8 · 12 відгуків");
+  });
+  test("review count plurals on the hero: 1 відгук / 2 відгуки / 5 відгуків / 11 відгуків", async () => {
+    assert.equal(ratingLine(await page("salonrc1-7021")), "4.8 · 1 відгук");
+    assert.equal(ratingLine(await page("salonrc2-7022")), "4.8 · 2 відгуки");
+    assert.equal(ratingLine(await page("salonrc5-7025")), "4.8 · 5 відгуків");
+    assert.equal(ratingLine(await page("salonrc11-7031")), "4.8 · 11 відгуків");
+  });
+  test("street present: only the street line, the city is not shown", async () => {
+    assert.deepEqual(addrLines(await page("lavanda-1111")), ["вул. Хрещатик, 22"]);
+  });
+  test("no street: a city-only line", async () => {
+    assert.deepEqual(addrLines(await page("salonnew-7001")), ["Львів"]);
+  });
+  test("neither street nor city: no address row at all", async () => {
+    const h = await page("salonbare-7002");
+    assert.equal(h.includes('class="addr-line"'), false);
+    assert.deepEqual(addrLines(h), []);
+  });
+  test("locationNote is on the hero card and not in the About tab", async () => {
+    const h = await page("lavanda-1111");
+    assert.equal(heroNote(h), "Вхід з двору, 2 поверх");
+    assert.equal(aboutPanel(h).includes("Вхід з двору"), false);
+    assert.equal(heroNote(await page("salonnew-7001")), "Вхід з двору");
+  });
+  test("no locationNote: no .hero-note element", async () => {
+    assert.equal(heroNote(await page("salonbare-7002")), undefined);
+    assert.equal(/<p[^>]*hero-note/.test(await page("salonbare-7002")), false);
+  });
+  test("preconnect to the cover image origin: plain (no crossorigin), next to the crossorigin API preconnect", async () => {
+    const h = await page("lavanda-1111");
+    assert.deepEqual(imageHref(h), ["https://media.beautica.test"]);
+    const api = preconnects(h).filter((l) => /crossorigin/.test(l));
+    assert.equal(api.length, 1);
+    assert.ok(api[0].includes(`href="${MOCK_API}"`), api[0]);
+  });
+  test("the cover wins over the avatar for the image preconnect", async () => {
+    assert.deepEqual(imageHref(await page("salonrated-7012")), ["https://cover.beautica.test"]);
+  });
+  test("no cover and no avatar: no image preconnect, only the API one", async () => {
+    const h = await page("salonbare-7002");
+    assert.deepEqual(imageHref(h), []);
+    assert.equal(preconnects(h).length, 1);
+  });
+  test("master page preconnects to the avatar origin, without crossorigin", async () => {
+    const h = (await get("/book/oksana-ab12")).body;
+    assert.deepEqual(imageHref(h), ["https://media.beautica.test"]);
+  });
+  test("master page without an avatar: no image preconnect", async () => {
+    assert.deepEqual(imageHref((await get("/book/sparse-0001")).body), []);
+  });
+  test("cover <img>: fetchpriority=high, no decoding=async", async () => {
+    const tag = (await page("lavanda-1111")).match(/<div class="cover">\s*(<img[^>]*>)/)[1];
+    assert.ok(tag.includes('fetchpriority="high"'), tag);
+    assert.equal(/decoding=/.test(tag), false, tag);
   });
 });
 

@@ -24,8 +24,8 @@ const strip = (s) => decode(s.replace(/<[^>]*>/g, "")).replace(/\s+/g, " ").trim
 /** Indexable pages: exact title / description / canonical / H1. */
 const PAGES = [
   { path: "/", title: "Beautica — скоро в Google Play та App Store", description: "Beautica — пошук і запис до майстрів краси. Скоро в Google Play та App Store.", canonical: "https://beautica.app/", h1: "Beautica" },
-  { path: "/privacy", title: "Політика конфіденційності — Beautica", description: "Які персональні дані збирає Beautica, навіщо, кому їх передає, скільки зберігає та як реалізувати свої права, зокрема для гостьового запису.", canonical: "https://beautica.app/privacy", h1: "Політика конфіденційності" },
-  { path: "/terms", title: "Умови користування — Beautica", description: "Правила користування Beautica: акаунти, записи та скасування, відгуки, фото, заборонені дії, відповідальність і право, що застосовується.", canonical: "https://beautica.app/terms", h1: "Умови користування" },
+  { path: "/privacy", title: "Політика конфіденційності — Beautica", description: "Які дані збирає Beautica, навіщо, кому їх передає, скільки зберігає та як реалізувати права, зокрема для гостьового запису, відгуків і скарг.", canonical: "https://beautica.app/privacy", h1: "Політика конфіденційності" },
+  { path: "/terms", title: "Умови користування — Beautica", description: "Правила користування Beautica: акаунти, записи, відгуки, фото, скарги й модерація, заборонені дії, відповідальність і право, що застосовується.", canonical: "https://beautica.app/terms", h1: "Умови користування" },
   { path: "/support", title: "Підтримка Beautica — як з нами зв'язатися", description: "Напишіть у підтримку Beautica: електронна пошта, форма в застосунку, що вказати у листі, а також контакти для питань про персональні дані.", canonical: "https://beautica.app/support", h1: "Підтримка" },
   { path: "/delete-account", title: "Видалення акаунта Beautica — як подати запит", description: "Як видалити акаунт Beautica в застосунку або без нього, які дані видаляються, що залишається і на який строк. Для гостей без акаунта теж.", canonical: "https://beautica.app/delete-account", h1: "Видалення акаунта" },
 ];
