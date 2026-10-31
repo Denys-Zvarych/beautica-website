@@ -34,10 +34,10 @@ const js = {
   booking: t("book.time.booking"), morning: t("book.time.morning"), day: t("book.time.day"), evening: t("book.time.evening"), selected: t("book.date.selected"),
   required: t("book.contact.required"), phoneErr: t("book.contact.phoneErr"), turnstileErr: t("book.contact.turnstileErr"), turnstileLoadErr: t("book.contact.turnstileLoadErr"),
   wait: t("book.otp.wait", { sec: "{sec}" }),
-  salonLabel: t("book.confirm.salon"), cityLabel: t("book.confirm.city"), dateLabel: t("book.confirm.date"), timeLabel: t("book.confirm.time"), servicesLabel: t("book.confirm.services"), totalLabel: t("book.confirm.total"),
+  salonLabel: t("book.confirm.salon"), cityLabel: t("book.confirm.city"), totalLabel: t("book.confirm.total"),
   invalid: t("book.confirm.invalid"), blockedMaster: t("book.confirm.blockedMaster"), blockedSalon: t("book.confirm.blockedSalon"), limit: t("book.confirm.limit"), unavailable: t("book.confirm.unavailable", { email: "{email}" }), error: t("book.confirm.error"), supportEmail: t("site.supportEmail"),
   uncertain: t("book.salonFlow.confirm.uncertain", { master: "{master}" }), retry: t("book.salonFlow.confirm.retry"),
-  calendar: t("book.done.calendar"), cap: t("book.salonFlow.services.cap", { count: 10 }), counter: t("book.confirm.counter", { n: "{n}", max: 500 }), addressLabel: t("book.confirm.address"), commentRow: t("book.confirm.commentRow"), icsSummary: t("book.ics.summary", { master: "{master}" }), icsDescription: t("book.ics.description", { services: "{services}" }), icsCancel: t("book.ics.cancel", { url: "{url}" }),
+  calendar: t("book.done.calendar"), cap: t("book.salonFlow.services.cap", { count: 10 }), addressLabel: t("book.confirm.address"), whenLabel: t("book.confirm.when"), icsSummary: t("book.ics.summary", { master: "{master}" }), icsDescription: t("book.ics.description", { services: "{services}" }),
 };
 const sf = salon
   ? {
@@ -267,11 +267,8 @@ const strip = info ? { name: info.masterName, subtitle: info.professionalTitle, 
 <section class="screen" data-screen="confirm" hidden>
   <BookTopBar title={salon ? t("book.salonFlow.confirm.title") : t("book.confirm.title")} heading />
   <div class="body">
-    <div class="pad-h pt-md pb-md">
+    <div class="pad-h pt-sm pb-md">
       {salon && <p class="stepno t-fb muted">{stepNo(4)}</p>}
-      <NeuCard bordered pad="md" class="mb-md">
-        <div class="lrow"><span class="lbl t-label">{t("book.confirm.client")}</span><span class="val t-value-12" id="c-name"></span><span class="det t-fb muted w600" id="c-phone"></span></div>
-      </NeuCard>
       {
         salon ? (
           <>
@@ -280,14 +277,15 @@ const strip = info ? { name: info.masterName, subtitle: info.professionalTitle, 
           </>
         ) : (
           <>
-            <MasterStrip {...strip!} />
+            <NeuCard bordered pad="md" class="sumcard">
+              <MasterStrip {...strip!} />
+              <div class="rule"></div>
+              <div id="confirm-card"></div>
+            </NeuCard>
             <div class="g-md" />
-            <NeuCard pad="md"><div id="confirm-card"></div></NeuCard>
-            <div class="g-md" />
-            <div>
+            <div class="field">
               <label class="t-label block-label" for="comment">{t("book.confirm.commentLabel")}</label>
-              <div class="field"><div class="box ta"><textarea id="comment" name="comment" rows="3" maxlength="500" placeholder={t("book.confirm.commentPh")}></textarea></div></div>
-              <div class="counter t-fb muted" id="counter" aria-hidden="true">{t("book.confirm.counter", { n: 0, max: 500 })}</div>
+              <div class="box ta"><textarea id="comment" name="comment" rows="2" maxlength="500" placeholder={t("book.confirm.commentPh")}></textarea></div>
             </div>
           </>
         )
@@ -299,22 +297,18 @@ const strip = info ? { name: info.masterName, subtitle: info.professionalTitle, 
 </section>
 
 <section class="screen" data-screen="done" hidden>
-  <div class="body pt-lg">
+  <div class="body">
     <div class="pad-h">
-      <div class="reveal"><div class="medallion"><span><Icon name="done" /></span></div></div>
-      <div class="g-xs"></div>
-      <h2 class="t-heading-lg centered reveal" data-step-heading tabindex="-1" aria-level="1">{t("book.done.h")}</h2>
-      <div class="g-sm"></div>
+      <div class="hero reveal">
+        <span class="disc"><Icon name="done" /></span>
+        <h2 class="t-heading-lg" data-step-heading tabindex="-1" aria-level="1">{t("book.done.h")}</h2>
+      </div>
       <p class="t-body11 centered reveal">{salon ? t("book.salonFlow.done.sub") : t("book.done.sub")}</p>
-      <div class="g-lg"></div>
-      {salon ? <div class="appts reveal" id="done-list"></div> : <NeuCard bordered pad="sm" class="reveal"><div id="done-card"></div></NeuCard>}
       <div class="g-md"></div>
-      <NeuCard bordered pad="sm" class="reveal"><p class="t-body11">{t("book.done.cancelRule")}</p></NeuCard>
-      <div class="g-md"></div>
-      {!salon && <div class="stack reveal tight"><a class="cta2" id="done-cancel" href="/" hidden><span class="vt-cta">{t("book.done.cancel")}</span></a></div>}
+      {salon ? <div class="appts reveal" id="done-list"></div> : <NeuCard bordered pad="md" class="reveal sumcard"><div id="done-card"></div></NeuCard>}
       <div class="g-md"></div>
       <ReminderChannelChoice />
-      <div class="g-xl"></div>
+      <div class="g-lg"></div>
     </div>
   </div>
 </section>
@@ -325,15 +319,14 @@ const strip = info ? { name: info.masterName, subtitle: info.professionalTitle, 
       {/* Cloned per master by the island: the strip, the visit's rows, an own comment (<= 500) and its own status. */}
       <template id="tpl-appt">
         <article class="appt" data-appt>
-          <div data-strip></div>
-          <div class="g-sm"></div>
-          <NeuCard bordered pad="md">
+          <NeuCard bordered pad="md" class="sumcard">
+            <div data-strip></div>
+            <div class="rule"></div>
             <div data-appt-body></div>
             <div class="rule dense"></div>
             <div data-appt-comment>
               <label class="t-label block-label" data-appt-label>{t("book.confirm.commentLabel")}</label>
-              <div class="field"><div class="box ta"><textarea rows="3" maxlength="500" placeholder={t("book.confirm.commentPh")} data-appt-text></textarea></div></div>
-              <div class="counter t-fb muted" aria-hidden="true" data-appt-counter>{t("book.confirm.counter", { n: 0, max: 500 })}</div>
+              <div class="field"><div class="box ta"><textarea rows="2" maxlength="500" placeholder={t("book.confirm.commentPh")} data-appt-text></textarea></div></div>
             </div>
           </NeuCard>
           <div class="errcard mt-md" role="alert" data-appt-error hidden><Icon name="error-outline" /><span class="t-fb err" data-appt-error-text></span></div>
@@ -346,9 +339,7 @@ const strip = info ? { name: info.masterName, subtitle: info.professionalTitle, 
         <article class="appt" data-done>
           <p class="t-sub13 ellipsis" data-done-title></p>
           <div class="g-sm"></div>
-          <NeuCard bordered pad="sm"><div data-done-body></div></NeuCard>
-          <div class="g-sm"></div>
-          <a class="cta2" href="/" data-done-cancel hidden><span class="vt-cta">{t("book.done.cancel")}</span></a>
+          <NeuCard bordered pad="md" class="sumcard"><div data-done-body></div></NeuCard>
         </article>
       </template>
       {/* The island clones these for the catalogue (a category with its service rows) and for every master strip, then fills the text. */}

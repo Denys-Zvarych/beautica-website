@@ -34,7 +34,6 @@ export interface RecapView {
   slot: Slot;
   /** Salon + address rows on top (master link). The salon cards carry them once, above all cards. */
   head: boolean;
-  comment?: string;
 }
 type Strings = Record<string, string>;
 export interface Core {
@@ -55,8 +54,8 @@ export interface Core {
   show: (step: string) => void;
   busy: (btn: HTMLButtonElement, on: boolean) => void;
   lrow: (label: string, value: string, detail?: string) => string;
-  recap: (into: HTMLElement, compact: boolean, view: RecapView) => void;
-  calendarButton: (b: { startsAt: string; minutes: number; master: string; services: string; cancelAbs: string | null }) => HTMLElement;
+  recap: (into: HTMLElement, view: RecapView) => void;
+  calendarButton: (b: { startsAt: string; minutes: number; master: string; services: string }) => HTMLElement;
   /** The guest token was refused (401): back to the code step with the session banner. */
   sessionExpired: () => void;
   /** Re-open the time step for the current master with the «already taken» notice. */
@@ -383,20 +382,16 @@ export function createSalon(core: Core, info: SalonInfo) {
       if (strip) a.querySelector("[data-strip]")!.replaceChildren(strip);
       const day = dayOf(g);
       const slot = slotOf(g);
-      if (day && slot) core.recap(a.querySelector<HTMLElement>("[data-appt-body]")!, false, { services: g.services, day, slot, head: false });
+      if (day && slot) core.recap(a.querySelector<HTMLElement>("[data-appt-body]")!, { services: g.services, day, slot, head: false });
       const text = a.querySelector<HTMLTextAreaElement>("[data-appt-text]")!;
       const label = a.querySelector<HTMLLabelElement>("[data-appt-label]")!;
       text.id = `note-${g.masterId}`;
       label.htmlFor = text.id;
       text.value = comments.get(g.masterId) ?? "";
-      const counter = a.querySelector<HTMLElement>("[data-appt-counter]")!;
-      const count = () => (counter.textContent = fmt(S.counter ?? "", { n: text.value.length }));
-      count();
       text.addEventListener("input", () => {
         const clean = text.value.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, "");
         if (clean !== text.value) text.value = clean;
         comments.set(g.masterId, text.value);
-        count();
       });
       const r = results.get(g.masterId);
       if (r?.ok) {
@@ -499,8 +494,7 @@ export function createSalon(core: Core, info: SalonInfo) {
     const tpl = $<HTMLTemplateElement>("#tpl-done").content.firstElementChild as HTMLElement;
     const first = tpl.cloneNode(true) as HTMLElement;
     first.querySelector("[data-done-title]")!.remove();
-    first.querySelector("[data-done-cancel]")!.remove();
-    first.querySelector<HTMLElement>("[data-done-body]")!.innerHTML = core.lrow(S.salonLabel!, core.salonName) + `<div class="rule dense"></div>` + core.lrow(S.addressLabel!, [core.city, core.address].filter(Boolean).join(", "), core.note);
+    first.querySelector<HTMLElement>("[data-done-body]")!.innerHTML = core.lrow(S.salonLabel!, core.salonName) + core.lrow(S.addressLabel!, [core.city, core.address].filter(Boolean).join(", "), core.note);
     host.append(first);
     for (const g of plan) {
       const r = results.get(g.masterId);
@@ -510,16 +504,11 @@ export function createSalon(core: Core, info: SalonInfo) {
       const a = tpl.cloneNode(true) as HTMLElement;
       a.querySelector("[data-done-title]")!.textContent = fmt(S.doneOne ?? "", { master: g.name });
       const body = a.querySelector<HTMLElement>("[data-done-body]")!;
-      core.recap(body, true, { services: g.services, day, slot, head: false, comment: undefined });
-      // The cancel link is a bearer token: it goes only into the file the guest downloads and this page's own link, never to analytics or logs.
+      core.recap(body, { services: g.services, day, slot, head: false });
+      // The cancel link is a bearer token (it arrives by SMS): it never goes into the calendar file, analytics or logs.
       const path = cancelPath(r.data.cancelUrl);
       const minutes = g.services.reduce((n, s) => n + s.minutes, 0) || r.data.durationMinutes;
-      body.append(el("div", "rule dense"), core.calendarButton({ startsAt: r.data.startsAt, minutes, master: g.name, services: g.services.map((s) => s.name).join(", "), cancelAbs: path ? location.origin + path : null }));
-      const cancel = a.querySelector<HTMLAnchorElement>("[data-done-cancel]")!;
-      if (path) {
-        cancel.href = path;
-        cancel.hidden = false;
-      }
+      body.append(el("div", "rule"), core.calendarButton({ startsAt: r.data.startsAt, minutes, master: g.name, services: g.services.map((s) => s.name).join(", ") }));
       host.append(a);
       offers.push({ token: cancelToken(path), telegram: r.data.telegram });
     }

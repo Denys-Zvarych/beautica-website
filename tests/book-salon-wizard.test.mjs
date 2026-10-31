@@ -151,7 +151,7 @@ describe("016: masters step (coverage assignment, no «any master»)", () => {
 });
 
 describe("016: the whole story, one booking per master", () => {
-  test("per-master bookable days and slots, contact + OTP once, a card per master, two POSTs with ONE token, a cancel link and .ics each", async () => {
+  test("per-master bookable days and slots, contact + OTP once, a card per master, two POSTs with ONE token, a calendar link each, no cancel link", async () => {
     const slug = "wiz-story-0001";
     const env = await salonPage(browser, slug);
     try {
@@ -213,16 +213,23 @@ describe("016: the whole story, one booking per master", () => {
       assert.ok(posts[0].body.startsAt.startsWith(d1) && posts[1].body.startsAt.startsWith(d2));
       assert.equal(posts[0].body.privacyAccepted, true);
       assert.equal((await mockLog((e) => e.path.includes("/otp/send"))).filter((e) => e.body.phone === "+380501110001").length, 1, "one code for the whole visit");
-      // --- done: each booking has its own cancel link and calendar file
+      // --- done (phase 025): each booking has its own calendar link to /api/ics; no cancel link, text or button (the cancel link arrives by SMS)
       assert.equal(await page.locator("[data-screen=done]").getByText("На головну").count(), 0, "no «На головну» on the success screen");
-      assert.equal(await page.locator("[data-screen=done] a[href='/']:not([hidden])").count(), 0, "no link to the home page, only the bookings' own cancel links");
+      assert.equal(await page.locator("[data-screen=done] a[href='/']:not([hidden])").count(), 0, "no link to the home page");
       const done = page.locator("#done-list [data-done]");
       assert.equal(await done.count(), 3, "the salon address card + one per master");
-      const hrefs = await page.locator("#done-list a[data-done-cancel]:not([hidden])").evaluateAll((a) => a.map((x) => x.getAttribute("href")));
-      assert.deepEqual(hrefs, ["/book/cancel/123e4567-e89b-42d3-a456-426614174001", "/book/cancel/123e4567-e89b-42d3-a456-426614174002"]);
-      await page.getByRole("button", { name: "Додати в календар" }).nth(1).click();
-      const ics = parseIcs(await page.evaluate(() => window.__icsBlobs.at(-1).text()));
-      assert.match(ics.VEVENT.URL, /\/book\/cancel\/123e4567-e89b-42d3-a456-426614174002$/, "master 2's file carries master 2's cancel link");
+      assert.equal(await page.locator("#done-list a[data-done-cancel], #done-list a[href*='/book/cancel']").count(), 0, "no cancel link");
+      assert.equal(/Скасувати|не пізніше ніж за 2 години/.test(await text(page.locator("[data-screen=done]"))), false, "no cancel text / button");
+      const cals = page.getByRole("link", { name: "Додати в календар" });
+      assert.equal(await cals.count(), 2, "one calendar link per master");
+      assert.equal(await page.getByRole("button", { name: "Додати в календар" }).count(), 0);
+      const hrefs = await cals.evaluateAll((a) => a.map((x) => x.getAttribute("href")));
+      for (const h of hrefs) assert.equal(new URL(h, "https://x.example").pathname, "/api/ics");
+      assert.equal(hrefs.some((h) => /cancel|123e4567/.test(decodeURIComponent(h))), false, "no cancel token in a calendar URL");
+      const res = await page.request.get(new URL(hrefs[1], page.url()).href);
+      assert.equal(res.status(), 200);
+      const ics = parseIcs(await res.text());
+      assert.equal("URL" in ics.VEVENT, false, "no cancel link in master 2's file");
       assert.equal(ics.text.SUMMARY, "Запис до Ірина Мельник");
       assert.equal(await page.locator("#done-list").evaluate((e) => e.scrollWidth <= e.clientWidth), true);
       noProblems(env);
@@ -267,7 +274,7 @@ describe("016: the whole story, one booking per master", () => {
       await page.waitForSelector("#done-list [data-done]", { state: "visible" });
       const posts = callsTo(await mockLog(), "POST", "/book/s/wiz-c409-0001/masters/");
       assert.deepEqual(posts.map((p) => p.path.split("/masters/")[1].split("/")[0]), [M1.id, M2.id, M2.id], "master 1 is posted ONCE; master 2 twice");
-      assert.equal(await page.locator("#done-list a[data-done-cancel]:not([hidden])").count(), 2);
+      assert.equal(await page.locator("#done-list .calbtn").count(), 2, "both bookings done, one calendar link each");
       noProblems(env);
     } finally {
       await env.context.close();
@@ -317,7 +324,7 @@ describe("016: every step renders at 360 / 768 / 1280 (non-zero boxes, no sidewa
         await noScroll("confirm");
         await page.click("#cta-confirm");
         await page.waitForSelector("#done-list [data-done]", { state: "visible" });
-        for (const sel of ["#done-list .calbtn", "#done-list a[data-done-cancel]:not([hidden])"]) await visible(sel);
+        for (const sel of ["#done-list .calbtn", "#done-list .sumcard"]) await visible(sel);
         await shot(page, `salon-${width}-5-done`);
         await noScroll("done");
         noProblems(env);
@@ -461,7 +468,7 @@ describe("QA 016/017: gaps closed", () => {
       await env.context.close();
     }
   });
-  test("016: each confirm card has its own comment capped at 500 with its own counter", async () => {
+  test("016: each confirm card has its own comment capped at 500 (no counter any more)", async () => {
     const env = await salonPage(browser, "wiz-cmt-0001");
     try {
       const { page } = env;
@@ -471,8 +478,8 @@ describe("QA 016/017: gaps closed", () => {
       assert.equal(await areas.count(), 2);
       for (let i = 0; i < 2; i++) assert.equal(await areas.nth(i).getAttribute("maxlength"), "500");
       await areas.nth(0).fill("а".repeat(120));
-      assert.match(await text(cards.nth(0).locator("[data-appt-counter]")), /120.*500/);
-      assert.match(await text(cards.nth(1).locator("[data-appt-counter]")), /\b0\b.*500/, "the other card's counter is untouched");
+      assert.equal(await page.locator("[data-appt-counter]").count(), 0, "the counter is gone");
+      assert.equal(await areas.nth(1).inputValue(), "", "the other card's comment is untouched");
       noProblems(env);
     } finally {
       await env.context.close();

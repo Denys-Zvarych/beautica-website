@@ -1,4 +1,4 @@
-// Phase 022: «Куди ви хочете отримувати нагадування про запис?» on the booking success screen (SMS default / Telegram).
+// Phase 022/025: «Куди надсилати нагадування про записи?» on the booking success screen: segmented SMS | Telegram picker (SMS default).
 // The markup is src/components/book/ReminderChannelChoice.astro (hidden); this only toggles it. Backend 407: every call carries
 // the booking's cancel token alone (never a phone); a 404 (not eligible / feature off) removes the block, so the screen is exactly
 // the pre-Telegram one. The t.me link comes from the backend and is followed only when api.ts proves its shape. No polling: one
@@ -42,17 +42,23 @@ export function mountReminders(d: ReminderDeps): void {
   const choice = q("[data-r-choice]");
   const errBox = q("[data-r-error]");
   const unlinkBtn = q<HTMLButtonElement>("[data-r-unlink]");
-  const sms = q<HTMLInputElement>('input[value="sms"]');
-  const tg = q<HTMLInputElement>('input[value="telegram"]');
+  const sms = q<HTMLInputElement>('input[type="radio"][data-v="sms"]');
+  const tg = q<HTMLInputElement>('input[type="radio"][data-v="telegram"]');
   const connect = q<HTMLButtonElement>("[data-r-connect]");
-  const connectGap = q("[data-r-connect-gap]");
   const radios = [sms, tg];
   let busy = false;
   let awaitingReturn = false;
 
-  // Selecting a radio only changes the selection (WCAG 3.2.2); the explicit button is what leaves for Telegram.
+  // Selecting a segment only changes the selection (WCAG 3.2.2); the explicit button is what leaves for Telegram.
+  const selected = (): "sms" | "telegram" => (tg.checked ? "telegram" : "sms");
   const syncConnect = (): void => {
-    connect.hidden = connectGap.hidden = !tg.checked;
+    connect.hidden = selected() !== "telegram";
+  };
+  /** The native radio group owns selection and arrow keys; this only syncs the description and the Connect button. */
+  const select = (v: "sms" | "telegram"): void => {
+    (v === "sms" ? sms : tg).checked = true;
+    root.querySelectorAll<HTMLElement>("[data-r-desc]").forEach((d) => d.toggleAttribute("data-off", d.dataset.rDesc !== v));
+    syncConnect();
   };
   const showError = (key: "rate" | "fail" | "unlink" | null): void => {
     errBox.hidden = key === null;
@@ -67,8 +73,7 @@ export function mountReminders(d: ReminderDeps): void {
     showError(null);
     linked.hidden = true;
     choice.hidden = false;
-    sms.checked = true;
-    syncConnect();
+    select("sms");
   };
   const setBusy = (on: boolean): void => {
     busy = on;
@@ -78,8 +83,11 @@ export function mountReminders(d: ReminderDeps): void {
   };
   // A 404 after the block is on screen (the feature was switched off, the booking stopped being eligible): never remove it (layout shift);
   // swap to a calm static line in a box of the same height. A 404 on the very first render never gets here: the block is simply not mounted.
+  const hold = (): void => {
+    root.style.minHeight = `${Math.max(parseFloat(root.style.minHeight) || 0, root.offsetHeight)}px`;
+  };
   const gone = (): void => {
-    root.style.minHeight = `${root.offsetHeight}px`;
+    hold();
     linked.hidden = choice.hidden = true;
     showError(null);
     q("[data-r-unavailable]").hidden = false;
@@ -103,8 +111,9 @@ export function mountReminders(d: ReminderDeps): void {
     }
     setBusy(false);
     if (!r.ok) {
-      sms.checked = true;
-      syncConnect();
+      // Measure BEFORE select("sms") hides the Connect button, or the held height is already the shrunken one and everything below jumps up.
+      hold();
+      select("sms");
       const e = errorFor(r.fail);
       return e === null ? gone() : showError(e);
     }
@@ -112,7 +121,7 @@ export function mountReminders(d: ReminderDeps): void {
   });
 
   // SMS is the default: choosing it sends nothing (the only way to switch a linked phone back is the unlink button).
-  radios.forEach((r) => r.addEventListener("change", () => (showError(null), syncConnect())));
+  radios.forEach((r) => r.addEventListener("change", () => (showError(null), select(r.dataset.v as "sms" | "telegram"))));
 
   // One status read when the guest comes back from Telegram (no polling loop, the endpoint is rate-limited).
   const onVisible = async (): Promise<void> => {

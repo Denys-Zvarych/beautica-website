@@ -685,6 +685,9 @@ a.tab {
 .shelf .dur {
   margin-top: calc(var(--vt-space-xs) / 2);
 }
+.shelf .chosen.ph {
+  visibility: hidden;
+}
 .shelf .chosen {
   display: flex;
   align-items: center;
@@ -936,6 +939,7 @@ a.tab {
   margin: 0;
 }
 
+.pt-sm { padding-top: var(--vt-space-sm); }
 .pt-md { padding-top: var(--vt-space-md); }
 .pt-lg { padding-top: var(--vt-space-lg); }
 .pb-md { padding-bottom: var(--vt-space-md); }
