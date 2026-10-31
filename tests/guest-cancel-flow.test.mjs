@@ -241,7 +241,7 @@ describe("the link itself", () => {
 // The status answer alone decides (never the booking source): offerChoice -> radios; linked -> status + «Повернутися до SMS»; otherwise nothing.
 describe("reminder channel on the cancel page (phase 024)", () => {
   const AXE = readFileSync(createRequire(import.meta.url).resolve("axe-core/axe.min.js"), "utf8");
-  const CLS = `window.__cls=0;new PerformanceObserver(function(l){for(const e of l.getEntries())window.__cls+=e.value}).observe({type:"layout-shift",buffered:true});`;
+  const CLS = `window.__cls=0;new PerformanceObserver(function(l){for(const e of l.getEntries())if(!e.hadRecentInput)window.__cls+=e.value}).observe({type:"layout-shift",buffered:true});`;
   const r = uk.book.done.reminders;
   /** Handlers for mockCancelApi: `telegram(req)` answers by endpoint name (status / unlink / link-token); unlisted = 404. */
   const tgApi = (tg, extra = {}) => ({
@@ -268,12 +268,12 @@ describe("reminder channel on the cancel page (phase 024)", () => {
       const cls = await page.evaluate(() => window.__cls);
       console.log("cancel page CLS (confirm + block):", cls);
       assert.ok(cls <= 0.005, `CLS ${cls}`);
-      assert.equal(await page.locator("#done-reminders [role=radiogroup] input").count(), 2);
+      assert.equal(await page.locator("#done-reminders .seg[role=group] input[type=radio][name=reminder-channel]").count(), 2);
       assert.equal(await page.locator("#done-reminders input[value=sms]").isChecked(), true);
-      const box = await page.locator("#done-reminders input[value=telegram]").locator("xpath=..").boundingBox();
-      assert.ok(box && box.width > 0 && box.height >= 48, "radio row is a 48 px target");
+      const box = await page.locator("#done-reminders label:has(input[value=telegram])").boundingBox();
+      assert.ok(box && box.width > 0 && box.height >= 48, "segment is a 48 px target");
       await page.locator("#done-reminders input[value=sms]").focus();
-      await page.keyboard.press("ArrowDown");
+      await page.keyboard.press("ArrowRight");
       await page.locator("[data-r-connect]").waitFor({ state: "visible" });
       const tg = tgCalls(calls);
       assert.equal(tg.length, 1, "arrow-key selection sends nothing beyond the status read");
@@ -291,7 +291,7 @@ describe("reminder channel on the cancel page (phase 024)", () => {
       assert.equal(await page.getByText(r.linked).isVisible(), true);
       await page.waitForTimeout(400);
       assert.ok((await page.evaluate(() => window.__cls)) <= 0.005, "linked: CLS");
-      assert.equal(await page.locator("#done-reminders [role=radiogroup]").isVisible(), false);
+      assert.equal(await page.locator("#done-reminders .seg").isVisible(), false);
       assert.deepEqual(await axeViolations(page), []);
       await page.getByRole("button", { name: r.backToSms }).click();
       await page.locator("#done-reminders input[value=sms]").waitFor({ state: "visible" });
