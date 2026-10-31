@@ -1,10 +1,10 @@
 // A strict, dependency-free RFC 5545 reader for the .ics the booking flow generates (phase 015 QA).
 // It throws on anything a calendar app could mis-read: bare CR/LF, over-long physical lines, bad folding, unknown property names,
-// unbalanced components, unescaped TEXT specials, duplicate/missing required properties, a URL that is not an absolute http(s) URL.
+// unbalanced components, unescaped TEXT specials, duplicate/missing required properties, and, since phase 025, ANY URL property (the file never carries a cancel link).
 const TEXT_PROPS = new Set(["SUMMARY", "DESCRIPTION", "LOCATION"]);
 const ALLOWED = {
   VCALENDAR: new Set(["VERSION", "PRODID", "CALSCALE"]),
-  VEVENT: new Set(["UID", "DTSTAMP", "DTSTART", "DTEND", "SUMMARY", "DESCRIPTION", "LOCATION", "URL"]),
+  VEVENT: new Set(["UID", "DTSTAMP", "DTSTART", "DTEND", "SUMMARY", "DESCRIPTION", "LOCATION"]),
 };
 const REQUIRED = { VCALENDAR: ["VERSION", "PRODID"], VEVENT: ["UID", "DTSTAMP", "DTSTART", "DTEND", "SUMMARY", "DESCRIPTION"] };
 const fail = (m) => { throw new Error(`invalid iCalendar: ${m}`); };
@@ -63,10 +63,5 @@ export function parseIcs(ics) {
   if (seen.VCALENDAR.VERSION !== "2.0") fail("VERSION must be 2.0");
   for (const p of ["DTSTAMP", "DTSTART", "DTEND"]) if (!/^\d{8}T\d{6}Z$/.test(seen.VEVENT[p])) fail(`${p} is not a UTC date-time: ${seen.VEVENT[p]}`);
   if (seen.VEVENT.DTEND <= seen.VEVENT.DTSTART) fail("DTEND must be after DTSTART");
-  if ("URL" in seen.VEVENT) {
-    let u;
-    try { u = new URL(seen.VEVENT.URL); } catch { fail(`URL is not absolute: ${seen.VEVENT.URL}`); }
-    if (!/^https?:$/.test(u.protocol) || /\s/.test(seen.VEVENT.URL)) fail(`URL not a clean http(s) URI: ${seen.VEVENT.URL}`);
-  }
   return { ...seen, text };
 }

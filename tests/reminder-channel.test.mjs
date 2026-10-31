@@ -99,13 +99,15 @@ function fakeDom() {
     const h = {};
     return { hidden: false, offsetHeight: 120, style: {}, checked: false, disabled: false, dataset: {}, handlers: h, addEventListener: (t, f) => (h[t] ??= []).push(f), fire: async (t) => { for (const f of h[t] ?? []) await f(); }, ...extra };
   };
-  const n = { linked: el(), choice: el(), err: el(), unlink: el(), sms: el({ checked: true }), tg: el(), connect: el({ hidden: true }), gap: el({ hidden: true }), gone: el({ hidden: true }) };
+  const n = { linked: el(), choice: el(), err: el(), unlink: el(), sms: el({ checked: true, dataset: { v: "sms" } }), tg: el({ dataset: { v: "telegram" } }), connect: el({ hidden: true }), gap: el({ hidden: true }), gone: el({ hidden: true }) };
   const errs = ["rate", "fail", "unlink"].map((k) => el({ dataset: { rErr: k } }));
-  const map = { "[data-r-linked]": n.linked, "[data-r-choice]": n.choice, "[data-r-error]": n.err, "[data-r-unlink]": n.unlink, 'input[value="sms"]': n.sms, 'input[value="telegram"]': n.tg, "[data-r-connect]": n.connect, "[data-r-connect-gap]": n.gap, "[data-r-unavailable]": n.gone };
-  const root = el({ hidden: true, querySelector: (s) => map[s], querySelectorAll: () => errs });
+  // description lines: `data-off` marks the hidden one (the real script toggles the attribute; CSS stacks them in one grid cell)
+  const descs = ["sms", "telegram"].map((k) => el({ dataset: { rDesc: k }, off: k !== "sms", toggleAttribute(a, on) { this.off = on; } }));
+  const map = { "[data-r-linked]": n.linked, "[data-r-choice]": n.choice, "[data-r-error]": n.err, "[data-r-unlink]": n.unlink, 'input[type="radio"][data-v="sms"]': n.sms, 'input[type="radio"][data-v="telegram"]': n.tg, "[data-r-connect]": n.connect, "[data-r-connect-gap]": n.gap, "[data-r-unavailable]": n.gone };
+  const root = el({ hidden: true, querySelector: (s) => map[s], querySelectorAll: (s) => (s === "[data-r-desc]" ? descs : errs) });
   // a native radio group: choosing one unchecks the other
   const pick = async (a, b) => { a.checked = true; b.checked = false; await a.fire("change"); };
-  return { n, root, errs, chooseTg: () => pick(n.tg, n.sms), chooseSms: () => pick(n.sms, n.tg) };
+  return { n, root, errs, descs, chooseTg: () => pick(n.tg, n.sms), chooseSms: () => pick(n.sms, n.tg) };
 }
 const DOC = { visibilityState: "visible", listeners: {}, addEventListener(t, f) { (this.listeners[t] ??= []).push(f); } };
 const mount = (dom, telegram, extra = {}) => {
@@ -146,8 +148,10 @@ describe("controller", () => {
     const d = fakeDom();
     const c = mount(d, { available: true, linked: false });
     assert.equal(d.n.connect.hidden, true);
+    assert.deepEqual(d.descs.map((x) => x.off), [false, true], "SMS description shown first");
     await d.chooseTg();
     assert.equal(d.n.connect.hidden, false);
+    assert.deepEqual(d.descs.map((x) => x.off), [true, false], "only the Telegram description shown");
     assert.equal(seen.length, 0);
     assert.deepEqual(c.nav, []);
     await d.chooseSms();

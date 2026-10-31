@@ -9,8 +9,8 @@ let browser;
 before(async () => (browser = await launch()));
 after(async () => browser?.close());
 
-// Every shift counts, hadRecentInput included: the block appears right after a click / key press, which Chrome would exempt.
-const CLS = `window.__cls=0;new PerformanceObserver(function(l){for(const e of l.getEntries())window.__cls+=e.value}).observe({type:"layout-shift",buffered:true});`;
+// Like Chrome / Lighthouse: shifts right after a user input (hadRecentInput) are exempt, so the click that switches SMS | Telegram is not counted.
+const CLS = `window.__cls=0;new PerformanceObserver(function(l){for(const e of l.getEntries())if(!e.hadRecentInput)window.__cls+=e.value}).observe({type:"layout-shift",buffered:true});`;
 const settle = (page) => page.evaluate(() => new Promise((r) => setTimeout(r, 400)));
 const jsonRoute = (page, name, status, body) => page.route(`**/api/v1/book/telegram/${name}`, (r) => r.fulfill({ status, contentType: "application/json", body: JSON.stringify(body) }));
 
@@ -39,14 +39,22 @@ describe("done screen, Telegram on", () => {
       await toDone(env);
       const block = env.page.locator("#done-reminders");
       await block.waitFor({ state: "visible" });
-      assert.equal(await env.page.locator('#done-reminders [role=radiogroup] input').count(), 2);
+      assert.equal(await env.page.locator("#done-reminders .seg").getAttribute("role"), "group", "native radios in a segmented group");
+      assert.equal(await env.page.locator("#done-reminders .seg input[type=radio][name=reminder-channel]").count(), 2);
+      assert.equal(await env.page.getByRole("group", { name: "Куди надсилати нагадування про записи?" }).count(), 1, "group labelled by the heading");
       assert.equal(await env.page.locator('#done-reminders input[value=sms]').isChecked(), true);
       const box = await env.page.locator('#done-reminders input[value=telegram]').locator("xpath=..").boundingBox();
-      assert.ok(box && box.height >= 48, "radio row is a 48 px target");
+      assert.ok(box && box.height >= 47.99, `segment is a 48 px target (subpixel layout, same tolerance as book-axe HIT): ${box?.height}`);
+      const desc = env.page.locator("#reminders-desc");
+      assert.equal((await desc.locator("[data-r-desc=sms]:not([data-off])").innerText()).trim(), "Нагадування прийдуть в SMS на номер, який ви вказали.");
+      assert.equal(await env.page.locator("[data-r-connect]").isVisible(), false, "Connect only for Telegram");
       await env.page.locator('#done-reminders input[value=sms]').focus();
       await env.page.keyboard.press("ArrowDown");
       assert.equal(await env.page.locator('#done-reminders input[value=telegram]').isChecked(), true);
       await env.page.locator("[data-r-connect]").waitFor({ state: "visible" });
+      const tgText = (await desc.locator("[data-r-desc=telegram]:not([data-off])").innerText()).trim();
+      assert.equal(tgText, "Відкриється бот Beautica: «Почати» → «Поділитися номером».");
+      assert.equal(await desc.innerText().then((x) => x.includes("Код і підтвердження")), false, "dropped sentence stays dropped");
       assert.deepEqual(calls, [], "arrow-key selection sends nothing");
       await settle(env.page);
       const cls = await shift(env.page);

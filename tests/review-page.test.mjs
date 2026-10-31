@@ -376,6 +376,7 @@ describe("opt-out", () => {
     try {
       const { page } = env;
       await page.click("#rv-optout");
+      await page.waitForSelector("#ts-optout iframe", { state: "attached" }); // the widget must be mounted before «Так», as in the happy-path test (a slow runner raced it)
       await page.click("#rv-optout-yes");
       await page.waitForSelector("#rv-optout-error", { state: "visible" });
       assert.equal(await text(page.locator("#rv-optout-error")), "Забагато спроб. Спробуйте за кілька хвилин.");
