@@ -5,7 +5,7 @@ import assert from "node:assert/strict";
 import { readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { BACKEND_DIR, backendGate } from "./helpers/backend.mjs";
-import { mountReminders, offered, errorFor, firstWithToken } from "../src/scripts/booking/reminder-channel.ts";
+import { mountReminders, offered, errorFor, firstWithToken, availabilityFromStatus } from "../src/scripts/booking/reminder-channel.ts";
 import { cancelToken, cancelPath, readTelegram, telegramLinkToken, telegramStatus, telegramUnlink, TELEGRAM_URL } from "../src/scripts/booking/api.ts";
 
 const UUID = "123e4567-e89b-42d3-a456-426614174000";
@@ -242,4 +242,12 @@ describe("wire shape = backend 407 records", backendGate(), () => {
   test("link-token response", () => assert.match(src("GuestTelegramLinkResponse.java"), /record GuestTelegramLinkResponse\(String url, Instant expiresAt, boolean alreadyLinked\)/));
   test("status response", () => assert.match(src("GuestTelegramStatusResponse.java"), /record GuestTelegramStatusResponse\(boolean available, boolean linked, boolean offerChoice\)/));
   test("booking block", () => assert.match(src("TelegramAvailability.java"), /boolean available,?\s*boolean linked/));
+});
+
+// Phase 024: the cancel page decides from the status answer alone (never the booking source).
+test("availabilityFromStatus: offerChoice -> choice, linked -> linked, booking-link guest not linked / unavailable -> nothing", () => {
+  assert.deepEqual(availabilityFromStatus({ available: true, linked: false, offerChoice: true }), { available: true, linked: false });
+  assert.deepEqual(availabilityFromStatus({ available: true, linked: true, offerChoice: false }), { available: true, linked: true });
+  assert.equal(availabilityFromStatus({ available: true, linked: false, offerChoice: false }), null);
+  assert.equal(availabilityFromStatus({ available: false, linked: true, offerChoice: true }), null);
 });

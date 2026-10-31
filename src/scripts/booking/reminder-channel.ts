@@ -19,6 +19,15 @@ export interface ReminderDeps {
 /** Whether the block is offered at all: Telegram on for this booking and we hold a cancel token. */
 export const offered = (telegram: TelegramAvailability | null, token: string | null): boolean => telegram?.available === true && !!token;
 
+/**
+ * Cancel page (phase 024): the status answer decides, never the booking source. `linked` -> status + «Повернутися до SMS»;
+ * `offerChoice` (a walk-in not linked yet) -> the choice; a booking-link guest who is not linked already chose on the success screen -> `null` (no block).
+ */
+export function availabilityFromStatus(s: { available: boolean; linked: boolean; offerChoice: boolean }): TelegramAvailability | null {
+  if (!s.available) return null;
+  return s.linked || s.offerChoice ? { available: true, linked: s.linked } : null;
+}
+
 /** Error key to show for a failed call; `null` = hide the whole block (404: not eligible or feature off). */
 export const errorFor = (fail: Fail): "rate" | "fail" | null => (fail === "not-found" ? null : fail === "rate-limited" ? "rate" : "fail");
 

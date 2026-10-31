@@ -1,0 +1,113 @@
+/* The reminder-channel block (phase 022 success screen, phase 024 cancel page): ONE source for the rules it shares with the booking pages.
+   book.css imports this file and so does ReminderChannelChoice.astro, so the cancel page gets these rules without book.css (whose Latin-core
+   @font-face would add two font files to a token page). No @font-face here. Moved verbatim from book.css / book-flow.css. */
+.remind {
+  --bk-text-muted: var(--vt-color-text-secondary);
+  --bk-text-error: color-mix(in srgb, var(--vt-color-error) 78%, var(--vt-color-text));
+}
+.remind [hidden] {
+  display: none !important;
+}
+.t-sub13 { font: var(--vt-fw-subheading) var(--vt-fs-input) / normal var(--vt-font-display); color: var(--vt-color-text); }
+.t-body11 { font: var(--vt-fw-body) var(--vt-fs-label) / var(--vt-lh-body) var(--vt-font-body); color: var(--vt-color-text-secondary); }
+.t-fb { font: var(--vt-fw-label) var(--vt-fs-label) / 1.4 var(--vt-font-body); }
+.t-fb.muted { color: var(--bk-text-muted); }
+.t-fb.sec { color: var(--vt-color-text-secondary); }
+.t-fb.deep { color: var(--vt-color-accent-deep); }
+.t-fb.err { color: var(--bk-text-error); }
+.t-fb.w600 { font-weight: 600; }
+.t-fb.w800 { font-weight: 800; }
+.mt-md { margin-top: var(--vt-space-md); }
+.cta2 .vt-cta {
+  color: var(--vt-color-accent-deep);
+}
+.errcard {
+  display: flex;
+  gap: var(--vt-space-sm);
+  align-items: flex-start;
+  padding: calc(var(--vt-space-sm) + var(--vt-space-xs));
+  border-radius: var(--vt-radius-card);
+  background: var(--vt-color-base);
+  border: var(--vt-app-hair) solid var(--vt-color-faint);
+  box-shadow: var(--vt-shadow-bordered-card);
+  color: var(--vt-color-error);
+  --icon-size: var(--vt-app-icon-18);
+  --icon-gap: 0;
+}
+.errcard .icon {
+  margin-top: var(--vt-app-hair);
+}
+.errcard .t-fb {
+  flex: 1;
+}
+.reveal {
+  animation: reveal calc(var(--vt-dur-base) * 2) var(--vt-ease) both;
+}
+@keyframes reveal {
+  from {
+    opacity: 0;
+    transform: translateY(var(--vt-space-md));
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.cta2 {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: center;
+  gap: var(--vt-space-sm);
+  min-height: var(--vt-size-cta);
+  padding: 0 var(--vt-space-sm);
+  border: 0;
+  cursor: pointer;
+  text-decoration: none;
+  border-radius: var(--vt-radius-button);
+  background: var(--vt-color-base);
+  color: var(--vt-color-accent-deep);
+  position: relative;
+  isolation: isolate;
+  transition: transform var(--vt-dur-fast) var(--vt-ease);
+  --icon-size: var(--vt-space-lg);
+  --icon-gap: 0;
+}
+/* The shadow is a pseudo-element: pressing fades it out (opacity), nothing animates box-shadow. */
+.cta2::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  pointer-events: none;
+  box-shadow: var(--vt-shadow-extruded-button);
+  transition: opacity var(--vt-dur-fast) var(--vt-ease);
+}
+.cta2:active {
+  transform: scale(0.98);
+}
+.cta2:active::before {
+  opacity: 0;
+}
+@media (hover: hover) {
+  .cta2:hover {
+    transform: translateY(calc(var(--vt-lift) * -1));
+  }
+}
+.cta2:focus-visible {
+  transform: translateY(calc(var(--vt-lift) * -1));
+}
+.okline {
+  display: flex;
+  align-items: center;
+  gap: var(--vt-space-xs);
+  margin: var(--vt-space-sm) 0 0;
+  color: var(--vt-color-text);
+  --icon-size: var(--vt-app-icon-18);
+  --icon-gap: 0;
+}
+/* Success green is for the check glyph only: as 11 px text on the base it is 3.6:1 (axe color-contrast). */
+.okline .icon {
+  color: var(--vt-color-success);
+}

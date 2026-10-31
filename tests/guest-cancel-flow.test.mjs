@@ -2,6 +2,8 @@
 // https://api.beautica.app: every state, one POST on double click, retry, no token leakage, CSP lets the API through.
 import { test, describe, before, after } from "node:test";
 import assert from "node:assert/strict";
+import { createRequire } from "node:module";
+import { readFileSync } from "node:fs";
 import { launch, open, mockCancelApi } from "./helpers/browser.mjs";
 import { BASE, API_ORIGIN, TOKEN, uk, requireBase } from "./helpers/env.mjs";
 
@@ -17,8 +19,9 @@ let browser;
 before(async () => (browser = await launch()));
 after(async () => browser?.close());
 
-async function run(handlers, fn, { path = PATH, ...opts } = {}) {
+async function run(handlers, fn, { path = PATH, init, ...opts } = {}) {
   const env = await open(browser, { width: 360, height: 800, ...opts });
+  if (init) await env.context.addInitScript(init);
   const calls = await mockCancelApi(env.context, handlers);
   try {
     await env.page.goto(BASE + path);
@@ -206,7 +209,9 @@ describe("the link itself", () => {
     try {
       await env.page.goto(BASE + PATH, { waitUntil: "networkidle" });
       await env.page.locator("#st-confirm").waitFor({ state: "visible" });
-      assert.deepEqual(referers, []);
+      // No request may name the token: a module chunk's Referer may only be its importing /_astro/*.js script (same origin, not the credential).
+      assert.deepEqual(referers.filter((r) => r.includes(TOKEN)), [], "no Referer carries the token");
+      assert.deepEqual(referers.filter((r) => !/ <- \S+\/_astro\/[^/\s]+\.js$/.test(r)), [], "any Referer is an /_astro/*.js chunk");
     } finally {
       await env.context.close();
     }
@@ -229,5 +234,135 @@ describe("the link itself", () => {
       await page.keyboard.press("Enter");
       await state("cancelled").waitFor({ state: "visible" });
     }, { width: 1280 });
+  });
+});
+
+// Phase 024: the reminder-channel block of the cancel page (ReminderChannelChoice + reminder-channel.ts, reused from the done screen).
+// The status answer alone decides (never the booking source): offerChoice -> radios; linked -> status + «Повернутися до SMS»; otherwise nothing.
+describe("reminder channel on the cancel page (phase 024)", () => {
+  const AXE = readFileSync(createRequire(import.meta.url).resolve("axe-core/axe.min.js"), "utf8");
+  const CLS = `window.__cls=0;new PerformanceObserver(function(l){for(const e of l.getEntries())window.__cls+=e.value}).observe({type:"layout-shift",buffered:true});`;
+  const r = uk.book.done.reminders;
+  /** Handlers for mockCancelApi: `telegram(req)` answers by endpoint name (status / unlink / link-token); unlisted = 404. */
+  const tgApi = (tg, extra = {}) => ({
+    get: () => ok(INFO),
+    post: () => ({ status: 204 }),
+    telegram: (req) => tg[new URL(req.url()).pathname.split("/").pop()] ?? { status: 404 },
+    ...extra,
+  });
+  const STATUS = (o) => ({ status: 200, json: { available: true, linked: false, offerChoice: false, ...o } });
+  const tgCalls = (calls) => calls.telegram;
+  const axeViolations = async (page) => {
+    await page.waitForTimeout(350);
+    await page.evaluate(AXE);
+    const res = await page.evaluate(() => axe.run(document, { runOnly: ["wcag2a", "wcag2aa", "wcag21aa", "best-practice"] }));
+    return res.violations.map((v) => `${v.id}: ${v.nodes.slice(0, 2).map((n) => n.target.join(" ")).join(" | ")}`);
+  };
+  const block = (page) => page.locator("#done-reminders");
+
+  test("offerChoice:true shows SMS preselected + Telegram; one status POST (token in the body only); selecting changes nothing; CLS and axe clean", async () => {
+    await run(tgApi({ status: STATUS({ offerChoice: true }) }), async ({ page, state, calls }) => {
+      await state("confirm").waitFor({ state: "visible" });
+      await block(page).waitFor({ state: "visible" });
+      await page.waitForTimeout(400);
+      const cls = await page.evaluate(() => window.__cls);
+      console.log("cancel page CLS (confirm + block):", cls);
+      assert.ok(cls <= 0.005, `CLS ${cls}`);
+      assert.equal(await page.locator("#done-reminders [role=radiogroup] input").count(), 2);
+      assert.equal(await page.locator("#done-reminders input[value=sms]").isChecked(), true);
+      const box = await page.locator("#done-reminders input[value=telegram]").locator("xpath=..").boundingBox();
+      assert.ok(box && box.width > 0 && box.height >= 48, "radio row is a 48 px target");
+      await page.locator("#done-reminders input[value=sms]").focus();
+      await page.keyboard.press("ArrowDown");
+      await page.locator("[data-r-connect]").waitFor({ state: "visible" });
+      const tg = tgCalls(calls);
+      assert.equal(tg.length, 1, "arrow-key selection sends nothing beyond the status read");
+      assert.ok(tg[0].url.endsWith("/api/v1/book/telegram/status") && !tg[0].url.includes(TOKEN), "token is not in the URL");
+      assert.deepEqual(JSON.parse(tg[0].body), { cancelToken: TOKEN }, "the cancel token travels in the body only");
+      assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true, "no horizontal scroll");
+      assert.deepEqual(await axeViolations(page), []);
+    }, { init: CLS, height: 640 });
+  });
+
+  test("linked:true shows the Telegram status + «Повернутися до SMS»; the unlink POST returns the choice; axe clean", async () => {
+    await run(tgApi({ status: { status: 200, json: { available: true, linked: true, offerChoice: false } }, unlink: { status: 204 } }), async ({ page, state, calls }) => {
+      await state("confirm").waitFor({ state: "visible" });
+      await block(page).waitFor({ state: "visible" });
+      assert.equal(await page.getByText(r.linked).isVisible(), true);
+      await page.waitForTimeout(400);
+      assert.ok((await page.evaluate(() => window.__cls)) <= 0.005, "linked: CLS");
+      assert.equal(await page.locator("#done-reminders [role=radiogroup]").isVisible(), false);
+      assert.deepEqual(await axeViolations(page), []);
+      await page.getByRole("button", { name: r.backToSms }).click();
+      await page.locator("#done-reminders input[value=sms]").waitFor({ state: "visible" });
+      assert.equal(await page.locator("#done-reminders input[value=sms]").isChecked(), true);
+      assert.equal(tgCalls(calls).filter((c) => c.url.endsWith("/unlink")).length, 1);
+    }, { init: CLS, height: 640 });
+  });
+
+  for (const [name, status] of [
+    ["a booking-link guest who is not linked (offerChoice:false)", STATUS({})],
+    ["available:false", STATUS({ available: false, offerChoice: true })],
+    ["a 404 (not eligible / feature off)", { status: 404 }],
+    ["a malformed answer", { status: 200, json: { ok: 1 } }],
+  ]) {
+    test(`block absent: ${name}`, async () => {
+      await run(tgApi({ status }), async ({ page, state, calls }) => {
+        await state("confirm").waitFor({ state: "visible" });
+        await page.waitForTimeout(400);
+        assert.equal(tgCalls(calls).length, 1);
+        assert.ok((await page.evaluate(() => window.__cls)) <= 0.005, "no block: CLS");
+        assert.equal(await block(page).isVisible(), false);
+        assert.equal(await block(page).count(), 1);
+        // The reserved space is released (no blank gap) and the footer is back, with no layout shift.
+        const gap = await page.locator(".rc").evaluate((e) => ({ h: e.getBoundingClientRect().height, reserved: e.hasAttribute("data-reserve") }));
+        assert.deepEqual(gap, { h: 0, reserved: false }, "no gap left when there is no block");
+        assert.equal(await page.locator(".site-footer").isVisible(), true);
+        assert.ok((await page.evaluate(() => window.__cls)) <= 0.005, "no block, after the release: CLS");
+      }, { init: CLS, height: 640 });
+    });
+  }
+
+  test("a network failure of the status call leaves the cancel page exactly as before", async () => {
+    await run({ get: () => ok(INFO), telegram: () => "abort" }, async ({ page, state }) => {
+      await state("confirm").waitFor({ state: "visible" });
+      await page.waitForTimeout(300);
+      assert.equal(await block(page).isVisible(), false);
+      assert.equal(await page.getByRole("button", { name: c.confirm }).isVisible(), true);
+    });
+  });
+
+  test("closed, unknown and malformed tokens never show the block and never call /book/telegram/status", async () => {
+    const offer = tgApi({ status: STATUS({ offerChoice: true }) });
+    await run({ ...offer, get: () => ok({ ...INFO, cancellable: false }) }, async ({ page, state, calls }) => {
+      await state("closed").waitFor({ state: "visible" });
+      await page.waitForTimeout(400);
+      assert.equal(await block(page).isVisible(), false);
+      assert.equal(calls.telegram.length, 0, "closed: no status call");
+      assert.ok((await page.evaluate(() => window.__cls)) <= 0.005, "closed: CLS");
+    }, { init: CLS, height: 640 });
+    await run({ ...offer, get: () => ({ status: 404 }) }, async ({ page, state, calls, problems }) => {
+      await state("notfound").waitFor({ state: "visible" });
+      await page.waitForTimeout(400);
+      assert.equal(calls.telegram.length, 0, "unknown / used: no status call");
+      assert.ok((await page.evaluate(() => window.__cls)) <= 0.005, "notfound: CLS");
+      expected(problems, /status of 404/); // the lookup's own 404 is the only console noise
+      assert.equal(problems.filter((p) => /telegram/.test(p)).length, 0);
+    }, { init: CLS, height: 640 });
+    await run(offer, async ({ page, state, calls }) => {
+      await state("notfound").waitFor({ state: "visible" });
+      assert.equal(calls.telegram.length, 0, "malformed token: no status call");
+    }, { path: "/book/cancel/not-a-token" });
+  });
+
+  test("a successful cancellation hides the block", async () => {
+    await run(tgApi({ status: STATUS({ offerChoice: true }) }), async ({ page, state, confirm, calls }) => {
+      await block(page).waitFor({ state: "visible" });
+      assert.equal(calls.telegram.length, 1);
+      await confirm.click();
+      await state("cancelled").waitFor({ state: "visible" });
+      assert.equal(await block(page).isVisible(), false);
+      assert.equal(calls.telegram.length, 1, "cancelled: no further status call");
+    });
   });
 });

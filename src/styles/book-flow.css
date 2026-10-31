@@ -470,64 +470,6 @@
   --icon-size: var(--vt-app-icon-34);
   --icon-gap: 0;
 }
-.reveal {
-  animation: reveal calc(var(--vt-dur-base) * 2) var(--vt-ease) both;
-}
-@keyframes reveal {
-  from {
-    opacity: 0;
-    transform: translateY(var(--vt-space-md));
-  }
-  to {
-    opacity: 1;
-    transform: none;
-  }
-}
-.cta2 {
-  display: flex;
-  width: 100%;
-  align-items: center;
-  justify-content: center;
-  gap: var(--vt-space-sm);
-  min-height: var(--vt-size-cta);
-  padding: 0 var(--vt-space-sm);
-  border: 0;
-  cursor: pointer;
-  text-decoration: none;
-  border-radius: var(--vt-radius-button);
-  background: var(--vt-color-base);
-  color: var(--vt-color-accent-deep);
-  position: relative;
-  isolation: isolate;
-  transition: transform var(--vt-dur-fast) var(--vt-ease);
-  --icon-size: var(--vt-space-lg);
-  --icon-gap: 0;
-}
-/* The shadow is a pseudo-element: pressing fades it out (opacity), nothing animates box-shadow. */
-.cta2::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  z-index: -1;
-  border-radius: inherit;
-  pointer-events: none;
-  box-shadow: var(--vt-shadow-extruded-button);
-  transition: opacity var(--vt-dur-fast) var(--vt-ease);
-}
-.cta2:active {
-  transform: scale(0.98);
-}
-.cta2:active::before {
-  opacity: 0;
-}
-@media (hover: hover) {
-  .cta2:hover {
-    transform: translateY(calc(var(--vt-lift) * -1));
-  }
-}
-.cta2:focus-visible {
-  transform: translateY(calc(var(--vt-lift) * -1));
-}
 .install {
   display: flex;
   flex-wrap: wrap;
@@ -739,19 +681,6 @@
   display: flex;
   flex-direction: column;
   gap: var(--vt-space-xl);
-}
-.okline {
-  display: flex;
-  align-items: center;
-  gap: var(--vt-space-xs);
-  margin: var(--vt-space-sm) 0 0;
-  color: var(--vt-color-text);
-  --icon-size: var(--vt-app-icon-18);
-  --icon-gap: 0;
-}
-/* Success green is for the check glyph only: as 11 px text on the base it is 3.6:1 (axe color-contrast). */
-.okline .icon {
-  color: var(--vt-color-success);
 }
 .appt .calwrap {
   justify-content: stretch;

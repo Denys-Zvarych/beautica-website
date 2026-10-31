@@ -222,9 +222,14 @@ describe("done screen, Telegram contract", () => {
       });
       await env.page.context().route("https://t.me/**", (r) => r.fulfill({ status: 204 })); // 204 = the browser stays on the page, as if the tab were backgrounded
       await toDone(env);
+      // The deterministic signal that the handler is awaiting the return: it asks the browser to go to t.me (`awaitingReturn = true` is set synchronously just before).
+      // The button is disabled EARLIER (while link-token is in flight), so waiting on `disabled` let the visibility event arrive too soon and be ignored.
+      const toTme = env.page.waitForRequest((r) => r.url().startsWith("https://t.me/"));
       await pickTelegram(env.page);
-      await env.page.waitForFunction(() => document.querySelector("[data-r-connect]").disabled); // awaiting return
+      await toTme;
+      const statusDone = env.page.waitForResponse((r) => r.url().endsWith("/api/v1/book/telegram/status"));
       await visibleAgain(env.page);
+      await statusDone;
       // waitForFunction, not a locator wait: Playwright's own waits block on the pending (204) navigation.
       await env.page.waitForFunction(() => !document.querySelector("[data-r-linked]").hidden);
       await visibleAgain(env.page);
