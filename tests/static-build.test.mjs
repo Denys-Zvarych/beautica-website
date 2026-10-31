@@ -163,3 +163,13 @@ test("the legal pages load the small Latin basic subset, not the full Latin face
     assert.deepEqual(outside, [], `/${p} renders Latin characters outside the basic subset: ${outside}`);
   }
 });
+
+describe("token shells carry <meta name=\"referrer\" content=\"no-referrer\"> (phase 024: no sub-resource may leak the token URL as Referer)", () => {
+  for (const shell of ["/l/cancel.html", "/l/invite.html", "/l/booking.html", "/l/review.html"])
+    test(`${shell}: exactly one no-referrer meta in the built HTML`, () => {
+      const html = readFileSync(join(DIST, shell), "utf8");
+      const metas = [...html.matchAll(/<meta\b[^>]*\bname="referrer"[^>]*>/g)].map((m) => m[0]);
+      assert.equal(metas.length, 1, `${shell}: ${metas.length} referrer metas`);
+      assert.match(metas[0], /\bcontent="no-referrer"/);
+    });
+});

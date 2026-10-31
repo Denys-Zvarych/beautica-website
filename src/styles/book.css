@@ -1,3 +1,4 @@
+@import "./remind.css";
 /* ---------- Latin core for the link pages ----------
    fonts.css declares the whole Latin face (letters, accents, symbols: 31-39 KB per family) and every page needs it for spaces and digits. These
    pages show Ukrainian text only, so they redeclare the same family with a small subset (src/fonts, pyftsubset of the same file: space, digits,
@@ -99,7 +100,6 @@
 .t-heading { font: var(--vt-fw-heading) var(--vt-fs-heading) / var(--vt-lh-heading) var(--vt-font-display); color: var(--vt-color-text); }
 .t-heading-lg { font: var(--vt-fw-heading) var(--vt-app-fs-23) / var(--vt-lh-heading) var(--vt-font-display); color: var(--vt-color-text); }
 .t-title { font: var(--vt-fw-subheading) var(--vt-fs-subheading) / normal var(--vt-font-display); color: var(--vt-color-text); } /* pageTitle = subheading */
-.t-sub13 { font: var(--vt-fw-subheading) var(--vt-fs-input) / normal var(--vt-font-display); color: var(--vt-color-text); }
 .t-sub15 { font: var(--vt-fw-subheading) var(--vt-app-fs-15) / normal var(--vt-font-display); color: var(--vt-color-text); }
 .t-sub12 { font: var(--vt-fw-subheading) var(--vt-fs-body) / normal var(--vt-font-display); color: var(--vt-color-text); }
 .t-sub11 { font: var(--vt-fw-subheading) var(--vt-fs-label) / normal var(--vt-font-display); color: var(--vt-color-text); }
@@ -109,20 +109,12 @@
 .t-stat { font: var(--vt-fw-stat-value) var(--vt-fs-stat-value) / normal var(--vt-font-display); color: var(--vt-color-text); }
 .t-avg { font: var(--vt-fw-heading) var(--vt-app-fs-43) / 1 var(--vt-font-display); color: var(--vt-color-text); }
 .t-body { font: var(--vt-fw-body) var(--vt-fs-body) / var(--vt-lh-body) var(--vt-font-body); color: var(--vt-color-text-secondary); }
-.t-body11 { font: var(--vt-fw-body) var(--vt-fs-label) / var(--vt-lh-body) var(--vt-font-body); color: var(--vt-color-text-secondary); }
 .t-strong { font: var(--vt-fw-body-strong) var(--vt-fs-body) / var(--vt-lh-body) var(--vt-font-body); color: var(--vt-color-text); }
 .t-strong11 { font: var(--vt-fw-body-strong) var(--vt-fs-label) / var(--vt-lh-body) var(--vt-font-body); color: var(--vt-color-text); }
 .t-strong115 { font: var(--vt-fw-body-strong) var(--vt-app-fs-115) / var(--vt-lh-body) var(--vt-font-body); color: var(--vt-color-text); }
 .t-input { font: var(--vt-fw-input) var(--vt-fs-input) / normal var(--vt-font-body); color: var(--vt-color-text); }
 .t-label { font: var(--vt-fw-label) var(--vt-fs-label) / normal var(--vt-font-body); letter-spacing: var(--vt-ls-label); color: var(--bk-text-muted); }
 .t-link { font: var(--vt-fw-label) var(--vt-fs-label) / normal var(--vt-font-body); color: var(--vt-color-accent-deep); }
-.t-fb { font: var(--vt-fw-label) var(--vt-fs-label) / 1.4 var(--vt-font-body); }
-.t-fb.muted { color: var(--bk-text-muted); }
-.t-fb.sec { color: var(--vt-color-text-secondary); }
-.t-fb.deep { color: var(--vt-color-accent-deep); }
-.t-fb.err { color: var(--bk-text-error); }
-.t-fb.w600 { font-weight: 600; }
-.t-fb.w800 { font-weight: 800; }
 .t-stat-cap { font: var(--vt-fw-label) var(--vt-fs-label) / normal var(--vt-font-body); letter-spacing: var(--vt-ls-stat-caption); color: var(--vt-color-text-secondary); }
 .t-price-md { font: 800 var(--vt-fs-subheading) / var(--vt-lh-body) var(--vt-font-body); color: var(--vt-color-accent-deep); } /* bookPriceMd */
 .t-accent-12 { font: 800 var(--vt-fs-body) / var(--vt-lh-body) var(--vt-font-body); color: var(--vt-color-accent-deep); } /* bookAccentBold15 */
@@ -805,25 +797,8 @@ a.tab {
 }
 
 /* ---------- misc ---------- */
-.errcard {
-  display: flex;
-  gap: var(--vt-space-sm);
-  align-items: flex-start;
-  padding: calc(var(--vt-space-sm) + var(--vt-space-xs));
-  border-radius: var(--vt-radius-card);
-  background: var(--vt-color-base);
-  border: var(--vt-app-hair) solid var(--vt-color-faint);
-  box-shadow: var(--vt-shadow-bordered-card);
-  color: var(--vt-color-error);
-  --icon-size: var(--vt-app-icon-18);
-  --icon-gap: 0;
-}
-.errcard .icon,
 .banner .icon {
   margin-top: var(--vt-app-hair);
-}
-.errcard .t-fb {
-  flex: 1;
 }
 .banner {
   display: flex;
@@ -967,7 +942,6 @@ a.tab {
 .pb-lg { padding-bottom: var(--vt-space-lg); }
 .pb-xl { padding-bottom: var(--vt-space-xl); }
 .mb-md { margin-bottom: var(--vt-space-md); }
-.mt-md { margin-top: var(--vt-space-md); }
 .rel { position: relative; }
 .back-abs {
   position: absolute;
@@ -993,9 +967,6 @@ a.tab {
 }
 #otp-resend-btn {
   padding-left: var(--vt-space-xs);
-}
-.cta2 .vt-cta {
-  color: var(--vt-color-accent-deep);
 }
 
 /* NeumorphicButton overlay: the button face is lighter top-left (camel) and darker bottom-right (mocha), as in the app. */

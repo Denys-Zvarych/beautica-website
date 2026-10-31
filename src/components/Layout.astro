@@ -68,6 +68,7 @@ const withAnalytics = analytics && !noReferrer; // a token route (noReferrer) mu
     {preloadLatin && <link rel="preload" as="font" type="font/woff2" href={basicLatin ? comfortaaBasic : comfortaaLat} crossorigin />}
     <Seo {...seo} />
     {withAnalytics && <Analytics />}
+    <slot name="head" />
   </head>
   <body>
     <a class="skip-link" href="#main">{t("a11y.skipToContent")}</a>

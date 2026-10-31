@@ -4,12 +4,13 @@
 import { formatDuration, formatPriceFrom, pluralServices } from "../../lib/booking/format";
 import { formatPhoneGrouped, nationalDigits } from "../../lib/phone";
 import { WINDOW_DAYS, addDays, dayLong, dayShort, daysBetween, inWindow, kyivDay, kyivTime, kyivToday, maxMonthOffset, monthLabel, monthView, partOfDay, weekdayMon0, weekdayShort, type Part } from "./calendar";
-import { cancelPath, createBooking, getAvailability, getBookableDays, sendOtp, verifyOtp, type Fail, type Result, type Slot } from "./api";
+import { cancelPath, cancelToken, createBooking, getAvailability, getBookableDays, sendOtp, verifyOtp, type Fail, type Result, type Slot, type TelegramAvailability } from "./api";
 import { buildIcs, downloadIcs } from "./ics";
 import { mountTurnstile, type Widget } from "./turnstile";
 import { calendarAdd } from "../../lib/icons/strokePaths";
 import { closeRounded, errorOutline, eventAvailable, expandMoreRounded, schedule } from "../../lib/icons/materialPaths";
 import { track } from "../track";
+import { mountReminders } from "./reminder-channel";
 import { hydrateIcons } from "./icons";
 import { cleanComment, cleanName, typingName } from "../../lib/booking/text.ts";
 import type { Core, RecapView, SalonFlow, Svc } from "./salon";
@@ -826,7 +827,7 @@ export async function initBooking(root: HTMLElement): Promise<{ open(): void }> 
     wrap.append(btn);
     return wrap;
   }
-  function renderDone(b: { startsAt: string; durationMinutes: number; cancelUrl: string | null }): void {
+  function renderDone(b: { startsAt: string; durationMinutes: number; cancelUrl: string | null; telegram: TelegramAvailability | null }): void {
     const card = $("#done-card");
     recap(card, true);
     const minutes = totals().minutes || b.durationMinutes;
@@ -838,6 +839,7 @@ export async function initBooking(root: HTMLElement): Promise<{ open(): void }> 
       cancel.href = cPath;
       cancel.hidden = false;
     }
+    mountReminders({ root: document.getElementById("done-reminders"), api, token: cancelToken(cPath), telegram: b.telegram, navigate: (u) => location.assign(u), track });
   }
 
   if (salonMode) {

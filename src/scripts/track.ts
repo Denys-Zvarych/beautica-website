@@ -16,6 +16,8 @@ export const EVENTS: Readonly<Record<string, readonly string[]>> = {
   booking_confirmed: ["services_count"],
   booking_error: ["code"],
   install_prompt_click: [],
+  reminder_channel_telegram_click: [],
+  reminder_channel_unlink: [],
 };
 
 // Channel of the booking link the visitor came from (phase 013): `kind` from the path, `source` from the 1-char `?s=` flag.

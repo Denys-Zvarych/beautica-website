@@ -1,9 +1,7 @@
 // Typed calls to the public booking API (PublicBookingController + PhoneOtpController). Credential-less fetches with a timeout;
 // every outcome is mapped to a small union, so the UI never inspects status codes. No PII is ever logged.
-export type Fail = "validation" | "unauthorized" | "conflict" | "provider-unavailable" | "rate-limited" | "unavailable" | "not-found" | "network" | "error";
-/** `status`: the HTTP status of a failed answer (absent for network / unreadable-body failures). */
-export type Result<T> = { ok: true; data: T } | { ok: false; fail: Fail; status?: number };
-
+export type { Fail, Result } from "./http.ts";
+import type { Fail, Result } from "./http.ts";
 export interface Slot {
   startsAt: string;
   endsAt: string;
@@ -19,6 +17,12 @@ export interface BookingCreated {
   serviceName: string;
   durationMinutes: number;
   cancelUrl: string | null;
+  /** Backend 407 D6: the Telegram reminder channel for the booker's phone. `null` = field absent / malformed = no choice is offered. */
+  telegram: TelegramAvailability | null;
+}
+export interface TelegramAvailability {
+  available: boolean;
+  linked: boolean;
 }
 export interface BookingRequest {
   serviceIds: string[];
@@ -30,54 +34,8 @@ export interface BookingRequest {
   clientComment?: string;
 }
 
-const TIMEOUT_MS = 15000;
-
-/** `code`: the stable `data.code` of an error body. 409 + `BOOKING_UNAVAILABLE` (booking create only, backend 398) is the neutral «blocked» answer; every other 409 stays a slot conflict. */
-export function failFor(status: number, code?: unknown): Fail {
-  if (status === 401 || status === 403) return "unauthorized";
-  if (status === 409) return code === "BOOKING_UNAVAILABLE" ? "provider-unavailable" : "conflict";
-  if (status === 429) return "rate-limited";
-  if (status === 404) return "not-found";
-  if (status === 400 || status === 422) return "validation";
-  if (status === 503 || status === 502 || status === 504) return "unavailable";
-  return "error";
-}
-
-/** Shared low-level call (also used by the review page script). `mapBlocked`: opt-in to the 409 `BOOKING_UNAVAILABLE` mapping (the booking-create calls only); everywhere else a 409 stays a plain conflict. */
-export async function call<T>(url: string, init: RequestInit, read: (json: unknown) => T | null, mapBlocked = false): Promise<Result<T>> {
-  let res: Response;
-  try {
-    res = await fetch(url, { ...init, credentials: "omit", cache: "no-store", referrerPolicy: "no-referrer", signal: AbortSignal.timeout(TIMEOUT_MS) });
-  } catch {
-    return { ok: false, fail: "network" };
-  }
-  if (!res.ok) {
-    let code: unknown;
-    if (mapBlocked && res.status === 409) {
-      try {
-        code = obj(obj(await res.json()).data).code;
-      } catch {
-        /* a 409 without a readable body is a plain conflict */
-      }
-    }
-    return { ok: false, fail: failFor(res.status, code), status: res.status };
-  }
-  let json: unknown = null;
-  try {
-    json = await res.json();
-  } catch {
-    /* an empty body is fine for some endpoints */
-  }
-  const data = read(json);
-  return data === null ? { ok: false, fail: "error" } : { ok: true, data };
-}
-
-const obj = (v: unknown): Record<string, unknown> => (typeof v === "object" && v !== null ? (v as Record<string, unknown>) : {});
-export const post = (body: unknown, token?: string): RequestInit => ({
-  method: "POST",
-  headers: { "Content-Type": "application/json", Accept: "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-  body: JSON.stringify(body),
-});
+export { failFor, call, post } from "./http.ts";
+import { call, post, obj } from "./http.ts";
 
 /** `/book/{slug}` for a master link; `/book/s/{slug}/masters/{masterId}` for one master of a salon link (backend 392/393: salon masters have no link of their own). */
 const scope = (api: string, slug: string, masterId?: string): string =>
@@ -121,7 +79,7 @@ export function createBooking(api: string, slug: string, guestToken: string, b: 
     (j) => {
       const o = obj(j);
       return typeof o.startsAt === "string"
-        ? { startsAt: o.startsAt, masterName: String(o.masterName ?? ""), serviceName: String(o.serviceName ?? ""), durationMinutes: Number(o.durationMinutes ?? 0), cancelUrl: typeof o.cancelUrl === "string" ? o.cancelUrl : null }
+        ? { startsAt: o.startsAt, masterName: String(o.masterName ?? ""), serviceName: String(o.serviceName ?? ""), durationMinutes: Number(o.durationMinutes ?? 0), cancelUrl: typeof o.cancelUrl === "string" ? o.cancelUrl : null, telegram: readTelegram(o.telegram) }
         : null;
     },
     true,
@@ -138,3 +96,17 @@ export function cancelPath(cancelUrl: string | null): string | null {
     return null;
   }
 }
+
+/** The `telegram {available, linked}` block of a booking response; anything else (absent, wrong types) is `null` = no choice shown. */
+export function readTelegram(v: unknown): TelegramAvailability | null {
+  const o = obj(v);
+  return typeof o.available === "boolean" && typeof o.linked === "boolean" ? { available: o.available, linked: o.linked } : null;
+}
+
+/** The cancel token = the UUID at the end of an already-validated `/book/cancel/{uuid}` path (`cancelPath`). */
+export function cancelToken(path: string | null): string | null {
+  const m = path?.match(/^\/book\/cancel\/([0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12})$/i);
+  return m ? m[1]! : null;
+}
+
+export * from "./telegram-api.ts";

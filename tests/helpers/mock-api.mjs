@@ -126,6 +126,7 @@ const MASTERS = {
   "daysr-0001": () => masterInfo(),
   "ambig-504a": () => masterInfo(),
   "nocancel-8888": () => masterInfo(),
+  "tgdone-3131": () => masterInfo(), // booking response carries telegram {available:true, linked:false} (phase 022)
   "foreigncancel-4242": () => masterInfo(),
   "bookdays-5151": () => masterInfo(),
   "expired-6666": () => masterInfo(),
@@ -427,7 +428,7 @@ export async function startMockApi() {
       }
       const names = ids.map((id) => SVC.find((s) => s.id === id)?.name).filter(Boolean);
       const minutes = ids.reduce((a, id) => a + (SVC.find((s) => s.id === id)?.durationMinutes ?? 0), 0);
-      return json(res, 201, { bookingId: "b0b0b0b0-1111-4222-8333-944455556666", appointmentId: ids.length > 1 ? "a0a0a0a0-1111-4222-8333-944455556666" : null, startsAt: b.startsAt, masterName: "Оксана Коваленко", serviceName: names.join(", "), durationMinutes: minutes, cancelUrl: slug === "nocancel-8888" ? null : slug === "foreigncancel-4242" ? FOREIGN_CANCEL_URL : CANCEL_URL });
+      return json(res, 201, { bookingId: "b0b0b0b0-1111-4222-8333-944455556666", appointmentId: ids.length > 1 ? "a0a0a0a0-1111-4222-8333-944455556666" : null, startsAt: b.startsAt, masterName: "Оксана Коваленко", serviceName: names.join(", "), durationMinutes: minutes, cancelUrl: slug === "nocancel-8888" ? null : slug === "foreigncancel-4242" ? FOREIGN_CANCEL_URL : CANCEL_URL, ...(slug.startsWith("tgdone") ? { telegram: { available: true, linked: false } } : {}) });
     }
     // Guest review invites, the real backend 401 shapes (bare JSON, state discriminator, null fields omitted). Tokens by prefix (16+ chars, [A-Za-z0-9_-]):
     //   rvopen...   one service (master)      rvmulti...  two services (master)      rvsalon...  two services, two masters (salon)

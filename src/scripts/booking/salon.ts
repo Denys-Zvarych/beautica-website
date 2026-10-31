@@ -8,9 +8,10 @@ import type { SalonInfo } from "../../lib/booking/types";
 import { hydrateIcons } from "./icons";
 import { cleanComment } from "../../lib/booking/text.ts";
 import { done as doneIcon, errorOutline, person } from "../../lib/icons/materialPaths";
-import { cancelPath, createBooking, type BookingCreated, type Fail, type Slot } from "./api";
+import { cancelPath, cancelToken, createBooking, type BookingCreated, type Fail, type Slot, type TelegramAvailability } from "./api";
 import { clearMarker, createLedger, mayExist, readMarker, saveMarker } from "./uncertain";
 import { track } from "../track";
+import { firstWithToken, mountReminders } from "./reminder-channel";
 
 export interface Svc {
   id: string;
@@ -494,6 +495,7 @@ export function createSalon(core: Core, info: SalonInfo) {
   function renderDone(): void {
     const host = $("#done-list");
     host.replaceChildren();
+    const offers: { token: string | null; telegram: TelegramAvailability | null }[] = [];
     const tpl = $<HTMLTemplateElement>("#tpl-done").content.firstElementChild as HTMLElement;
     const first = tpl.cloneNode(true) as HTMLElement;
     first.querySelector("[data-done-title]")!.remove();
@@ -519,7 +521,11 @@ export function createSalon(core: Core, info: SalonInfo) {
         cancel.hidden = false;
       }
       host.append(a);
+      offers.push({ token: cancelToken(path), telegram: r.data.telegram });
     }
+    // Telegram is per phone: the first booking WITH a cancel token stands for the whole visit.
+    const offer = firstWithToken(offers);
+    if (offer) mountReminders({ root: document.getElementById("done-reminders"), api: core.api, token: offer.token, telegram: offer.telegram, navigate: (u) => location.assign(u), track });
   }
 
   return {

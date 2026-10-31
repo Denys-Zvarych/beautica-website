@@ -175,6 +175,11 @@ jobs:
         timeout-minutes: 5
         run: node scripts/run-tests.mjs tests/booking-privacy.test.mjs
 
+      # Phase 022 success-screen reminder choice (browser, mock backend); also the CLS probe of the done step (<= 0.005).
+      - name: Tests - booking success screen reminders + done-step CLS
+        timeout-minutes: 5
+        run: node scripts/run-tests.mjs tests/book-reminders.test.mjs
+
       # Cold-cache layout shift. Lighthouse profile (412 px, lost font preload => reflow) on four representative routes; the late-font
       # stress profile (360/320 px, fonts delayed) on the home page, the four legal pages and the token shell.
       - name: CLS probe - Lighthouse-like profile
