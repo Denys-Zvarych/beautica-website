@@ -44,7 +44,7 @@ describe("done screen, Telegram on", () => {
       assert.equal(await env.page.getByRole("group", { name: "Куди надсилати нагадування про записи?" }).count(), 1, "group labelled by the heading");
       assert.equal(await env.page.locator('#done-reminders input[value=sms]').isChecked(), true);
       const box = await env.page.locator('#done-reminders input[value=telegram]').locator("xpath=..").boundingBox();
-      assert.ok(box && box.height >= 48, "segment is a 48 px target");
+      assert.ok(box && box.height >= 47.99, `segment is a 48 px target (subpixel layout, same tolerance as book-axe HIT): ${box?.height}`);
       const desc = env.page.locator("#reminders-desc");
       assert.equal((await desc.locator("[data-r-desc=sms]:not([data-off])").innerText()).trim(), "Нагадування прийдуть в SMS на номер, який ви вказали.");
       assert.equal(await env.page.locator("[data-r-connect]").isVisible(), false, "Connect only for Telegram");
