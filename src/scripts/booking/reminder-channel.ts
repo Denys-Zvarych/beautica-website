@@ -3,7 +3,9 @@
 // the booking's cancel token alone (never a phone); a 404 (not eligible / feature off) removes the block, so the screen is exactly
 // the pre-Telegram one. The t.me link comes from the backend and is followed only when api.ts proves its shape. No polling: one
 // status read when the tab becomes visible again after the guest left for Telegram.
-import { telegramLinkToken, telegramStatus, telegramUnlink, type Fail, type TelegramAvailability } from "./api.ts";
+import { telegramLinkToken, telegramStatus, telegramUnlink } from "./telegram-api.ts";
+import type { Fail } from "./http.ts";
+import type { TelegramAvailability } from "./api.ts";
 
 export interface ReminderDeps {
   root: HTMLElement | null;

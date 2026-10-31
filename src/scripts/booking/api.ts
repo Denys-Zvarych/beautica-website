@@ -1,9 +1,7 @@
 // Typed calls to the public booking API (PublicBookingController + PhoneOtpController). Credential-less fetches with a timeout;
 // every outcome is mapped to a small union, so the UI never inspects status codes. No PII is ever logged.
-export type Fail = "validation" | "unauthorized" | "conflict" | "provider-unavailable" | "rate-limited" | "unavailable" | "not-found" | "network" | "error";
-/** `status`: the HTTP status of a failed answer (absent for network / unreadable-body failures). */
-export type Result<T> = { ok: true; data: T } | { ok: false; fail: Fail; status?: number };
-
+export type { Fail, Result } from "./http.ts";
+import type { Fail, Result } from "./http.ts";
 export interface Slot {
   startsAt: string;
   endsAt: string;
@@ -36,54 +34,8 @@ export interface BookingRequest {
   clientComment?: string;
 }
 
-const TIMEOUT_MS = 15000;
-
-/** `code`: the stable `data.code` of an error body. 409 + `BOOKING_UNAVAILABLE` (booking create only, backend 398) is the neutral «blocked» answer; every other 409 stays a slot conflict. */
-export function failFor(status: number, code?: unknown): Fail {
-  if (status === 401 || status === 403) return "unauthorized";
-  if (status === 409) return code === "BOOKING_UNAVAILABLE" ? "provider-unavailable" : "conflict";
-  if (status === 429) return "rate-limited";
-  if (status === 404) return "not-found";
-  if (status === 400 || status === 422) return "validation";
-  if (status === 503 || status === 502 || status === 504) return "unavailable";
-  return "error";
-}
-
-/** Shared low-level call (also used by the review page script). `mapBlocked`: opt-in to the 409 `BOOKING_UNAVAILABLE` mapping (the booking-create calls only); everywhere else a 409 stays a plain conflict. */
-export async function call<T>(url: string, init: RequestInit, read: (json: unknown) => T | null, mapBlocked = false): Promise<Result<T>> {
-  let res: Response;
-  try {
-    res = await fetch(url, { ...init, credentials: "omit", cache: "no-store", referrerPolicy: "no-referrer", signal: AbortSignal.timeout(TIMEOUT_MS) });
-  } catch {
-    return { ok: false, fail: "network" };
-  }
-  if (!res.ok) {
-    let code: unknown;
-    if (mapBlocked && res.status === 409) {
-      try {
-        code = obj(obj(await res.json()).data).code;
-      } catch {
-        /* a 409 without a readable body is a plain conflict */
-      }
-    }
-    return { ok: false, fail: failFor(res.status, code), status: res.status };
-  }
-  let json: unknown = null;
-  try {
-    json = await res.json();
-  } catch {
-    /* an empty body is fine for some endpoints */
-  }
-  const data = read(json);
-  return data === null ? { ok: false, fail: "error" } : { ok: true, data };
-}
-
-const obj = (v: unknown): Record<string, unknown> => (typeof v === "object" && v !== null ? (v as Record<string, unknown>) : {});
-export const post = (body: unknown, token?: string): RequestInit => ({
-  method: "POST",
-  headers: { "Content-Type": "application/json", Accept: "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-  body: JSON.stringify(body),
-});
+export { failFor, call, post } from "./http.ts";
+import { call, post, obj } from "./http.ts";
 
 /** `/book/{slug}` for a master link; `/book/s/{slug}/masters/{masterId}` for one master of a salon link (backend 392/393: salon masters have no link of their own). */
 const scope = (api: string, slug: string, masterId?: string): string =>
@@ -151,35 +103,10 @@ export function readTelegram(v: unknown): TelegramAvailability | null {
   return typeof o.available === "boolean" && typeof o.linked === "boolean" ? { available: o.available, linked: o.linked } : null;
 }
 
-/** Backend 407: the only shape a deep link may have (a bot username and a start token). Anything else is never followed. */
-export const TELEGRAM_URL = /^https:\/\/t\.me\/[A-Za-z0-9_]{5,32}\?start=[A-Za-z0-9_-]{1,64}$/;
-
 /** The cancel token = the UUID at the end of an already-validated `/book/cancel/{uuid}` path (`cancelPath`). */
 export function cancelToken(path: string | null): string | null {
   const m = path?.match(/^\/book\/cancel\/([0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12})$/i);
   return m ? m[1]! : null;
 }
 
-export type LinkToken = { alreadyLinked: true } | { alreadyLinked: false; url: string };
-
-/** POST /api/v1/book/telegram/link-token (404 = not eligible / feature off). Body: the cancel token only. */
-export function telegramLinkToken(api: string, token: string): Promise<Result<LinkToken>> {
-  return call(`${api}/api/v1/book/telegram/link-token`, post({ cancelToken: token }), (j) => {
-    const o = obj(j);
-    if (o.alreadyLinked === true) return { alreadyLinked: true };
-    return typeof o.url === "string" && TELEGRAM_URL.test(o.url) ? { alreadyLinked: false, url: o.url } : null;
-  });
-}
-
-/** POST /api/v1/book/telegram/status. */
-export function telegramStatus(api: string, token: string): Promise<Result<{ available: boolean; linked: boolean; offerChoice: boolean }>> {
-  return call(`${api}/api/v1/book/telegram/status`, post({ cancelToken: token }), (j) => {
-    const o = obj(j);
-    return typeof o.available === "boolean" && typeof o.linked === "boolean" ? { available: o.available, linked: o.linked, offerChoice: o.offerChoice === true } : null;
-  });
-}
-
-/** POST /api/v1/book/telegram/unlink (204, idempotent): the phone goes back to SMS. */
-export function telegramUnlink(api: string, token: string): Promise<Result<true>> {
-  return call(`${api}/api/v1/book/telegram/unlink`, post({ cancelToken: token }), () => true);
-}
+export * from "./telegram-api.ts";

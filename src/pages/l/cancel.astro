@@ -11,6 +11,8 @@ import { API_BASE } from "../../lib/appLinks";
 ---
 
 <AppLinkPage title={t("cancel.metaTitle")} description={t("cancel.metaDescription")} openInApp={false}>
+  {/* Without script the footer must not stay hidden (rule below); a <style> is only valid in <head>, so it goes through Layout's head slot. */}
+  <noscript slot="head"><style is:inline>body .site-footer { visibility: visible !important; }</style></noscript>
   <h1 id="cancel-title" class="vt-heading" tabindex="-1">{t("cancel.h1")}</h1>
   <div
     id="cancel-root"
@@ -27,7 +29,7 @@ import { API_BASE } from "../../lib/appLinks";
   >
     <div class="state" id="st-loading" role="status">
       <p class="vt-prose">{t("cancel.loading")}</p>
-      <noscript><style is:inline>body .site-footer { visibility: visible !important; }</style><p class="vt-prose">{t("cancel.noscript")}</p></noscript>
+      <noscript><p class="vt-prose">{t("cancel.noscript")}</p></noscript>
     </div>
 
     <div class="state" id="st-confirm" hidden>
@@ -119,7 +121,7 @@ import { API_BASE } from "../../lib/appLinks";
 
 <script>
   import { tokenFromPath, fetchInfo, cancelBooking, formatWhen, type CancelState } from "../../lib/guestCancel";
-  import { telegramStatus } from "../../scripts/booking/api";
+  import { telegramStatus } from "../../scripts/booking/telegram-api";
   import { availabilityFromStatus, mountReminders } from "../../scripts/booking/reminder-channel";
 
   const root = document.getElementById("cancel-root")!;
@@ -152,16 +154,11 @@ import { API_BASE } from "../../lib/appLinks";
       rc.removeAttribute("data-reserve");
     }
   }
-  const ctl = () => {
-    const c = new AbortController();
-    setTimeout(() => c.abort(), 15_000);
-    return c.signal;
-  };
 
   async function load() {
     if (!token) return show("notfound");
     show("loading");
-    const { state, info } = await fetchInfo(api, token, ctl());
+    const { state, info } = await fetchInfo(api, token);
     if (info && state === "confirm") {
       $("c-master").textContent = info.masterName;
       $("c-service").textContent = info.serviceName;
@@ -178,7 +175,7 @@ import { API_BASE } from "../../lib/appLinks";
     confirmBtn.disabled = true;
     confirmBtn.setAttribute("aria-busy", "true");
     label.textContent = root.dataset.cancelling ?? "";
-    const state = await cancelBooking(api, token, ctl());
+    const state = await cancelBooking(api, token);
     confirmBtn.disabled = false;
     confirmBtn.removeAttribute("aria-busy");
     label.textContent = root.dataset.confirm ?? "";

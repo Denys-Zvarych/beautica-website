@@ -1,5 +1,7 @@
 // Guest cancel logic (phase 004): pure, no DOM. Backend contract: GET + POST /api/v1/book/cancel/{token}
 // (PublicBookingController.java:125,136). GET -> CancelTokenInfoResponse, POST -> 204.
+import { call } from "../scripts/booking/http.ts";
+
 export type CancelState = "confirm" | "closed" | "notfound" | "error" | "cancelled";
 
 export interface CancelInfo {
@@ -23,24 +25,16 @@ export function stateForStatus(status: number): CancelState {
   return "error";
 }
 
-export async function fetchInfo(api: string, token: string, signal: AbortSignal): Promise<{ state: CancelState; info?: CancelInfo }> {
-  try {
-    const res = await fetch(`${api}/api/v1/book/cancel/${token}`, { headers: { Accept: "application/json" }, signal, credentials: "omit", cache: "no-store", referrerPolicy: "no-referrer" });
-    if (!res.ok) return { state: stateForStatus(res.status) };
-    const info = (await res.json()) as CancelInfo;
-    return { state: info.cancellable ? "confirm" : "closed", info };
-  } catch {
-    return { state: "error" };
-  }
+// Both calls go through the shared `call` (credential-less, no-store, no-referrer, 15 s timeout): the cancel page then ships no fetch code of its own.
+export async function fetchInfo(api: string, token: string): Promise<{ state: CancelState; info?: CancelInfo }> {
+  const r = await call(`${api}/api/v1/book/cancel/${token}`, { headers: { Accept: "application/json" } }, (j) => j as CancelInfo | null);
+  if (!r.ok) return { state: stateForStatus(r.status ?? 0) };
+  return { state: r.data.cancellable ? "confirm" : "closed", info: r.data };
 }
 
-export async function cancelBooking(api: string, token: string, signal: AbortSignal): Promise<CancelState> {
-  try {
-    const res = await fetch(`${api}/api/v1/book/cancel/${token}`, { method: "POST", signal, credentials: "omit", cache: "no-store", referrerPolicy: "no-referrer" });
-    return res.status === 204 || res.ok ? "cancelled" : stateForStatus(res.status);
-  } catch {
-    return "error";
-  }
+export async function cancelBooking(api: string, token: string): Promise<CancelState> {
+  const r = await call(`${api}/api/v1/book/cancel/${token}`, { method: "POST" }, () => true);
+  return r.ok ? "cancelled" : stateForStatus(r.status ?? 0);
 }
 
 export function formatWhen(iso: string, locale = "uk-UA"): string {

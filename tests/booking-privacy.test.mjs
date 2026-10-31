@@ -30,6 +30,8 @@ const EVENTS = {
   otp_verified: [],
   booking_confirmed: ["services_count"],
   booking_error: ["code"],
+  reminder_channel_telegram_click: [],
+  reminder_channel_unlink: [],
 };
 
 /** A page with an analytics spy (window.umami), the fake media + Turnstile origins, and a record of every request with its headers. */
