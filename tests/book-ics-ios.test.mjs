@@ -37,9 +37,17 @@ async function doneScreen(ua) {
     const control = env.page.getByRole("link", { name: "Додати в календар" });
     const tag = await control.evaluate((e) => e.tagName);
     const href = await control.getAttribute("href");
-    // Answer like the endpoint does (an attachment keeps the page where it is; the real bytes are covered in book-ics.test.mjs), then look at what the click ran.
-    await env.page.route("**/api/ics?**", (r) => r.fulfill({ status: 200, headers: { "content-type": "text/calendar; charset=utf-8", "content-disposition": 'attachment; filename="beautica-booking.ics"' }, body: "BEGIN:VCALENDAR\r\nEND:VCALENDAR\r\n" }));
+    // Intercept but pass the REAL endpoint response through (inline text/calendar opens the iOS Calendar sheet and keeps the page where it is), and assert its real header so a regression to `attachment` goes red; then look at what the click ran.
+    let real;
+    await env.page.route("**/api/ics?**", async (r) => {
+      const res = await r.fetch();
+      real = { status: res.status(), type: res.headers()["content-type"], disposition: res.headers()["content-disposition"] };
+      await r.fulfill({ response: res });
+    });
     const [download] = await Promise.all([env.page.waitForEvent("download"), control.click()]);
+    assert.equal(real?.status, 200);
+    assert.match(real.type, /^text\/calendar/);
+    assert.match(real.disposition, /^inline/, "real /api/ics must answer content-disposition: inline");
     assert.equal(download.suggestedFilename(), "beautica-booking.ics");
     const spy = await env.page.evaluate(() => window.__ics);
     return { tag, href, spy, buttons: await env.page.getByRole("button", { name: "Додати в календар" }).count() };

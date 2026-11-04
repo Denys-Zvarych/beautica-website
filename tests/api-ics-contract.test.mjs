@@ -16,11 +16,11 @@ const secured = (res) => {
 };
 
 describe("GET /api/ics: success", () => {
-  test("200, text/calendar, attachment beautica-booking.ics, no-store, noindex", async () => {
+  test("200, text/calendar, inline beautica-booking.ics, no-store, noindex", async () => {
     const res = await get(good);
     assert.equal(res.status, 200);
     assert.equal(res.headers.get("content-type"), "text/calendar; charset=utf-8");
-    assert.equal(res.headers.get("content-disposition"), 'attachment; filename="beautica-booking.ics"');
+    assert.equal(res.headers.get("content-disposition"), 'inline; filename="beautica-booking.ics"');
     secured(res);
     const p = parseIcs(await res.text());
     assert.equal(p.text.SUMMARY, good.t);
@@ -91,6 +91,27 @@ describe("GET /api/ics: who may call it, and which methods", () => {
   });
   for (const v of ["same-origin", "same-site", "none"])
     test(`Sec-Fetch-Site: ${v} -> 200`, async () => assert.equal((await get(good, { headers: { "sec-fetch-site": v } })).status, 200));
+  test("no Sec-Fetch-Site, foreign Referer -> 403", async () => {
+    const res = await get(good, { headers: { referer: "https://evil.example/x" } });
+    assert.equal(res.status, 403);
+    secured(res);
+  });
+  test("foreign Origin -> 403", async () => assert.equal((await get(good, { headers: { origin: "https://evil.example" } })).status, 403));
+  test("unparsable Referer / Origin -> 403", async () => {
+    assert.equal((await get(good, { headers: { referer: "not a url" } })).status, 403);
+    assert.equal((await get(good, { headers: { origin: "null" } })).status, 403);
+  });
+  test("same-host Referer / Origin -> 200", async () => {
+    assert.equal((await get(good, { headers: { referer: `${BASE}/book/done` } })).status, 200);
+    assert.equal((await get(good, { headers: { origin: new URL(BASE).origin } })).status, 200);
+  });
+  test("a lookalike host (same prefix, userinfo trick) or a foreign Referer next to a same-host Origin -> 403", async () => {
+    const host = new URL(BASE).host;
+    assert.equal((await get(good, { headers: { referer: `http://${host}.evil.example/x` } })).status, 403);
+    assert.equal((await get(good, { headers: { referer: `http://${host}@evil.example/x` } })).status, 403);
+    assert.equal((await get(good, { headers: { origin: new URL(BASE).origin, referer: "https://evil.example/x" } })).status, 403);
+  });
+  test("no Referer / Origin / Sec-Fetch-Site -> 200", async () => assert.equal((await get(good)).status, 200));
   for (const method of ["POST", "PUT", "DELETE", "PATCH"])
     test(`${method} -> 405, Allow: GET, no-store, noindex`, async () => {
       const res = await get(good, { method });
@@ -104,11 +125,11 @@ describe("GET /api/ics: who may call it, and which methods", () => {
     assert.equal(res.headers.get("allow"), "GET, HEAD");
     secured(res);
   });
-  test("HEAD valid -> 200, text/calendar, attachment, no-store, empty body", async () => {
+  test("HEAD valid -> 200, text/calendar, inline, no-store, empty body", async () => {
     const res = await get(good, { method: "HEAD" });
     assert.equal(res.status, 200);
     assert.equal(res.headers.get("content-type"), "text/calendar; charset=utf-8");
-    assert.equal(res.headers.get("content-disposition"), 'attachment; filename="beautica-booking.ics"');
+    assert.equal(res.headers.get("content-disposition"), 'inline; filename="beautica-booking.ics"');
     secured(res);
     assert.equal(await res.text(), "");
   });
