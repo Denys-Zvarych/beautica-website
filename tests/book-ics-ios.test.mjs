@@ -5,6 +5,7 @@
 import { test, describe, before, after } from "node:test";
 import assert from "node:assert/strict";
 import { launch } from "./helpers/browser.mjs";
+import { uk } from "./helpers/env.mjs";
 import { bookPage, driveTo } from "./helpers/book.mjs";
 
 const UA = {
@@ -34,7 +35,7 @@ async function doneScreen(ua) {
     await driveTo(env.page, "confirm", { contact: { name: "Айос", phone: "500000031" } });
     await env.page.click("#cta-confirm");
     await env.page.waitForSelector("#done-card", { state: "visible" });
-    const control = env.page.getByRole("link", { name: "Календар Apple" });
+    const control = env.page.getByRole("link", { name: uk.book.done.calendarApple });
     const tag = await control.evaluate((e) => e.tagName);
     const href = await control.getAttribute("href");
     // Intercept but pass the REAL endpoint response through (inline text/calendar opens the iOS Calendar sheet and keeps the page where it is), and assert its real header so a regression to `attachment` goes red; then look at what the click ran.
@@ -50,7 +51,7 @@ async function doneScreen(ua) {
     assert.match(real.disposition, /^inline/, "real /api/ics must answer content-disposition: inline");
     assert.equal(download.suggestedFilename(), "beautica-booking.ics");
     const spy = await env.page.evaluate(() => window.__ics);
-    return { tag, href, spy, buttons: await env.page.getByRole("button", { name: /Google|Apple/ }).count() };
+    return { tag, href, spy, buttons: await env.page.getByRole("button", { name: new RegExp(`${uk.book.done.calendarGoogle}|${uk.book.done.calendarApple}`) }).count() };
   } finally {
     await env.context.close();
   }

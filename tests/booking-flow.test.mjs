@@ -3,7 +3,7 @@
 import { test, describe, before, after } from "node:test";
 import assert from "node:assert/strict";
 import { launch, visibleBox } from "./helpers/browser.mjs";
-import { BASE, MOCK_API } from "./helpers/env.mjs";
+import { BASE, MOCK_API, uk } from "./helpers/env.mjs";
 import { bookPage, mockLog, callsTo, driveTo, fillContact, pickableDay, shot, toggleConsent, SVC_ID } from "./helpers/book.mjs";
 import { PRIVACY_POLICY_VERSION } from "../src/config/legal.mjs";
 import { UMAMI_SCRIPT_SRC, UMAMI_HOST_URL, CF_BEACON_SRC } from "../src/config/analytics.mjs";
@@ -109,10 +109,10 @@ describe("happy path: one service", () => {
       assert.equal(await page.locator("[data-screen=done] a[href*='/book/cancel']").count(), 0, "no link to the cancel page");
       assert.equal(await page.getByRole("button", { name: /Скасувати/ }).count(), 0);
       assert.equal(/Скасувати запис|не пізніше ніж за 2 години/.test(done), false, done);
-      const cal = page.getByRole("link", { name: "Календар Apple" });
+      const cal = page.getByRole("link", { name: uk.book.done.calendarApple });
       assert.equal(await cal.count(), 1);
       assert.equal(new URL(await cal.getAttribute("href"), "https://x.example").pathname, "/api/ics");
-      assert.equal(await page.getByRole("button", { name: "Календар Apple" }).count(), 0, "a link, not a button");
+      assert.equal(await page.getByRole("button", { name: uk.book.done.calendarApple }).count(), 0, "a link, not a button");
       assert.equal(done.includes("Керуйте записами"), false, "no install block: the done step is the design's");
       assert.equal(await page.locator("[data-screen=done] .chip").count(), 0);
       for (const k of ["google", "apple"]) assert.ok(await visibleBox(page.locator(`[data-screen=done] .calbtn[data-cal=${k}] svg`)), `${k} calendar mark is drawn`);
@@ -155,7 +155,7 @@ describe("happy path: one service", () => {
       await driveTo(page, "confirm", { contact: { name: "Календар" } });
       await page.click("#cta-confirm");
       await page.waitForSelector("#done-card", { state: "visible" });
-      const href = await page.getByRole("link", { name: "Календар Apple" }).getAttribute("href");
+      const href = await page.getByRole("link", { name: uk.book.done.calendarApple }).getAttribute("href");
       const res = await page.request.get(new URL(href, page.url()).href);
       assert.equal(res.status(), 200);
       assert.match(res.headers()["content-type"], /^text\/calendar/);

@@ -3,6 +3,7 @@
 import { test, describe, before, after } from "node:test";
 import assert from "node:assert/strict";
 import { launch } from "./helpers/browser.mjs";
+import { uk } from "./helpers/env.mjs";
 import { bookPage, mockLog, driveTo } from "./helpers/book.mjs";
 import { parseIcs } from "./helpers/ics-parse.mjs";
 import { buildIcs } from "../src/scripts/booking/ics.ts";
@@ -63,7 +64,7 @@ async function bookAndDownload(slug) {
     await env.page.click("#cta-confirm");
     await env.page.waitForSelector("#done-card", { state: "visible" });
     const before = await snapshot(env.page);
-    const link = env.page.getByRole("link", { name: "Календар Apple" });
+    const link = env.page.getByRole("link", { name: uk.book.done.calendarApple });
     const href = await link.getAttribute("href");
     const [download] = await Promise.all([env.page.waitForEvent("download"), link.click()]);
     // The browser saved the file (its name is asserted); the bytes are read with the page's own request context from the same href.

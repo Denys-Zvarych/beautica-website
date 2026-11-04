@@ -5,7 +5,7 @@
 import { test, describe, before, after } from "node:test";
 import assert from "node:assert/strict";
 import { launch } from "./helpers/browser.mjs";
-import { BASE, MOCK_API, rawRequest, requireBase } from "./helpers/env.mjs";
+import { BASE, MOCK_API, rawRequest, requireBase, uk } from "./helpers/env.mjs";
 import { callsTo, mockLog, shot } from "./helpers/book.mjs";
 import { wizAssign, wizMasterId, GUEST_TOKEN } from "./helpers/mock-api.mjs";
 import { M1, M2, M3, S1, S2, S3, S4, salonPage, pickServices, openAll, toggleMaster, chip, clickAndLoadDays, nextMaster, days, pickDay, pickSlot, scheduleMaster, verifyOtp, toConfirm } from "./helpers/salon.mjs";
@@ -220,9 +220,9 @@ describe("016: the whole story, one booking per master", () => {
       assert.equal(await done.count(), 3, "the salon address card + one per master");
       assert.equal(await page.locator("#done-list a[data-done-cancel], #done-list a[href*='/book/cancel']").count(), 0, "no cancel link");
       assert.equal(/Скасувати|не пізніше ніж за 2 години/.test(await text(page.locator("[data-screen=done]"))), false, "no cancel text / button");
-      const cals = page.getByRole("link", { name: "Календар Apple" });
+      const cals = page.getByRole("link", { name: uk.book.done.calendarApple });
       assert.equal(await cals.count(), 2, "one calendar link per master");
-      assert.equal(await page.getByRole("button", { name: "Календар Apple" }).count(), 0);
+      assert.equal(await page.getByRole("button", { name: uk.book.done.calendarApple }).count(), 0);
       const hrefs = await cals.evaluateAll((a) => a.map((x) => x.getAttribute("href")));
       for (const h of hrefs) assert.equal(new URL(h, "https://x.example").pathname, "/api/ics");
       assert.equal(hrefs.some((h) => /cancel|123e4567/.test(decodeURIComponent(h))), false, "no cancel token in a calendar URL");
