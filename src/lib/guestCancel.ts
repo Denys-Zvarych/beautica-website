@@ -17,11 +17,20 @@ export interface CancelInfo {
   /** Salon bookings only; null otherwise (absent on an older backend). Shown as text. */
   salonName?: string | null;
   address?: string | null;
+  /** Entrance hint, shown in brackets after the address (only with an address). Text only. */
+  locationNote?: string | null;
 }
 
 /** A displayable text fact: a non-blank string, trimmed; anything else (null, absent, non-string) = no row. */
 export function factText(v: unknown): string | null {
   return typeof v === "string" && v.trim() ? v.trim() : null;
+}
+
+/** «Address (note)»: the note is shown only with an address; no address = no value (the row stays hidden). */
+export function addressWithNote(address: unknown, note: unknown): string | null {
+  const a = factText(address);
+  const n = factText(note);
+  return a ? (n ? `${a} (${n})` : a) : null;
 }
 
 /** Only our own link-page paths are offered as «Записатися знову» (never an arbitrary URL from the response). */
@@ -38,10 +47,21 @@ export function readonlyKind(status: string | undefined): ReadonlyKind {
   return "other";
 }
 
-const TOKEN_RE = /^\/book\/cancel\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\/?$/i;
+/** Short link /c/{16 alphanumerics} (case-sensitive) or the legacy /book/cancel/{uuid}; the token goes to the API unchanged. */
+const SHORT = "[0-9A-Za-z]{16}";
+const UUID = "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}";
+const SHORT_RE = new RegExp(`^/c/(${SHORT})/?$`);
+const LEGACY_RE = new RegExp(`^/book/cancel/(${UUID})/?$`, "i");
+const SHORT_ONLY = new RegExp(`^${SHORT}$`);
+const UUID_ONLY = new RegExp(`^${UUID}$`, "i");
+
+/** Server-side token shape check (same rules as tokenFromPath): 16 alphanumerics or a UUID. */
+export function isValidCancelToken(token: unknown): token is string {
+  return typeof token === "string" && (SHORT_ONLY.test(token) || UUID_ONLY.test(token));
+}
 
 export function tokenFromPath(pathname: string): string | null {
-  return TOKEN_RE.exec(pathname)?.[1] ?? null;
+  return SHORT_RE.exec(pathname)?.[1] ?? LEGACY_RE.exec(pathname)?.[1] ?? null;
 }
 
 /** 404 and 400 (malformed id) mean "used or invalid"; anything unexpected is a retryable error. */

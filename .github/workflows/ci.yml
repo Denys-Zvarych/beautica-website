@@ -159,7 +159,7 @@ jobs:
         timeout-minutes: 5
         run: npm test
         env:
-          TEST_EXCLUDE: booking-flow.test,booking-flow-b,book-compact,book-axe,booking-privacy,book-salon-wizard,review-page,book-blocked
+          TEST_EXCLUDE: booking-flow.test,booking-flow-b,book-compact,book-axe,booking-privacy,book-salon-wizard,review-page,book-blocked,book-reminders
 
       # The flow spec is split in two (phase 025): the single file ran ~273 s with its failures and sat on the 5-minute cap. Each half is ~2 min.
       - name: Tests - guest booking flow, part 1 (browser, mock backend)

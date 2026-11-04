@@ -20,7 +20,7 @@ export const CSP = [
   "object-src 'none'",
 ].join("; ");
 
-/** Token routes (/l/*, /invite/*, /bookings/*, /book/cancel/*, /r/*) never load analytics: the shared policy minus its origins. public/_headers carries the same value. */
+/** Token routes (/l/*, /invite/*, /bookings/*, /book/cancel/*, /c/*, /r/*) never load analytics: the shared policy minus its origins. public/_headers carries the same value. */
 export const TOKEN_CSP = CSP.replace(` ${ANALYTICS_SCRIPT}`, "").replace(` ${ANALYTICS_CONNECT}`, "");
 
 const TURNSTILE = "https://challenges.cloudflare.com";
@@ -79,10 +79,10 @@ export const SECURITY_HEADERS: Record<string, string> = {
 // Applied to every on-demand response, including error answers: it never overrides a header a route already set
 // (token routes set their own Referrer-Policy: no-referrer).
 //
-// `path` (the request pathname) matters for token prefixes: ANY answer under /book/cancel/, /invite/, /bookings/, /l/, /r/ (a 404 for a
+// `path` (the request pathname) matters for token prefixes: ANY answer under /book/cancel/, /c/, /invite/, /bookings/, /l/, /r/ (a 404 for a
 // malformed variant such as /book/cancel/{token}/extra included) is treated as a token response: TOKEN_CSP (no analytics origins),
 // Referrer-Policy no-referrer, no-store, noindex. The URL may hold a token, so nothing on that page may report or leak it.
-export const TOKEN_PATH = /^\/(?:book\/cancel|invite|bookings|l|r)\//;
+export const TOKEN_PATH = /^\/(?:book\/cancel|c|invite|bookings|l|r)\//;
 
 export function withSecurityHeaders(res: Response, path?: string): Response {
   const token = path !== undefined && TOKEN_PATH.test(path);

@@ -145,7 +145,7 @@ import { API_BASE } from "../../lib/appLinks";
 </style>
 
 <script>
-  import { tokenFromPath, fetchInfo, cancelBooking, formatWhen, readonlyKind, safeRebookPath, factText, type CancelState } from "../../lib/guestCancel";
+  import { tokenFromPath, fetchInfo, cancelBooking, formatWhen, readonlyKind, safeRebookPath, factText, addressWithNote, type CancelState } from "../../lib/guestCancel";
   import { telegramStatus } from "../../scripts/booking/telegram-api";
   import { availabilityFromStatus, mountReminders } from "../../scripts/booking/reminder-channel";
 
@@ -181,8 +181,8 @@ import { API_BASE } from "../../lib/appLinks";
   }
 
   // Phase 435: optional salon / address facts, text only (textContent); a null or blank value keeps the row hidden.
-  function setOptionalFacts(prefix: "c" | "r", info: { salonName?: unknown; address?: unknown }) {
-    for (const [key, value] of [["salon", factText(info.salonName)], ["address", factText(info.address)]] as const) {
+  function setOptionalFacts(prefix: "c" | "r", info: { salonName?: unknown; address?: unknown; locationNote?: unknown }) {
+    for (const [key, value] of [["salon", factText(info.salonName)], ["address", addressWithNote(info.address, info.locationNote)]] as const) {
       $(`${prefix}-${key}`).textContent = value ?? "";
       $(`${prefix}-${key}-row`).hidden = !value;
     }

@@ -53,6 +53,16 @@ const axeViolations = async (page) => {
   const res = await page.evaluate(() => axe.run(document, { runOnly: ["wcag2a", "wcag2aa", "wcag21aa", "best-practice"] }));
   return res.violations.map((v) => `${v.id}: ${v.nodes.slice(0, 2).map((n) => n.target.join(" ")).join(" | ")}`);
 };
+/** Two painted frames: any layout shift the last change causes has been reported (a condition, not a fixed sleep). */
+const quiet = (page) => page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
+/** Polls until `read()` is truthy (e.g. the mock saw the request); fails with `msg` after 15 s. */
+async function until(read, msg) {
+  const end = Date.now() + 15_000;
+  while (!read() && Date.now() < end) await new Promise((r) => setTimeout(r, 25));
+  assert.ok(read(), msg);
+}
+/** The status call was answered and the reserved space under the confirm button is settled (released when there is no block). */
+const releasedSpace = (page) => page.waitForFunction(() => { const e = document.querySelector(".rc"); return !!e && !e.hasAttribute("data-reserve"); });
 const expected = (problems, re) => assert.deepEqual(problems.filter((p) => !re.test(p)), [], "unexpected console/page errors");
 
 describe("loading the booking", () => {
@@ -193,13 +203,37 @@ describe("confirming the cancel", () => {
 });
 
 describe("the link itself", () => {
-  test("a malformed token never reaches the API: straight to «notfound»", async () => {
-    await run({ get: () => ok(INFO) }, async ({ page, state, calls }) => {
-      await state("notfound").waitFor({ state: "visible" });
-      assert.equal(calls.length, 0);
-      await assertOnlyState(page, "notfound");
-    }, { path: "/book/cancel/not-a-token" });
+  // Malformed tokens are refused by the Worker with the 404 page (no cancel shell at all); see tests/headers-seo.test.mjs for status + headers.
+  const assertServer404 = async (page, calls) => {
+    await page.waitForLoadState("load");
+    assert.equal(await page.locator("#cancel-root").count(), 0, "the 404 page, not the cancel shell");
+    assert.equal(calls.length, 0);
+  };
+  test("a malformed token never reaches the API: the server answers with the 404 page", async () => {
+    await run({ get: () => ok(INFO) }, async ({ page, calls }) => assertServer404(page, calls), { path: "/book/cancel/not-a-token" });
   });
+
+  test("the short link /c/{16} renders the confirm page; the token is forwarded unchanged (case kept)", async () => {
+    const short = "Ab3dEf7hJk9mNp2Q";
+    await run({ get: () => ok(INFO) }, async ({ page, state, calls }) => {
+      await state("confirm").waitFor({ state: "visible" });
+      assert.equal(calls[0].url, `${API_ORIGIN}/api/v1/book/cancel/${short}`);
+      await assertOnlyState(page, "confirm");
+    }, { path: `/c/${short}` });
+  });
+
+  test("the short link with a trailing slash redirects to the slash-less URL and still renders", async () => {
+    await run({ get: () => ok(INFO) }, async ({ page, state }) => {
+      await state("confirm").waitFor({ state: "visible" });
+      assert.equal(new URL(page.url()).pathname, "/c/Ab3dEf7hJk9mNp2Q");
+    }, { path: "/c/Ab3dEf7hJk9mNp2Q/" });
+  });
+
+  for (const bad of ["/c/Ab3dEf7hJk9mNp2", "/c/Ab3dEf7hJk9mNp2QQ", "/c/Ab3dEf7hJk9mNp2-", "/c/Ab3dEf7hJk9mNp2_"]) {
+    test(`${bad}: the server answers with the 404 page and never reaches the API`, async () => {
+      await run({ get: () => ok(INFO) }, async ({ page, calls }) => assertServer404(page, calls), { path: bad });
+    });
+  }
 
   test("an upper-case token is accepted and forwarded as written", async () => {
     const upper = TOKEN.toUpperCase();
@@ -265,7 +299,7 @@ describe("reminder channel on the cancel page (phase 024)", () => {
     await run(tgApi({ status: STATUS({ offerChoice: true }) }), async ({ page, state, calls }) => {
       await state("confirm").waitFor({ state: "visible" });
       await block(page).waitFor({ state: "visible" });
-      await page.waitForTimeout(400);
+      await quiet(page);
       const cls = await page.evaluate(() => window.__cls);
       console.log("cancel page CLS (confirm + block):", cls);
       assert.ok(cls <= 0.005, `CLS ${cls}`);
@@ -290,7 +324,7 @@ describe("reminder channel on the cancel page (phase 024)", () => {
       await state("confirm").waitFor({ state: "visible" });
       await block(page).waitFor({ state: "visible" });
       assert.equal(await page.getByText(r.linked).isVisible(), true);
-      await page.waitForTimeout(400);
+      await quiet(page);
       assert.ok((await page.evaluate(() => window.__cls)) <= 0.005, "linked: CLS");
       assert.equal(await page.locator("#done-reminders .seg").isVisible(), false);
       assert.deepEqual(await axeViolations(page), []);
@@ -310,7 +344,9 @@ describe("reminder channel on the cancel page (phase 024)", () => {
     test(`block absent: ${name}`, async () => {
       await run(tgApi({ status }), async ({ page, state, calls }) => {
         await state("confirm").waitFor({ state: "visible" });
-        await page.waitForTimeout(400);
+        await until(() => tgCalls(calls).length >= 1, "the status call was made");
+        await releasedSpace(page);
+        await quiet(page);
         assert.equal(tgCalls(calls).length, 1);
         assert.ok((await page.evaluate(() => window.__cls)) <= 0.005, "no block: CLS");
         assert.equal(await block(page).isVisible(), false);
@@ -327,7 +363,8 @@ describe("reminder channel on the cancel page (phase 024)", () => {
   test("a network failure of the status call leaves the cancel page exactly as before", async () => {
     await run({ get: () => ok(INFO), telegram: () => "abort" }, async ({ page, state }) => {
       await state("confirm").waitFor({ state: "visible" });
-      await page.waitForTimeout(300);
+      await releasedSpace(page);
+      await quiet(page);
       assert.equal(await block(page).isVisible(), false);
       assert.equal(await page.getByRole("button", { name: c.confirm }).isVisible(), true);
     });
@@ -337,21 +374,22 @@ describe("reminder channel on the cancel page (phase 024)", () => {
     const offer = tgApi({ status: STATUS({ offerChoice: true }) });
     await run({ ...offer, get: () => ok({ ...INFO, cancellable: false }) }, async ({ page, state, calls }) => {
       await state("closed").waitFor({ state: "visible" });
-      await page.waitForTimeout(400);
+      await quiet(page);
       assert.equal(await block(page).isVisible(), false);
       assert.equal(calls.telegram.length, 0, "closed: no status call");
       assert.ok((await page.evaluate(() => window.__cls)) <= 0.005, "closed: CLS");
     }, { init: CLS, height: 640 });
     await run({ ...offer, get: () => ({ status: 404 }) }, async ({ page, state, calls, problems }) => {
       await state("notfound").waitFor({ state: "visible" });
-      await page.waitForTimeout(400);
+      await quiet(page);
       assert.equal(calls.telegram.length, 0, "unknown / used: no status call");
       assert.ok((await page.evaluate(() => window.__cls)) <= 0.005, "notfound: CLS");
       expected(problems, /status of 404/); // the lookup's own 404 is the only console noise
       assert.equal(problems.filter((p) => /telegram/.test(p)).length, 0);
     }, { init: CLS, height: 640 });
-    await run(offer, async ({ page, state, calls }) => {
-      await state("notfound").waitFor({ state: "visible" });
+    await run(offer, async ({ page, calls }) => {
+      await page.waitForLoadState("load");
+      assert.equal(await page.locator("#cancel-root").count(), 0, "the 404 page, not the cancel shell");
       assert.equal(calls.telegram.length, 0, "malformed token: no status call");
     }, { path: "/book/cancel/not-a-token" });
   });
@@ -474,6 +512,34 @@ describe("salon and address facts (phase 435)", () => {
         assert.equal((await page.locator(`#${p}-salon`).innerText()).trim(), "Beauty Room");
         assert.equal((await page.locator(`#${p}-address`).innerText()).trim(), "Київ, вул. Хрещатик, 1");
       });
+    });
+
+    test(`${st}: locationNote follows the address in brackets, as text`, async () => {
+      await run({ get: () => ok({ ...INFO, ...extra, address: "Хрещатик 10", locationNote: "вхід з двору" }) }, async ({ page, state }) => {
+        await state(st).waitFor({ state: "visible" });
+        assert.equal((await page.locator(`#${p}-address`).innerText()).trim(), "Хрещатик 10 (вхід з двору)");
+      });
+      await run({ get: () => ok({ ...INFO, ...extra, address: "Хрещатик 10", locationNote: "<b>x</b>" }) }, async ({ page, state }) => {
+        await state(st).waitFor({ state: "visible" });
+        assert.equal((await page.locator(`#${p}-address`).innerText()).trim(), "Хрещатик 10 (<b>x</b>)");
+        assert.equal(await page.locator(`#${p}-address *`).count(), 0);
+      });
+    });
+
+    test(`${st}: no note = plain address; a note without an address shows no row`, async () => {
+      for (const body of [{ address: "Хрещатик 10", locationNote: null }, { address: "Хрещатик 10", locationNote: "  " }, { address: "Хрещатик 10" }]) {
+        await run({ get: () => ok({ ...INFO, ...extra, ...body }) }, async ({ page, state }) => {
+          await state(st).waitFor({ state: "visible" });
+          assert.equal((await page.locator(`#${p}-address`).innerText()).trim(), "Хрещатик 10");
+        });
+      }
+      for (const body of [{ address: null, locationNote: "вхід з двору" }, { locationNote: "вхід з двору" }, { address: " ", locationNote: "вхід з двору" }]) {
+        await run({ get: () => ok({ ...INFO, ...extra, ...body }) }, async ({ page, state }) => {
+          await state(st).waitFor({ state: "visible" });
+          assert.equal(await page.locator(`#${p}-address-row`).isVisible(), false);
+          assert.equal((await page.locator(`#${p}-address`).textContent()).trim(), "");
+        });
+      }
     });
 
     test(`${st}: null, blank or absent values leave both rows hidden`, async () => {

@@ -18,7 +18,8 @@ export async function launch() {
  */
 export async function open(browser, { width = 360, height = 800, ...opts } = {}) {
   const context = await browser.newContext({ viewport: { width, height }, ...opts });
-  context.setDefaultTimeout(10_000); // a broken feature fails in 10 s, not 30
+  context.setDefaultTimeout(15_000); // a broken feature fails in 15 s, not 30
+  context.setDefaultNavigationTimeout(60_000); // wrangler cold-starts a route and a loaded runner stalls navigations: wait on the condition, not a tight clock
   const external = [];
   const problems = [];
   await context.route(

@@ -6,7 +6,7 @@ import { test, describe, before, after } from "node:test";
 import assert from "node:assert/strict";
 import { launch, open, mockCancelApi } from "./helpers/browser.mjs";
 import { bookPage, pickableDay } from "./helpers/book.mjs";
-import { BASE, TOKEN, requireBase } from "./helpers/env.mjs";
+import { BASE, TOKEN, SHORT_TOKEN, requireBase } from "./helpers/env.mjs";
 import { UMAMI_SCRIPT_SRC, UMAMI_HOST_URL, UMAMI_WEBSITE_ID, UMAMI_DOMAINS, CF_BEACON_SRC, CF_BEACON_TOKEN } from "../src/config/analytics.mjs";
 
 requireBase();
@@ -33,18 +33,20 @@ async function stubTags(context, { umami = "stub", beforeUmami } = {}) {
 
 describe("loader timing and attributes on public pages", () => {
   for (const path of ["/", "/privacy"]) {
-    test(`${path}: no analytics request until >= 1.4 s after the load event; then Umami and the beacon with the documented attributes`, async () => {
+    test(`${path}: no analytics request before the 1.5 s delay (fake clock); then Umami and the beacon with the documented attributes`, async () => {
       const { context, page } = await open(browser);
       try {
         const hits = await stubTags(context);
-        let loadedAt = 0;
-        page.on("load", () => (loadedAt = Date.now()));
+        await page.clock.install(); // controlled clock: the 1.5 s delay is stepped, never waited for
         await page.goto(BASE + path, { waitUntil: "load" });
         assert.equal(await page.locator("script[data-website-id], script[data-cf-beacon]").count(), 0, "no tag at load time");
+        await page.clock.runFor(1400);
+        assert.deepEqual(hits, [], "nothing requested before the 1.5 s delay");
+        assert.equal(await page.locator("script[data-website-id]").count(), 0, "no Umami tag at 1.4 s");
+        await page.clock.runFor(6000); // past the delay, the idle slot and the beacon's slot
         await page.waitForFunction(() => document.querySelector("script[data-cf-beacon]")); // condition, not a sleep
+        await expectEventually(() => hits.length, 2, "both analytics requests recorded"); // the tag element is injected before its request is routed
         assert.deepEqual(hits.map((h) => h.url), [UMAMI_SCRIPT_SRC, CF_BEACON_SRC], "Umami first, the beacon in its own later slot");
-        assert.ok(loadedAt > 0 && hits[0].at - loadedAt >= 1300, // the page arms its 1500 ms timer at the load event; this side learns of the event late on a loaded runner (1365 ms seen), so 100 ms slack
-           `first analytics request ${hits[0].at - loadedAt} ms after load`);
         assert.ok(hits[1].at >= hits[0].at);
         const attr = (sel, name) => page.locator(sel).getAttribute(name);
         assert.equal(await attr("script[data-website-id]", "data-website-id"), UMAMI_WEBSITE_ID);
@@ -61,10 +63,10 @@ describe("loader timing and attributes on public pages", () => {
 });
 
 describe("token routes and malformed token paths: no marker, no tag, no request even after 10 s", () => {
-  const MALFORMED = ["/book/cancel/a/b", `/book/cancel/${TOKEN}/extra`, "/invite/x/y", "/bookings/x/y", "/l/nothing"];
-  const PATHS = [`/bookings/${TOKEN}`, `/bookings/${TOKEN}/review`, "/invite/accept?token=abc123", `/book/cancel/${TOKEN}`, "/l/booking", "/l/cancel", ...MALFORMED];
+  const MALFORMED = ["/book/cancel/a/b", `/book/cancel/${TOKEN}/extra`, "/c/a/b", `/c/${SHORT_TOKEN}/extra`, "/invite/x/y", "/bookings/x/y", "/l/nothing"];
+  const PATHS = [`/bookings/${TOKEN}`, `/bookings/${TOKEN}/review`, "/invite/accept?token=abc123", `/book/cancel/${TOKEN}`, `/c/${SHORT_TOKEN}`, "/l/booking", "/l/cancel", ...MALFORMED];
   for (const path of PATHS) {
-    test(`${path.replace(TOKEN, ":id")}: nothing requested`, async () => {
+    test(`${path.replace(TOKEN, ":id").replace(SHORT_TOKEN, ":short")}: nothing requested`, async () => {
       const { context, page, analytics } = await open(browser);
       try {
         await mockCancelApi(context, { get: () => ({ status: 404 }) });
@@ -163,6 +165,13 @@ describe("link_open on a booking link survives the delayed load", () => {
   });
 });
 
+/** Polls (condition, not a sleep) until `read()` equals `want`; the final failure shows the last value. */
+async function expectEventually(read, want, msg, ms = 15_000) {
+  const end = Date.now() + ms;
+  while (read() !== want && Date.now() < end) await new Promise((r) => setTimeout(r, 25));
+  assert.equal(read(), want, msg);
+}
+
 /** Opens a booking-link page with the fake clock installed BEFORE navigation and the tags answered locally. */
 async function bookPageWithClock(slug, query, referer, tagOpts) {
   const env = await open(browser);
@@ -194,7 +203,7 @@ describe("no cookies, ever", () => {
         const hits = await stubTags(context);
         await page.goto(BASE + path, { waitUntil: "load" });
         await page.waitForFunction(() => document.querySelector("script[data-cf-beacon]")); // analytics fully injected
-        assert.equal(hits.length, 2);
+        await expectEventually(() => hits.length, 2, "both analytics requests recorded"); // the tag element appears before its request is routed
         if (path === "/privacy") {
           await page.locator("details.toc-details summary").click().catch(() => {}); // contents list is a <details> on phones
           await page.keyboard.press("End");

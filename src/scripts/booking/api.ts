@@ -86,12 +86,15 @@ export function createBooking(api: string, slug: string, guestToken: string, b: 
   );
 }
 
-/** The cancel page lives on this site: keep only the `/book/cancel/{uuid}` path of whatever origin the backend put in the URL. */
+const CANCEL_SHORT = /^\/c\/[0-9A-Za-z]{16}$/;
+const CANCEL_LEGACY = /^\/book\/cancel\/[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i;
+
+/** The cancel page lives on this site: keep only the `/c/{16}` (or legacy `/book/cancel/{uuid}`) path of whatever origin the backend put in the URL. */
 export function cancelPath(cancelUrl: string | null): string | null {
   if (!cancelUrl) return null;
   try {
     const p = new URL(cancelUrl, "https://beautica.app").pathname;
-    return /^\/book\/cancel\/[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(p) ? p : null;
+    return CANCEL_SHORT.test(p) || CANCEL_LEGACY.test(p) ? p : null;
   } catch {
     return null;
   }
@@ -103,10 +106,9 @@ export function readTelegram(v: unknown): TelegramAvailability | null {
   return typeof o.available === "boolean" && typeof o.linked === "boolean" ? { available: o.available, linked: o.linked } : null;
 }
 
-/** The cancel token = the UUID at the end of an already-validated `/book/cancel/{uuid}` path (`cancelPath`). */
+/** The cancel token = the last segment of an already-validated `/c/{16}` or `/book/cancel/{uuid}` path (`cancelPath`). */
 export function cancelToken(path: string | null): string | null {
-  const m = path?.match(/^\/book\/cancel\/([0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12})$/i);
-  return m ? m[1]! : null;
+  return path && (CANCEL_SHORT.test(path) || CANCEL_LEGACY.test(path)) ? path.slice(path.lastIndexOf("/") + 1) : null;
 }
 
 export * from "./telegram-api.ts";
