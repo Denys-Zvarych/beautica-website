@@ -234,7 +234,7 @@ describe("done screen, Telegram contract", () => {
       await toDone(env);
       await env.page.getByText("Нагадування надходять у Telegram").waitFor({ state: "visible" });
       assert.equal(await env.page.locator('#done-reminders input[value=sms]').isVisible(), false);
-      await env.page.getByRole("button", { name: "Повернутися до SMS" }).click();
+      await env.page.getByRole("button", { name: "Відписатися від Telegram" }).click();
       await env.page.locator('#done-reminders input[value=sms]').waitFor({ state: "visible" });
       assert.equal(await env.page.locator('#done-reminders input[value=sms]').isChecked(), true);
       assert.deepEqual(calls.unlink.map((b) => JSON.parse(b)), [{ cancelToken: "123e4567-e89b-42d3-a456-426614174000" }]);

@@ -280,7 +280,7 @@ describe("the link itself", () => {
 });
 
 // Phase 024: the reminder-channel block of the cancel page (ReminderChannelChoice + reminder-channel.ts, reused from the done screen).
-// The status answer alone decides (never the booking source): offerChoice -> radios; linked -> status + «Повернутися до SMS»; otherwise nothing.
+// The status answer alone decides (never the booking source): offerChoice -> radios; linked -> status + «Відписатися від Telegram»; otherwise nothing.
 describe("reminder channel on the cancel page (phase 024)", () => {
   const CLS = `window.__cls=0;new PerformanceObserver(function(l){for(const e of l.getEntries())if(!e.hadRecentInput)window.__cls+=e.value}).observe({type:"layout-shift",buffered:true});`;
   const r = uk.book.done.reminders;
@@ -319,7 +319,7 @@ describe("reminder channel on the cancel page (phase 024)", () => {
     }, { init: CLS, height: 640 });
   });
 
-  test("linked:true shows the Telegram status + «Повернутися до SMS»; the unlink POST returns the choice; axe clean", async () => {
+  test("linked:true shows the Telegram status + «Відписатися від Telegram»; the unlink POST returns the choice; axe clean", async () => {
     await run(tgApi({ status: { status: 200, json: { available: true, linked: true, offerChoice: false } }, unlink: { status: 204 } }), async ({ page, state, calls }) => {
       await state("confirm").waitFor({ state: "visible" });
       await block(page).waitFor({ state: "visible" });

@@ -22,7 +22,7 @@ export interface ReminderDeps {
 export const offered = (telegram: TelegramAvailability | null, token: string | null): boolean => telegram?.available === true && !!token;
 
 /**
- * Cancel page (phase 024): the status answer decides, never the booking source. `linked` -> status + «Повернутися до SMS»;
+ * Cancel page (phase 024): the status answer decides, never the booking source. `linked` -> status + «Відписатися від Telegram»;
  * `offerChoice` (a walk-in not linked yet) -> the choice; a booking-link guest who is not linked already chose on the success screen -> `null` (no block).
  */
 export function availabilityFromStatus(s: { available: boolean; linked: boolean; offerChoice: boolean }): TelegramAvailability | null {

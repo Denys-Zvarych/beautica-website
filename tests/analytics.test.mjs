@@ -37,13 +37,15 @@ describe("loader timing and attributes on public pages", () => {
       const { context, page } = await open(browser);
       try {
         const hits = await stubTags(context);
-        await page.clock.install(); // controlled clock: the 1.5 s delay is stepped, never waited for
+        await page.clock.install({ time: 0 }); // controlled clock: the 1.5 s delay is stepped, never waited for
+        await page.clock.pauseAt(1000); // frozen from page start: a slow load under CI cannot let real time run the 1.5 s timer
         await page.goto(BASE + path, { waitUntil: "load" });
         assert.equal(await page.locator("script[data-website-id], script[data-cf-beacon]").count(), 0, "no tag at load time");
         await page.clock.runFor(1400);
         assert.deepEqual(hits, [], "nothing requested before the 1.5 s delay");
         assert.equal(await page.locator("script[data-website-id]").count(), 0, "no Umami tag at 1.4 s");
         await page.clock.runFor(6000); // past the delay, the idle slot and the beacon's slot
+        await page.clock.resume(); // real time again: the idle slot and the stub responses need it
         await page.waitForFunction(() => document.querySelector("script[data-cf-beacon]")); // condition, not a sleep
         await expectEventually(() => hits.length, 2, "both analytics requests recorded"); // the tag element is injected before its request is routed
         assert.deepEqual(hits.map((h) => h.url), [UMAMI_SCRIPT_SRC, CF_BEACON_SRC], "Umami first, the beacon in its own later slot");
