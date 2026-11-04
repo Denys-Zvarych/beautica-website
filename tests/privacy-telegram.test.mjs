@@ -53,7 +53,7 @@ describe("/privacy: the Telegram subsection is reachable and the table of conten
 });
 
 describe("the policy's Telegram facts equal the backend's", gate, () => {
-  const KINDS = { GUEST_REMINDER_24H: "за 24 год", GUEST_REMINDER_2H: "за 2 год", GUEST_PROVIDER_CANCELLATION: "скасування або перенесення запису майстром чи салоном", GUEST_PROVIDER_RESCHEDULE: "перенесення запису майстром чи салоном", GUEST_REVIEW_INVITE: "запрошення залишити відгук" };
+  const KINDS = { GUEST_CONFIRMATION: "підтвердження запису з посиланням для скасування", WALK_IN_CONFIRMATION: "запису, який вам зробив майстер", GUEST_REMINDER_24H: "за 24 год", GUEST_REMINDER_2H: "за 2 год", GUEST_PROVIDER_CANCELLATION: "скасування або перенесення запису майстром чи салоном", GUEST_PROVIDER_RESCHEDULE: "перенесення запису майстром чи салоном", GUEST_REVIEW_INVITE: "запрошення залишити відгук" };
   test("the messages the policy sends via Telegram are exactly the GuestMessageKind values", () => {
     const enumBody = /GuestMessageKind\s*\{([\s\S]*?);/.exec(javaSource("GuestMessageKind").replace(/\/\*[\s\S]*?\*\//g, ""))[1];
     const kinds = [...enumBody.matchAll(/\b([A-Z][A-Z0-9_]+)\(/g)].map((m) => m[1]);
@@ -61,10 +61,10 @@ describe("the policy's Telegram facts equal the backend's", gate, () => {
     const sent = bullet("Що надсилаємо в Telegram").split("Код підтвердження")[0];
     for (const [k, phrase] of Object.entries(KINDS)) assert.ok(sent.includes(phrase), `policy no longer lists ${k} («${phrase}»)`);
   });
-  test("the SMS-only kinds the policy names (code, confirmation + cancel link, own cancellation) are NOT Telegram kinds", () => {
+  test("the policy says only the phone code is SMS-only and the guest's own cancellation sends nothing: neither is a Telegram kind", () => {
     const smsOnly = bullet("Що надсилаємо в Telegram").split("Код підтвердження")[1] ?? "";
-    for (const phrase of ["підтвердження запису з посиланням для скасування", "підтвердження скасування, яке ви зробили самі", "лише SMS"]) assert.ok(smsOnly.includes(phrase), `policy lost the SMS-only item «${phrase}»`);
-    assert.doesNotMatch(javaSource("GuestMessageKind"), /^\s*GUEST_(OTP|CONFIRMATION|CANCELLATION)\w*\(/m, "an SMS-only kind became Telegram-capable: update the policy");
+    for (const phrase of ["лише SMS", "скасування, яке ви зробили самі, ми не надсилаємо"]) assert.ok(smsOnly.includes(phrase), `policy lost the SMS-only item «${phrase}»`);
+    assert.doesNotMatch(javaSource("GuestMessageKind"), /^\s*GUEST_(OTP|CANCELLATION)\w*\(/m, "the phone code or the guest's own cancellation became a Telegram kind: update the policy");
   });
   test("the link is keyed by an HMAC-SHA-256 of the phone, as the policy says", () => {
     assert.match(bullet("Що ми зберігаємо"), /HMAC-SHA-256/);
