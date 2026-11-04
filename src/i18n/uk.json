@@ -386,6 +386,8 @@
       "h": "Записано!",
       "sub": "Ваш запис підтверджено",
       "calendar": "Додати в календар",
+      "calendarGoogle": "Google Календар",
+      "calendarApple": "Календар Apple",
       "reminders": {
         "heading": "Куди надсилати нагадування про записи?",
         "sms": "SMS",

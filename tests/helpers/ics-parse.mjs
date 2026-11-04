@@ -3,8 +3,9 @@
 // unbalanced components, unescaped TEXT specials, duplicate/missing required properties, and, since phase 025, ANY URL property (the file never carries a cancel link).
 const TEXT_PROPS = new Set(["SUMMARY", "DESCRIPTION", "LOCATION"]);
 const ALLOWED = {
-  VCALENDAR: new Set(["VERSION", "PRODID", "CALSCALE"]),
+  VCALENDAR: new Set(["VERSION", "PRODID", "CALSCALE", "METHOD"]),
   VEVENT: new Set(["UID", "DTSTAMP", "DTSTART", "DTEND", "SUMMARY", "DESCRIPTION", "LOCATION"]),
+  VALARM: new Set(["ACTION", "TRIGGER", "DESCRIPTION"]),
 };
 const REQUIRED = { VCALENDAR: ["VERSION", "PRODID"], VEVENT: ["UID", "DTSTAMP", "DTSTART", "DTEND", "SUMMARY", "DESCRIPTION"] };
 const fail = (m) => { throw new Error(`invalid iCalendar: ${m}`); };
@@ -27,7 +28,7 @@ export function parseIcs(ics) {
     else lines.push(l);
   }
   const stack = [];
-  const seen = { VCALENDAR: {}, VEVENT: {} };
+  const seen = { VCALENDAR: {}, VEVENT: {}, VALARM: {} };
   const text = {};
   let events = 0;
   if (lines[0] !== "BEGIN:VCALENDAR") fail("first line must be BEGIN:VCALENDAR");
@@ -39,6 +40,8 @@ export function parseIcs(ics) {
     const [, name, , value] = m;
     if (name === "BEGIN") {
       if (value === "VEVENT" && stack.at(-1) !== "VCALENDAR") fail("VEVENT outside VCALENDAR");
+      if (value === "VALARM" && stack.at(-1) !== "VEVENT") fail("VALARM outside VEVENT");
+      if (value === "VALARM" && "ACTION" in seen.VALARM) fail("more than one VALARM");
       if (value === "VCALENDAR" && stack.length) fail("nested VCALENDAR");
       if (!(value in ALLOWED)) fail(`unknown component ${value}`);
       if (value === "VEVENT") events++;
@@ -50,7 +53,7 @@ export function parseIcs(ics) {
       if (!comp || !ALLOWED[comp].has(name)) fail(`property ${name} not allowed in ${comp}`);
       if (name in seen[comp]) fail(`duplicate ${name}`);
       seen[comp][name] = value;
-      if (TEXT_PROPS.has(name)) {
+      if (comp === "VEVENT" && TEXT_PROPS.has(name)) {
         if (/(^|[^\\])(\\\\)*[;,]/.test(value)) fail(`unescaped ; or , in ${name}: ${value}`);
         if (/\\[^\\;,nN]/.test(value.replace(/\\\\/g, ""))) fail(`bad escape in ${name}: ${value}`);
         text[name] = value.replace(/\\(.)/g, (_, c) => (c === "n" || c === "N" ? "\n" : c)); // single pass: \\ \; \, \n
@@ -59,6 +62,8 @@ export function parseIcs(ics) {
   }
   if (stack.length) fail("unclosed component");
   if (events !== 1) fail(`expected exactly one VEVENT, got ${events}`);
+  if (seen.VALARM.ACTION !== "DISPLAY" || seen.VALARM.TRIGGER !== "-PT1H") fail("VALARM must be DISPLAY -PT1H");
+  if (seen.VCALENDAR.METHOD !== "PUBLISH") fail("METHOD must be PUBLISH");
   for (const [c, req] of Object.entries(REQUIRED)) for (const p of req) if (!(p in seen[c])) fail(`${c} lacks ${p}`);
   if (seen.VCALENDAR.VERSION !== "2.0") fail("VERSION must be 2.0");
   for (const p of ["DTSTAMP", "DTSTART", "DTEND"]) if (!/^\d{8}T\d{6}Z$/.test(seen.VEVENT[p])) fail(`${p} is not a UTC date-time: ${seen.VEVENT[p]}`);

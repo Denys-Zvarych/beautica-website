@@ -1,4 +1,5 @@
 @import "./remind.css";
+@import "./recap.css";
 /* ---------- Latin core for the link pages ----------
    fonts.css declares the whole Latin face (letters, accents, symbols: 31-39 KB per family) and every page needs it for spaces and digits. These
    pages show Ukrainian text only, so they redeclare the same family with a small subset (src/fonts, pyftsubset of the same file: space, digits,
@@ -113,14 +114,12 @@
 .t-strong11 { font: var(--vt-fw-body-strong) var(--vt-fs-label) / var(--vt-lh-body) var(--vt-font-body); color: var(--vt-color-text); }
 .t-strong115 { font: var(--vt-fw-body-strong) var(--vt-app-fs-115) / var(--vt-lh-body) var(--vt-font-body); color: var(--vt-color-text); }
 .t-input { font: var(--vt-fw-input) var(--vt-fs-input) / normal var(--vt-font-body); color: var(--vt-color-text); }
-.t-label { font: var(--vt-fw-label) var(--vt-fs-label) / normal var(--vt-font-body); letter-spacing: var(--vt-ls-label); color: var(--bk-text-muted); }
 .t-link { font: var(--vt-fw-label) var(--vt-fs-label) / normal var(--vt-font-body); color: var(--vt-color-accent-deep); }
 .t-stat-cap { font: var(--vt-fw-label) var(--vt-fs-label) / normal var(--vt-font-body); letter-spacing: var(--vt-ls-stat-caption); color: var(--vt-color-text-secondary); }
 .t-price-md { font: 800 var(--vt-fs-subheading) / var(--vt-lh-body) var(--vt-font-body); color: var(--vt-color-accent-deep); } /* bookPriceMd */
 .t-accent-12 { font: 800 var(--vt-fs-body) / var(--vt-lh-body) var(--vt-font-body); color: var(--vt-color-accent-deep); } /* bookAccentBold15 */
 .t-accent-11 { font: 800 var(--vt-fs-label) / var(--vt-lh-body) var(--vt-font-body); color: var(--vt-color-accent-deep); }
 .t-name-13w800 { font: 800 var(--vt-fs-input) / var(--vt-lh-body) var(--vt-font-body); color: var(--vt-color-text); } /* bookName16w800 */
-.t-value-12 { font: var(--vt-fw-label) var(--vt-fs-body) / 1.3 var(--vt-font-body); color: var(--vt-color-text); } /* bookCardValue15 */
 .t-value-11 { font: var(--vt-fw-label) var(--vt-fs-label) / 1.3 var(--vt-font-body); color: var(--vt-color-text); } /* bookCardValue135 */
 .t-otp { font: var(--vt-fw-heading) var(--vt-fs-heading) / normal var(--vt-font-display); color: var(--vt-color-accent); } /* otpDigit */
 .t-cal-num { font: var(--vt-fw-subheading) var(--vt-fs-body) / var(--vt-lh-body) var(--vt-font-body); } /* bodyStrong15 w600 */

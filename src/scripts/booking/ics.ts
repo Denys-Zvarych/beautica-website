@@ -41,6 +41,7 @@ export function buildIcs(e: IcsEvent, now: Date = new Date()): string {
     "VERSION:2.0",
     "PRODID:-//Beautica//Booking//UK",
     "CALSCALE:GREGORIAN",
+    "METHOD:PUBLISH",
     "BEGIN:VEVENT",
     `UID:${e.uid}@beautica.app`,
     `DTSTAMP:${stamp(now)}`,
@@ -49,6 +50,12 @@ export function buildIcs(e: IcsEvent, now: Date = new Date()): string {
     `SUMMARY:${esc(e.summary)}`,
     `DESCRIPTION:${esc(e.description)}`,
     ...(e.location ? [`LOCATION:${esc(e.location)}`] : []),
+    // A reminder one hour before (shown by the calendar app itself).
+    "BEGIN:VALARM",
+    "ACTION:DISPLAY",
+    `DESCRIPTION:${esc(e.summary)}`,
+    "TRIGGER:-PT1H",
+    "END:VALARM",
     "END:VEVENT",
     "END:VCALENDAR",
   ];

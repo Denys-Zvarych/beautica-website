@@ -32,6 +32,13 @@ describe("GET /api/ics: success", () => {
     const body = await (await get(good)).text();
     assert.equal(/URL:|book\/cancel|Скасувати|\+380|ATTENDEE|ORGANIZER/.test(body), false, body);
   });
+  test("the live file is a PUBLISH calendar with one display alarm one hour before", async () => {
+    const body = await (await get(good)).text();
+    assert.match(body, /\r\nMETHOD:PUBLISH\r\n/);
+    assert.equal(body.match(/BEGIN:VALARM/g)?.length, 1);
+    assert.match(body, /BEGIN:VALARM\r\nACTION:DISPLAY\r\nDESCRIPTION:[^\r]+\r\nTRIGGER:-PT1H\r\nEND:VALARM/);
+    parseIcs(body);
+  });
   test("over-long summary / place / description are cut with «…», not rejected", async () => {
     const res = await get({ ...good, t: "М".repeat(300), l: "в".repeat(400), d: "д".repeat(900) });
     assert.equal(res.status, 200);

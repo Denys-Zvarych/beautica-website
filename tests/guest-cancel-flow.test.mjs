@@ -70,14 +70,29 @@ describe("loading the booking", () => {
     await run({ get: () => ok(INFO) }, async ({ page, state, problems }) => {
       await state("confirm").waitFor({ state: "visible" });
       await assertOnlyState(page, "confirm");
-      assert.equal(await page.locator("#c-master").innerText(), INFO.masterName);
-      assert.equal(await page.locator("#c-service").innerText(), INFO.serviceName);
-      assert.match(await page.locator("#c-when").innerText(), /5 березня.*12:00/); // 10:00Z = 12:00 in Europe/Kyiv (winter)
+      assert.equal(await page.locator("#c-facts [data-fact=master] .t-value-12").innerText(), INFO.masterName);
+      assert.equal(await page.locator("#c-facts [data-fact=service] .t-value-12").innerText(), INFO.serviceName);
+      assert.match(await page.locator("#c-facts [data-fact=when] .t-value-12").innerText(), /5 березня.*12:00/); // 10:00Z = 12:00 in Europe/Kyiv (winter)
       assert.match(await page.locator("#c-until").innerText(), /^Скасувати можна до 5 березня.*10:00\.$/);
       assert.equal(await page.getByRole("heading", { name: c.confirmTitle }).isVisible(), true);
       await oneH1(page, "confirm");
       assert.deepEqual(problems, []);
     });
+  });
+
+  test("regression: every recap row has its label and value on ONE row (same top, label left of value), at 360 and 768", async () => {
+    for (const width of [360, 768])
+      await run({ get: () => ok(INFO) }, async ({ page, state }) => {
+        await state("confirm").waitFor({ state: "visible" });
+        const rows = await page.locator("#c-facts .kv").evaluateAll((els) =>
+          els.map((e) => ({ fact: e.dataset.fact, l: e.querySelector(".t-label").getBoundingClientRect().toJSON(), v: e.querySelector(".t-value-12").getBoundingClientRect().toJSON() })));
+        assert.deepEqual(rows.map((r) => r.fact), ["master", "service", "when"]);
+        for (const r of rows) {
+          assert.ok(r.l.width > 0 && r.v.width > 0, `${r.fact}: both boxes are painted`);
+          assert.ok(Math.abs(r.l.y - r.v.y) < 6, `${r.fact} @${width}: label y ${r.l.y} vs value y ${r.v.y} (stacked?)`);
+          assert.ok(r.l.right <= r.v.left + 1, `${r.fact} @${width}: the label sits left of the value`);
+        }
+      }, { width });
   });
 
   test("the lookup is one credential-less GET to the exact API path (no cookie, no referrer, JSON accepted)", async () => {
@@ -306,7 +321,7 @@ describe("reminder channel on the cancel page (phase 024)", () => {
       assert.equal(await page.locator("#done-reminders .seg[role=group] input[type=radio][name=reminder-channel]").count(), 2);
       assert.equal(await page.locator("#done-reminders input[value=sms]").isChecked(), true);
       const box = await page.locator("#done-reminders label:has(input[value=telegram])").boundingBox();
-      assert.ok(box && box.width > 0 && box.height >= 48, "segment is a 48 px target");
+      assert.ok(box && box.width > 0 && box.height >= 47.99, "segment is a 48 px target (sub-pixel rounding tolerated)");
       await page.locator("#done-reminders input[value=sms]").focus();
       await page.keyboard.press("ArrowRight");
       await page.locator("[data-r-connect]").waitFor({ state: "visible" });
@@ -424,9 +439,9 @@ describe("read-only states (phase 435)", () => {
         assert.equal(await h1.count(), 1);
         assert.equal((await h1.innerText()).trim(), title);
         assert.equal(await focusedId(page), "cancel-title");
-        assert.equal((await page.locator("#r-master").innerText()).trim(), INFO.masterName);
-        assert.equal((await page.locator("#r-service").innerText()).trim(), INFO.serviceName);
-        assert.match(await page.locator("#r-when").innerText(), /5 березня/);
+        assert.equal((await page.locator("#r-facts [data-fact=master] .t-value-12").innerText()).trim(), INFO.masterName);
+        assert.equal((await page.locator("#r-facts [data-fact=service] .t-value-12").innerText()).trim(), INFO.serviceName);
+        assert.match(await page.locator("#r-facts [data-fact=when] .t-value-12").innerText(), /5 березня/);
         if (text) assert.equal(await page.getByText(text).isVisible(), true);
         else assert.equal(await page.locator("#r-text").isVisible(), false);
         assert.equal(await confirm.count(), 0, "no visible cancel button");
@@ -505,24 +520,24 @@ describe("salon and address facts (phase 435)", () => {
     test(`${st}: salon and address are shown with their labels`, async () => {
       await run({ get: () => ok({ ...INFO, ...extra, salonName: "Beauty Room", address: "Київ, вул. Хрещатик, 1" }) }, async ({ page, state }) => {
         await state(st).waitFor({ state: "visible" });
-        assert.equal(await page.locator(`#${p}-salon-row`).isVisible(), true);
-        assert.equal(await page.locator(`#${p}-address-row`).isVisible(), true);
-        assert.equal((await page.locator(`#${p}-salon-row dt`).innerText()).trim(), c.salon);
-        assert.equal((await page.locator(`#${p}-address-row dt`).innerText()).trim(), c.address);
-        assert.equal((await page.locator(`#${p}-salon`).innerText()).trim(), "Beauty Room");
-        assert.equal((await page.locator(`#${p}-address`).innerText()).trim(), "Київ, вул. Хрещатик, 1");
+        assert.equal(await page.locator(`#${p}-facts [data-fact=salon]`).isVisible(), true);
+        assert.equal(await page.locator(`#${p}-facts [data-fact=address]`).isVisible(), true);
+        assert.equal((await page.locator(`#${p}-facts [data-fact=salon] .t-label`).innerText()).trim(), c.salon);
+        assert.equal((await page.locator(`#${p}-facts [data-fact=address] .t-label`).innerText()).trim(), c.address);
+        assert.equal((await page.locator(`#${p}-facts [data-fact=salon] .t-value-12`).innerText()).trim(), "Beauty Room");
+        assert.equal((await page.locator(`#${p}-facts [data-fact=address] .t-value-12`).innerText()).trim(), "Київ, вул. Хрещатик, 1");
       });
     });
 
     test(`${st}: locationNote follows the address in brackets, as text`, async () => {
       await run({ get: () => ok({ ...INFO, ...extra, address: "Хрещатик 10", locationNote: "вхід з двору" }) }, async ({ page, state }) => {
         await state(st).waitFor({ state: "visible" });
-        assert.equal((await page.locator(`#${p}-address`).innerText()).trim(), "Хрещатик 10 (вхід з двору)");
+        assert.equal((await page.locator(`#${p}-facts [data-fact=address] .t-value-12`).innerText()).trim(), "Хрещатик 10 (вхід з двору)");
       });
       await run({ get: () => ok({ ...INFO, ...extra, address: "Хрещатик 10", locationNote: "<b>x</b>" }) }, async ({ page, state }) => {
         await state(st).waitFor({ state: "visible" });
-        assert.equal((await page.locator(`#${p}-address`).innerText()).trim(), "Хрещатик 10 (<b>x</b>)");
-        assert.equal(await page.locator(`#${p}-address *`).count(), 0);
+        assert.equal((await page.locator(`#${p}-facts [data-fact=address] .t-value-12`).innerText()).trim(), "Хрещатик 10 (<b>x</b>)");
+        assert.equal(await page.locator(`#${p}-facts [data-fact=address] .t-value-12 *`).count(), 0);
       });
     });
 
@@ -530,14 +545,14 @@ describe("salon and address facts (phase 435)", () => {
       for (const body of [{ address: "Хрещатик 10", locationNote: null }, { address: "Хрещатик 10", locationNote: "  " }, { address: "Хрещатик 10" }]) {
         await run({ get: () => ok({ ...INFO, ...extra, ...body }) }, async ({ page, state }) => {
           await state(st).waitFor({ state: "visible" });
-          assert.equal((await page.locator(`#${p}-address`).innerText()).trim(), "Хрещатик 10");
+          assert.equal((await page.locator(`#${p}-facts [data-fact=address] .t-value-12`).innerText()).trim(), "Хрещатик 10");
         });
       }
       for (const body of [{ address: null, locationNote: "вхід з двору" }, { locationNote: "вхід з двору" }, { address: " ", locationNote: "вхід з двору" }]) {
         await run({ get: () => ok({ ...INFO, ...extra, ...body }) }, async ({ page, state }) => {
           await state(st).waitFor({ state: "visible" });
-          assert.equal(await page.locator(`#${p}-address-row`).isVisible(), false);
-          assert.equal((await page.locator(`#${p}-address`).textContent()).trim(), "");
+          assert.equal(await page.locator(`#${p}-facts [data-fact=address]`).isVisible(), false);
+          assert.equal(await page.locator(`#${p}-facts [data-fact=address]`).count(), 0);
         });
       }
     });
@@ -546,8 +561,8 @@ describe("salon and address facts (phase 435)", () => {
       for (const body of [{ salonName: null, address: null }, { salonName: "  ", address: "" }, {}]) {
         await run({ get: () => ok({ ...INFO, ...extra, ...body }) }, async ({ page, state }) => {
           await state(st).waitFor({ state: "visible" });
-          assert.equal(await page.locator(`#${p}-salon-row`).isVisible(), false);
-          assert.equal(await page.locator(`#${p}-address-row`).isVisible(), false);
+          assert.equal(await page.locator(`#${p}-facts [data-fact=salon]`).isVisible(), false);
+          assert.equal(await page.locator(`#${p}-facts [data-fact=address]`).isVisible(), false);
           assert.equal(await page.getByText(c.salon, { exact: true }).count() === 0 || !(await page.getByText(c.salon, { exact: true }).first().isVisible()), true);
         });
       }
@@ -557,9 +572,9 @@ describe("salon and address facts (phase 435)", () => {
       const evil = '<img src=x onerror="window.__pwn=1"><b>Салон</b>';
       await run({ get: () => ok({ ...INFO, ...extra, salonName: evil, address: "<script>window.__pwn=1</script>" }) }, async ({ page, state }) => {
         await state(st).waitFor({ state: "visible" });
-        assert.equal((await page.locator(`#${p}-salon`).innerText()).trim(), evil);
-        assert.equal((await page.locator(`#${p}-address`).innerText()).trim(), "<script>window.__pwn=1</script>");
-        assert.equal(await page.locator(`#${p}-salon *, #${p}-address *`).count(), 0, "no child elements were created");
+        assert.equal((await page.locator(`#${p}-facts [data-fact=salon] .t-value-12`).innerText()).trim(), evil);
+        assert.equal((await page.locator(`#${p}-facts [data-fact=address] .t-value-12`).innerText()).trim(), "<script>window.__pwn=1</script>");
+        assert.equal(await page.locator(`#${p}-facts .t-value-12 *`).count(), 0, "no child elements were created");
         assert.equal(await page.evaluate(() => window.__pwn), undefined);
       });
     });
@@ -568,8 +583,8 @@ describe("salon and address facts (phase 435)", () => {
   test("the read-only view with salon and address rows has no axe violations at 360 px, with the rebook link", async () => {
     await run({ get: () => ok({ ...INFO, cancellable: false, status: "COMPLETED", rebookPath: "/book/olena-koval", salonName: "Beauty Room", address: "Київ, вул. Хрещатик, 1" }) }, async ({ page, state }) => {
       await state("readonly").waitFor({ state: "visible" });
-      assert.equal(await page.locator("#r-salon-row").isVisible(), true, "salon row shown");
-      assert.equal(await page.locator("#r-address-row").isVisible(), true, "address row shown");
+      assert.equal(await page.locator("#r-facts [data-fact=salon]").isVisible(), true, "salon row shown");
+      assert.equal(await page.locator("#r-facts [data-fact=address]").isVisible(), true, "address row shown");
       assert.equal(await page.getByRole("link", { name: c.rebook }).isVisible(), true, "rebook shown");
       assert.deepEqual(await axeViolations(page), []);
     });

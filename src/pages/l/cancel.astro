@@ -8,6 +8,7 @@ import CtaButton from "../../components/CtaButton.astro";
 import ReminderChannelChoice from "../../components/book/ReminderChannelChoice.astro";
 import { t } from "../../i18n/t";
 import { API_BASE } from "../../lib/appLinks";
+import "../../styles/recap.css"; // the shared summary row (.kv), same as the booking done card
 ---
 
 <AppLinkPage title={t("cancel.metaTitle")} description={t("cancel.metaDescription")} openInApp={false}>
@@ -19,6 +20,11 @@ import { API_BASE } from "../../lib/appLinks";
     class="states"
     data-api={API_BASE}
     data-until={t("cancel.until", { time: "{time}" })}
+    data-l-master={t("cancel.master")}
+    data-l-service={t("cancel.service")}
+    data-l-when={t("cancel.when")}
+    data-l-salon={t("cancel.salon")}
+    data-l-address={t("cancel.address")}
     data-confirm={t("cancel.confirm")}
     data-cancelling={t("cancel.cancelling")}
     data-h-confirm={t("cancel.confirmTitle")}
@@ -40,13 +46,7 @@ import { API_BASE } from "../../lib/appLinks";
     </div>
 
     <div class="state" id="st-confirm" hidden>
-      <dl class="facts vt-prose">
-        <div><dt>{t("cancel.master")}</dt><dd id="c-master"></dd></div>
-        <div><dt>{t("cancel.service")}</dt><dd id="c-service"></dd></div>
-        <div><dt>{t("cancel.when")}</dt><dd id="c-when"></dd></div>
-        <div id="c-salon-row" hidden><dt>{t("cancel.salon")}</dt><dd id="c-salon"></dd></div>
-        <div id="c-address-row" hidden><dt>{t("cancel.address")}</dt><dd id="c-address"></dd></div>
-      </dl>
+      <div class="facts" id="c-facts"></div>
       <p class="vt-body" id="c-until"></p>
       <CtaButton type="button" id="c-confirm" spinner>{t("cancel.confirm")}</CtaButton>
       <p class="vt-body">{t("cancel.changedMind")}</p>
@@ -58,13 +58,7 @@ import { API_BASE } from "../../lib/appLinks";
 
     {/* Phase 435: read-only view for a booking that is not CONFIRMED (cancelled / declined / completed / no-show / unknown status). No cancel button. */}
     <div class="state" id="st-readonly" hidden>
-      <dl class="facts vt-prose">
-        <div><dt>{t("cancel.master")}</dt><dd id="r-master"></dd></div>
-        <div><dt>{t("cancel.service")}</dt><dd id="r-service"></dd></div>
-        <div><dt>{t("cancel.when")}</dt><dd id="r-when"></dd></div>
-        <div id="r-salon-row" hidden><dt>{t("cancel.salon")}</dt><dd id="r-salon"></dd></div>
-        <div id="r-address-row" hidden><dt>{t("cancel.address")}</dt><dd id="r-address"></dd></div>
-      </dl>
+      <div class="facts" id="r-facts"></div>
       <p class="vt-prose" id="r-text" hidden></p>
       <div id="r-rebook" hidden><CtaButton href="/" id="r-rebook-link">{t("cancel.rebook")}</CtaButton></div>
     </div>
@@ -120,32 +114,17 @@ import { API_BASE } from "../../lib/appLinks";
   .rc[data-reserve] {
     min-height: calc(var(--vt-space-xxl) * 6);
   }
+  /* Rows are the shared .kv summary row (styles/recap.css), built by the script. */
   .facts {
-    display: flex;
-    flex-direction: column;
-    gap: var(--vt-space-sm);
-    margin: 0;
-  }
-  .facts div {
-    display: flex;
-    flex-direction: column;
-  }
-  .facts div[hidden] {
-    display: none;
-  }
-  .facts dt {
-    font-size: var(--vt-fs-label);
-    font-weight: var(--vt-fw-label);
-    letter-spacing: var(--vt-ls-label);
-  }
-  .facts dd {
-    margin: 0;
-    color: var(--vt-color-text);
+    width: 100%;
+    text-align: start;
   }
 </style>
 
 <script>
   import { tokenFromPath, fetchInfo, cancelBooking, formatWhen, readonlyKind, safeRebookPath, factText, addressWithNote, type CancelState } from "../../lib/guestCancel";
+  // The "?own" query makes Vite treat the file as a module of this entry only: it is bundled INTO this script (no separate shared chunk = no extra request on this token page); the source is still the one recap-row.ts.
+  import { kvRow } from "../../scripts/booking/recap-row.ts?own";
   import { telegramStatus } from "../../scripts/booking/telegram-api";
   import { availabilityFromStatus, mountReminders } from "../../scripts/booking/reminder-channel";
 
@@ -180,12 +159,23 @@ import { API_BASE } from "../../lib/appLinks";
     }
   }
 
-  // Phase 435: optional salon / address facts, text only (textContent); a null or blank value keeps the row hidden.
-  function setOptionalFacts(prefix: "c" | "r", info: { salonName?: unknown; address?: unknown; locationNote?: unknown }) {
-    for (const [key, value] of [["salon", factText(info.salonName)], ["address", addressWithNote(info.address, info.locationNote)]] as const) {
-      $(`${prefix}-${key}`).textContent = value ?? "";
-      $(`${prefix}-${key}-row`).hidden = !value;
-    }
+  // The summary is the booking done page's own row (label and value on one row): salon / address only with a value; text only (textContent).
+  function renderFacts(prefix: "c" | "r", info: { masterName: string; serviceName: string; startsAt: string; salonName?: unknown; address?: unknown; locationNote?: unknown }) {
+    const rows: [string, string | null][] = [
+      ["master", info.masterName],
+      ["service", info.serviceName],
+      ["when", formatWhen(info.startsAt)],
+      ["salon", factText(info.salonName)],
+      ["address", addressWithNote(info.address, info.locationNote)],
+    ];
+    $(`${prefix}-facts`).replaceChildren(
+      ...rows.flatMap(([key, value]) => {
+        if (!value) return [];
+        const row = kvRow(root.dataset[`l${key[0]!.toUpperCase()}${key.slice(1)}`] ?? "", value);
+        row.dataset.fact = key;
+        return [row];
+      }),
+    );
   }
 
   async function load() {
@@ -193,18 +183,12 @@ import { API_BASE } from "../../lib/appLinks";
     show("loading");
     const { state, info } = await fetchInfo(api, token);
     if (info && state === "confirm") {
-      $("c-master").textContent = info.masterName;
-      $("c-service").textContent = info.serviceName;
-      $("c-when").textContent = formatWhen(info.startsAt);
-      setOptionalFacts("c", info);
+      renderFacts("c", info);
       $("c-until").textContent = (root.dataset.until ?? "").replace("{time}", formatWhen(info.windowClosesAt));
     }
     if (info && state === "readonly") {
       const kind = readonlyKind(info.status).toLowerCase();
-      $("r-master").textContent = info.masterName;
-      $("r-service").textContent = info.serviceName;
-      $("r-when").textContent = formatWhen(info.startsAt);
-      setOptionalFacts("r", info);
+      renderFacts("r", info);
       const text = $("r-text");
       text.textContent = root.dataset[`roText${kind[0]!.toUpperCase()}${kind.slice(1)}`] ?? "";
       text.hidden = !text.textContent;
