@@ -13,7 +13,7 @@ const PATH = `/book/cancel/${TOKEN}`;
 const API_PATH = `/api/v1/book/cancel/${TOKEN}`;
 const INFO = { masterName: "Олена Коваль", serviceName: "Манікюр з покриттям", startsAt: "2030-03-05T10:00:00Z", cancellable: true, windowClosesAt: "2030-03-05T08:00:00Z" };
 const ok = (json) => ({ status: 200, json });
-const ALL_STATES = ["loading", "confirm", "cancelled", "closed", "notfound", "error"];
+const ALL_STATES = ["loading", "confirm", "cancelled", "closed", "notfound", "error", "readonly"];
 
 let browser;
 before(async () => (browser = await launch()));
@@ -45,6 +45,24 @@ async function oneH1(page, st) {
   assert.equal(await page.getByRole("heading", { level: 2 }).count(), 0, `${st}: no second, stacked title`);
   assert.equal(await focusedId(page), "cancel-title", `${st}: focus moves to the heading`);
 }
+const AXE = readFileSync(createRequire(import.meta.url).resolve("axe-core/axe.min.js"), "utf8");
+const axeViolations = async (page) => {
+  // Settled = fonts loaded and no running finite animation/transition (looping spinners excepted) (contrast is computed on the final colours).
+  await page.waitForFunction(() => document.fonts.status === "loaded" && document.getAnimations().every((a) => a.effect.getComputedTiming().iterations === Infinity || a.playState === "finished"));
+  await page.evaluate(AXE);
+  const res = await page.evaluate(() => axe.run(document, { runOnly: ["wcag2a", "wcag2aa", "wcag21aa", "best-practice"] }));
+  return res.violations.map((v) => `${v.id}: ${v.nodes.slice(0, 2).map((n) => n.target.join(" ")).join(" | ")}`);
+};
+/** Two painted frames: any layout shift the last change causes has been reported (a condition, not a fixed sleep). */
+const quiet = (page) => page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
+/** Polls until `read()` is truthy (e.g. the mock saw the request); fails with `msg` after 15 s. */
+async function until(read, msg) {
+  const end = Date.now() + 15_000;
+  while (!read() && Date.now() < end) await new Promise((r) => setTimeout(r, 25));
+  assert.ok(read(), msg);
+}
+/** The status call was answered and the reserved space under the confirm button is settled (released when there is no block). */
+const releasedSpace = (page) => page.waitForFunction(() => { const e = document.querySelector(".rc"); return !!e && !e.hasAttribute("data-reserve"); });
 const expected = (problems, re) => assert.deepEqual(problems.filter((p) => !re.test(p)), [], "unexpected console/page errors");
 
 describe("loading the booking", () => {
@@ -185,13 +203,37 @@ describe("confirming the cancel", () => {
 });
 
 describe("the link itself", () => {
-  test("a malformed token never reaches the API: straight to «notfound»", async () => {
-    await run({ get: () => ok(INFO) }, async ({ page, state, calls }) => {
-      await state("notfound").waitFor({ state: "visible" });
-      assert.equal(calls.length, 0);
-      await assertOnlyState(page, "notfound");
-    }, { path: "/book/cancel/not-a-token" });
+  // Malformed tokens are refused by the Worker with the 404 page (no cancel shell at all); see tests/headers-seo.test.mjs for status + headers.
+  const assertServer404 = async (page, calls) => {
+    await page.waitForLoadState("load");
+    assert.equal(await page.locator("#cancel-root").count(), 0, "the 404 page, not the cancel shell");
+    assert.equal(calls.length, 0);
+  };
+  test("a malformed token never reaches the API: the server answers with the 404 page", async () => {
+    await run({ get: () => ok(INFO) }, async ({ page, calls }) => assertServer404(page, calls), { path: "/book/cancel/not-a-token" });
   });
+
+  test("the short link /c/{16} renders the confirm page; the token is forwarded unchanged (case kept)", async () => {
+    const short = "Ab3dEf7hJk9mNp2Q";
+    await run({ get: () => ok(INFO) }, async ({ page, state, calls }) => {
+      await state("confirm").waitFor({ state: "visible" });
+      assert.equal(calls[0].url, `${API_ORIGIN}/api/v1/book/cancel/${short}`);
+      await assertOnlyState(page, "confirm");
+    }, { path: `/c/${short}` });
+  });
+
+  test("the short link with a trailing slash redirects to the slash-less URL and still renders", async () => {
+    await run({ get: () => ok(INFO) }, async ({ page, state }) => {
+      await state("confirm").waitFor({ state: "visible" });
+      assert.equal(new URL(page.url()).pathname, "/c/Ab3dEf7hJk9mNp2Q");
+    }, { path: "/c/Ab3dEf7hJk9mNp2Q/" });
+  });
+
+  for (const bad of ["/c/Ab3dEf7hJk9mNp2", "/c/Ab3dEf7hJk9mNp2QQ", "/c/Ab3dEf7hJk9mNp2-", "/c/Ab3dEf7hJk9mNp2_"]) {
+    test(`${bad}: the server answers with the 404 page and never reaches the API`, async () => {
+      await run({ get: () => ok(INFO) }, async ({ page, calls }) => assertServer404(page, calls), { path: bad });
+    });
+  }
 
   test("an upper-case token is accepted and forwarded as written", async () => {
     const upper = TOKEN.toUpperCase();
@@ -238,9 +280,8 @@ describe("the link itself", () => {
 });
 
 // Phase 024: the reminder-channel block of the cancel page (ReminderChannelChoice + reminder-channel.ts, reused from the done screen).
-// The status answer alone decides (never the booking source): offerChoice -> radios; linked -> status + «Повернутися до SMS»; otherwise nothing.
+// The status answer alone decides (never the booking source): offerChoice -> radios; linked -> status + «Відписатися від Telegram»; otherwise nothing.
 describe("reminder channel on the cancel page (phase 024)", () => {
-  const AXE = readFileSync(createRequire(import.meta.url).resolve("axe-core/axe.min.js"), "utf8");
   const CLS = `window.__cls=0;new PerformanceObserver(function(l){for(const e of l.getEntries())if(!e.hadRecentInput)window.__cls+=e.value}).observe({type:"layout-shift",buffered:true});`;
   const r = uk.book.done.reminders;
   /** Handlers for mockCancelApi: `telegram(req)` answers by endpoint name (status / unlink / link-token); unlisted = 404. */
@@ -252,19 +293,13 @@ describe("reminder channel on the cancel page (phase 024)", () => {
   });
   const STATUS = (o) => ({ status: 200, json: { available: true, linked: false, offerChoice: false, ...o } });
   const tgCalls = (calls) => calls.telegram;
-  const axeViolations = async (page) => {
-    await page.waitForTimeout(350);
-    await page.evaluate(AXE);
-    const res = await page.evaluate(() => axe.run(document, { runOnly: ["wcag2a", "wcag2aa", "wcag21aa", "best-practice"] }));
-    return res.violations.map((v) => `${v.id}: ${v.nodes.slice(0, 2).map((n) => n.target.join(" ")).join(" | ")}`);
-  };
   const block = (page) => page.locator("#done-reminders");
 
   test("offerChoice:true shows SMS preselected + Telegram; one status POST (token in the body only); selecting changes nothing; CLS and axe clean", async () => {
     await run(tgApi({ status: STATUS({ offerChoice: true }) }), async ({ page, state, calls }) => {
       await state("confirm").waitFor({ state: "visible" });
       await block(page).waitFor({ state: "visible" });
-      await page.waitForTimeout(400);
+      await quiet(page);
       const cls = await page.evaluate(() => window.__cls);
       console.log("cancel page CLS (confirm + block):", cls);
       assert.ok(cls <= 0.005, `CLS ${cls}`);
@@ -284,12 +319,12 @@ describe("reminder channel on the cancel page (phase 024)", () => {
     }, { init: CLS, height: 640 });
   });
 
-  test("linked:true shows the Telegram status + «Повернутися до SMS»; the unlink POST returns the choice; axe clean", async () => {
+  test("linked:true shows the Telegram status + «Відписатися від Telegram»; the unlink POST returns the choice; axe clean", async () => {
     await run(tgApi({ status: { status: 200, json: { available: true, linked: true, offerChoice: false } }, unlink: { status: 204 } }), async ({ page, state, calls }) => {
       await state("confirm").waitFor({ state: "visible" });
       await block(page).waitFor({ state: "visible" });
       assert.equal(await page.getByText(r.linked).isVisible(), true);
-      await page.waitForTimeout(400);
+      await quiet(page);
       assert.ok((await page.evaluate(() => window.__cls)) <= 0.005, "linked: CLS");
       assert.equal(await page.locator("#done-reminders .seg").isVisible(), false);
       assert.deepEqual(await axeViolations(page), []);
@@ -309,7 +344,9 @@ describe("reminder channel on the cancel page (phase 024)", () => {
     test(`block absent: ${name}`, async () => {
       await run(tgApi({ status }), async ({ page, state, calls }) => {
         await state("confirm").waitFor({ state: "visible" });
-        await page.waitForTimeout(400);
+        await until(() => tgCalls(calls).length >= 1, "the status call was made");
+        await releasedSpace(page);
+        await quiet(page);
         assert.equal(tgCalls(calls).length, 1);
         assert.ok((await page.evaluate(() => window.__cls)) <= 0.005, "no block: CLS");
         assert.equal(await block(page).isVisible(), false);
@@ -326,7 +363,8 @@ describe("reminder channel on the cancel page (phase 024)", () => {
   test("a network failure of the status call leaves the cancel page exactly as before", async () => {
     await run({ get: () => ok(INFO), telegram: () => "abort" }, async ({ page, state }) => {
       await state("confirm").waitFor({ state: "visible" });
-      await page.waitForTimeout(300);
+      await releasedSpace(page);
+      await quiet(page);
       assert.equal(await block(page).isVisible(), false);
       assert.equal(await page.getByRole("button", { name: c.confirm }).isVisible(), true);
     });
@@ -336,21 +374,22 @@ describe("reminder channel on the cancel page (phase 024)", () => {
     const offer = tgApi({ status: STATUS({ offerChoice: true }) });
     await run({ ...offer, get: () => ok({ ...INFO, cancellable: false }) }, async ({ page, state, calls }) => {
       await state("closed").waitFor({ state: "visible" });
-      await page.waitForTimeout(400);
+      await quiet(page);
       assert.equal(await block(page).isVisible(), false);
       assert.equal(calls.telegram.length, 0, "closed: no status call");
       assert.ok((await page.evaluate(() => window.__cls)) <= 0.005, "closed: CLS");
     }, { init: CLS, height: 640 });
     await run({ ...offer, get: () => ({ status: 404 }) }, async ({ page, state, calls, problems }) => {
       await state("notfound").waitFor({ state: "visible" });
-      await page.waitForTimeout(400);
+      await quiet(page);
       assert.equal(calls.telegram.length, 0, "unknown / used: no status call");
       assert.ok((await page.evaluate(() => window.__cls)) <= 0.005, "notfound: CLS");
       expected(problems, /status of 404/); // the lookup's own 404 is the only console noise
       assert.equal(problems.filter((p) => /telegram/.test(p)).length, 0);
     }, { init: CLS, height: 640 });
-    await run(offer, async ({ page, state, calls }) => {
-      await state("notfound").waitFor({ state: "visible" });
+    await run(offer, async ({ page, calls }) => {
+      await page.waitForLoadState("load");
+      assert.equal(await page.locator("#cancel-root").count(), 0, "the 404 page, not the cancel shell");
       assert.equal(calls.telegram.length, 0, "malformed token: no status call");
     }, { path: "/book/cancel/not-a-token" });
   });
@@ -363,6 +402,176 @@ describe("reminder channel on the cancel page (phase 024)", () => {
       await state("cancelled").waitFor({ state: "visible" });
       assert.equal(await block(page).isVisible(), false);
       assert.equal(calls.telegram.length, 1, "cancelled: no further status call");
+    });
+  });
+});
+
+// Phase 435: GET now answers 200 for non-CONFIRMED bookings (status + rebookPath): a read-only view, never a cancel offer.
+describe("read-only states (phase 435)", () => {
+  const cases = [
+    ["CANCELLED", c.doneTitle, c.ro.cancelledText],
+    ["DECLINED", c.doneTitle, c.ro.cancelledText],
+    ["COMPLETED", c.ro.completedTitle, c.ro.completedText],
+    ["NOT_COMPLETED", c.ro.notCompletedTitle, c.ro.notCompletedText],
+    ["SOMETHING_NEW", c.ro.otherTitle, null],
+  ];
+  for (const [status, title, text] of cases) {
+    test(`${status}: details, heading «${title}», rebook link, no cancel`, async () => {
+      await run({ get: () => ok({ ...INFO, cancellable: false, status, rebookPath: "/book/olena-koval" }) }, async ({ page, state, calls, confirm }) => {
+        await state("readonly").waitFor({ state: "visible" });
+        await assertOnlyState(page, "readonly");
+        const h1 = page.getByRole("heading", { level: 1 });
+        assert.equal(await h1.count(), 1);
+        assert.equal((await h1.innerText()).trim(), title);
+        assert.equal(await focusedId(page), "cancel-title");
+        assert.equal((await page.locator("#r-master").innerText()).trim(), INFO.masterName);
+        assert.equal((await page.locator("#r-service").innerText()).trim(), INFO.serviceName);
+        assert.match(await page.locator("#r-when").innerText(), /5 березня/);
+        if (text) assert.equal(await page.getByText(text).isVisible(), true);
+        else assert.equal(await page.locator("#r-text").isVisible(), false);
+        assert.equal(await confirm.count(), 0, "no visible cancel button");
+        assert.equal(await page.locator("#st-readonly button").count(), 0, "the read-only view contains no button");
+        const rebook = page.getByRole("link", { name: c.rebook });
+        assert.equal(await rebook.isVisible(), true);
+        assert.equal(await rebook.getAttribute("href"), "/book/olena-koval");
+        const box = await rebook.boundingBox();
+        assert.ok(box && box.width > 0 && box.height >= 48, "rebook button has a real box");
+        assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true, "no horizontal scroll");
+        assert.equal(calls.length, 1, "one GET, no POST");
+        assert.equal(calls.filter((x) => x.method === "POST").length, 0);
+      });
+    });
+  }
+
+  test("rebookPath null hides the button; a salon path is kept; a foreign URL is dropped", async () => {
+    await run({ get: () => ok({ ...INFO, cancellable: false, status: "COMPLETED", rebookPath: null }) }, async ({ page, state }) => {
+      await state("readonly").waitFor({ state: "visible" });
+      assert.equal(await page.getByRole("link", { name: c.rebook }).isVisible(), false);
+    });
+    await run({ get: () => ok({ ...INFO, cancellable: false, status: "CANCELLED", rebookPath: "/book/s/beauty-room" }) }, async ({ page, state }) => {
+      await state("readonly").waitFor({ state: "visible" });
+      assert.equal(await page.getByRole("link", { name: c.rebook }).getAttribute("href"), "/book/s/beauty-room");
+    });
+    await run({ get: () => ok({ ...INFO, cancellable: false, status: "CANCELLED", rebookPath: "https://evil.example/x" }) }, async ({ page, state }) => {
+      await state("readonly").waitFor({ state: "visible" });
+      assert.equal(await page.getByRole("link", { name: c.rebook }).isVisible(), false);
+    });
+  });
+
+  test("rebookPath naming the cancel token route is dropped; slugs merely starting with «cancel» are kept", async () => {
+    for (const bad of ["/book/cancel", "/book/s/cancel"]) {
+      await run({ get: () => ok({ ...INFO, cancellable: false, status: "CANCELLED", rebookPath: bad }) }, async ({ page, state }) => {
+        await state("readonly").waitFor({ state: "visible" });
+        assert.equal(await page.getByRole("link", { name: c.rebook }).isVisible(), false, bad);
+      });
+    }
+    for (const good of ["/book/cancelia", "/book/cancel-studio", "/book/s/cancel-studio"]) {
+      await run({ get: () => ok({ ...INFO, cancellable: false, status: "CANCELLED", rebookPath: good }) }, async ({ page, state }) => {
+        await state("readonly").waitFor({ state: "visible" });
+        assert.equal(await page.getByRole("link", { name: c.rebook }).getAttribute("href"), good);
+      });
+    }
+  });
+
+  test("status CONFIRMED (and an older backend without status) keeps today's behaviour", async () => {
+    await run({ get: () => ok({ ...INFO, status: "CONFIRMED", rebookPath: "/book/x" }) }, async ({ page, state }) => {
+      await state("confirm").waitFor({ state: "visible" });
+      await assertOnlyState(page, "confirm");
+    });
+    await run({ get: () => ok({ ...INFO, status: "CONFIRMED", cancellable: false }) }, async ({ page, state }) => {
+      await state("closed").waitFor({ state: "visible" });
+      await assertOnlyState(page, "closed");
+    });
+  });
+
+  test("the read-only view fits 360 / 768 / 1280 px and sends the token nowhere but the API path", async () => {
+    for (const width of [360, 768, 1280]) {
+      await run({ get: () => ok({ ...INFO, cancellable: false, status: "DECLINED", rebookPath: "/book/olena-koval" }) }, async ({ page, state, calls }) => {
+        await state("readonly").waitFor({ state: "visible" });
+        assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true, `${width}: no horizontal scroll`);
+        assert.equal(calls[0].url, `${API_ORIGIN}${API_PATH}`);
+      }, { width });
+    }
+  });
+});
+
+// Phase 435: optional salonName / address facts, in the confirm and the read-only view; text only.
+describe("salon and address facts (phase 435)", () => {
+  const views = [
+    ["confirm", "c", {}],
+    ["readonly", "r", { cancellable: false, status: "COMPLETED", rebookPath: null }],
+  ];
+  for (const [st, p, extra] of views) {
+    test(`${st}: salon and address are shown with their labels`, async () => {
+      await run({ get: () => ok({ ...INFO, ...extra, salonName: "Beauty Room", address: "Київ, вул. Хрещатик, 1" }) }, async ({ page, state }) => {
+        await state(st).waitFor({ state: "visible" });
+        assert.equal(await page.locator(`#${p}-salon-row`).isVisible(), true);
+        assert.equal(await page.locator(`#${p}-address-row`).isVisible(), true);
+        assert.equal((await page.locator(`#${p}-salon-row dt`).innerText()).trim(), c.salon);
+        assert.equal((await page.locator(`#${p}-address-row dt`).innerText()).trim(), c.address);
+        assert.equal((await page.locator(`#${p}-salon`).innerText()).trim(), "Beauty Room");
+        assert.equal((await page.locator(`#${p}-address`).innerText()).trim(), "Київ, вул. Хрещатик, 1");
+      });
+    });
+
+    test(`${st}: locationNote follows the address in brackets, as text`, async () => {
+      await run({ get: () => ok({ ...INFO, ...extra, address: "Хрещатик 10", locationNote: "вхід з двору" }) }, async ({ page, state }) => {
+        await state(st).waitFor({ state: "visible" });
+        assert.equal((await page.locator(`#${p}-address`).innerText()).trim(), "Хрещатик 10 (вхід з двору)");
+      });
+      await run({ get: () => ok({ ...INFO, ...extra, address: "Хрещатик 10", locationNote: "<b>x</b>" }) }, async ({ page, state }) => {
+        await state(st).waitFor({ state: "visible" });
+        assert.equal((await page.locator(`#${p}-address`).innerText()).trim(), "Хрещатик 10 (<b>x</b>)");
+        assert.equal(await page.locator(`#${p}-address *`).count(), 0);
+      });
+    });
+
+    test(`${st}: no note = plain address; a note without an address shows no row`, async () => {
+      for (const body of [{ address: "Хрещатик 10", locationNote: null }, { address: "Хрещатик 10", locationNote: "  " }, { address: "Хрещатик 10" }]) {
+        await run({ get: () => ok({ ...INFO, ...extra, ...body }) }, async ({ page, state }) => {
+          await state(st).waitFor({ state: "visible" });
+          assert.equal((await page.locator(`#${p}-address`).innerText()).trim(), "Хрещатик 10");
+        });
+      }
+      for (const body of [{ address: null, locationNote: "вхід з двору" }, { locationNote: "вхід з двору" }, { address: " ", locationNote: "вхід з двору" }]) {
+        await run({ get: () => ok({ ...INFO, ...extra, ...body }) }, async ({ page, state }) => {
+          await state(st).waitFor({ state: "visible" });
+          assert.equal(await page.locator(`#${p}-address-row`).isVisible(), false);
+          assert.equal((await page.locator(`#${p}-address`).textContent()).trim(), "");
+        });
+      }
+    });
+
+    test(`${st}: null, blank or absent values leave both rows hidden`, async () => {
+      for (const body of [{ salonName: null, address: null }, { salonName: "  ", address: "" }, {}]) {
+        await run({ get: () => ok({ ...INFO, ...extra, ...body }) }, async ({ page, state }) => {
+          await state(st).waitFor({ state: "visible" });
+          assert.equal(await page.locator(`#${p}-salon-row`).isVisible(), false);
+          assert.equal(await page.locator(`#${p}-address-row`).isVisible(), false);
+          assert.equal(await page.getByText(c.salon, { exact: true }).count() === 0 || !(await page.getByText(c.salon, { exact: true }).first().isVisible()), true);
+        });
+      }
+    });
+
+    test(`${st}: an HTML-looking value is rendered as text, never as markup`, async () => {
+      const evil = '<img src=x onerror="window.__pwn=1"><b>Салон</b>';
+      await run({ get: () => ok({ ...INFO, ...extra, salonName: evil, address: "<script>window.__pwn=1</script>" }) }, async ({ page, state }) => {
+        await state(st).waitFor({ state: "visible" });
+        assert.equal((await page.locator(`#${p}-salon`).innerText()).trim(), evil);
+        assert.equal((await page.locator(`#${p}-address`).innerText()).trim(), "<script>window.__pwn=1</script>");
+        assert.equal(await page.locator(`#${p}-salon *, #${p}-address *`).count(), 0, "no child elements were created");
+        assert.equal(await page.evaluate(() => window.__pwn), undefined);
+      });
+    });
+  }
+
+  test("the read-only view with salon and address rows has no axe violations at 360 px, with the rebook link", async () => {
+    await run({ get: () => ok({ ...INFO, cancellable: false, status: "COMPLETED", rebookPath: "/book/olena-koval", salonName: "Beauty Room", address: "Київ, вул. Хрещатик, 1" }) }, async ({ page, state }) => {
+      await state("readonly").waitFor({ state: "visible" });
+      assert.equal(await page.locator("#r-salon-row").isVisible(), true, "salon row shown");
+      assert.equal(await page.locator("#r-address-row").isVisible(), true, "address row shown");
+      assert.equal(await page.getByRole("link", { name: c.rebook }).isVisible(), true, "rebook shown");
+      assert.deepEqual(await axeViolations(page), []);
     });
   });
 });

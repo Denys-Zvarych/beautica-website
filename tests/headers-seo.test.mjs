@@ -36,6 +36,7 @@ const TOKEN_ROUTES = [
   { real: `/bookings/${TOKEN}`, shell: "/l/booking", title: "Ваш запис у Beautica", h1: "Ваш запис у Beautica" },
   { real: `/bookings/${TOKEN}/review`, shell: "/l/review", title: "Залиште відгук — Beautica", h1: "Залиште відгук" },
   { real: `/book/cancel/${TOKEN}`, shell: "/l/cancel", title: "Скасування запису — Beautica", h1: "Скасування запису" },
+  { real: "/c/Ab3dEf7hJk9mNp2Q", shell: "/l/cancel", title: "Скасування запису — Beautica", h1: "Скасування запису" },
 ];
 
 describe("indexable pages", () => {
@@ -116,7 +117,7 @@ describe("token routes (real e-mail URL -> 200 rewrite -> noindex shell)", () =>
 });
 
 describe("malformed paths under token prefixes (the 404 must not report or leak the token)", () => {
-  for (const path of [`/book/cancel/${TOKEN}/extra`, "/book/cancel/abc123/extra", "/invite/abc/def", `/bookings/${TOKEN}/nope`, "/l/nothing"]) {
+  for (const path of [`/book/cancel/${TOKEN}/extra`, "/book/cancel/abc123/extra", "/invite/abc/def", `/bookings/${TOKEN}/nope`, "/l/nothing", "/c/Ab3dEf7hJk9mNp2Q/extra", "/c/a/b"]) {
     test(`${path}: 404, token CSP without analytics origins, no-referrer, no-store, noindex`, async () => {
       const res = await rawRequest(path);
       assert.equal(res.status, 404);
@@ -129,16 +130,34 @@ describe("malformed paths under token prefixes (the 404 must not report or leak 
   }
 });
 
+describe("cancel link: token validated server-side", () => {
+  for (const path of ["/c/bad!", "/c/short", "/book/cancel/not-a-uuid"]) {
+    test(`${path}: 404 with token headers`, async () => {
+      const res = await rawRequest(path);
+      assert.equal(res.status, 404);
+      assert.deepEqual(res.all("content-security-policy"), [TOKEN_CSP]);
+      assert.deepEqual(res.all("referrer-policy"), ["no-referrer"]);
+      assert.deepEqual(res.all("cache-control"), ["no-store"]);
+      assert.match(res.all("x-robots-tag")[0], /noindex/);
+    });
+  }
+  for (const path of ["/c/Ab3dEf7hJk9mNp2Q", `/book/cancel/${TOKEN}`]) {
+    test(`${path}: 200`, async () => {
+      assert.equal((await rawRequest(path)).status, 200);
+    });
+  }
+});
+
 // Phase 007 QA (security LOW): a deeper path under a token prefix is not served by any route; the asset layer / catch-all answers it. Whoever answers,
 // it must carry the token-route headers (a token may sit in the URL): no analytics origins in the CSP, no referrer, never cached, never indexed.
 // Trailing-slash variants are separate cases: the asset layer treats `/a/b/` and `/a/b` differently.
 describe("deeper token paths and trailing-slash variants (404 must still be a token response)", () => {
-  const DEEP = ["/book/cancel/a/b/", "/book/cancel/a/b", "/book/cancel/a/", "/invite/x/y/", "/invite/x/y", "/bookings/x/y/", "/bookings/x/y", "/l/x/y/", "/l/x/y", `/book/cancel/${TOKEN}/`, `/book/cancel/${TOKEN}/extra/`];
+  const DEEP = ["/book/cancel/a/b/", "/book/cancel/a/b", "/book/cancel/a/", "/invite/x/y/", "/invite/x/y", "/bookings/x/y/", "/bookings/x/y", "/l/x/y/", "/l/x/y", `/book/cancel/${TOKEN}/`, `/book/cancel/${TOKEN}/extra/`, "/c/a/b/", "/c/Ab3dEf7hJk9mNp2Q/", "/c/Ab3dEf7hJk9mNp2Q/extra/"];
   for (const path of DEEP) {
     test(`${path}: 404 with the token CSP (no umami / cloudflareinsights), Referrer-Policy no-referrer once, no-store, noindex`, async () => {
       const res = await rawRequest(path);
       // One segment + trailing slash is the documented 307 to the slash-less token URL (tests/token-route-trailing-slash.test.mjs); the redirect is a token response too.
-      const redirect = path === "/book/cancel/a/" || path === `/book/cancel/${TOKEN}/`;
+      const redirect = path === "/book/cancel/a/" || path === `/book/cancel/${TOKEN}/` || path === "/c/Ab3dEf7hJk9mNp2Q/";
       assert.equal(res.status, redirect ? 307 : 404, `status ${res.status}`);
       const csp = res.all("content-security-policy");
       assert.equal(csp.length, 1, "exactly one CSP");
@@ -242,7 +261,7 @@ describe("crawlers", () => {
     assert.equal(res.status, 200);
     assert.match(res.headers["content-type"], /^text\/plain/);
     const lines = res.body.split("\n").map((l) => l.trim());
-    for (const l of ["User-agent: *", "Allow: /", "Disallow: /l/", "Disallow: /invite/", "Disallow: /bookings/", "Disallow: /book/cancel/", "Disallow: /api/", "Sitemap: https://beautica.app/sitemap-index.xml"]) {
+    for (const l of ["User-agent: *", "Allow: /", "Disallow: /l/", "Disallow: /invite/", "Disallow: /bookings/", "Disallow: /book/cancel/", "Disallow: /c/", "Disallow: /api/", "Sitemap: https://beautica.app/sitemap-index.xml"]) {
       assert.ok(lines.includes(l), `robots.txt lacks "${l}"`);
     }
   });

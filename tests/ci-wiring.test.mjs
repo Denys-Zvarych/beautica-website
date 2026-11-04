@@ -76,7 +76,7 @@ describe("every route is under Lighthouse", () => {
   const staticRoutes = routes("").filter((r) => !r.includes("[") && !r.startsWith("/book-steps/")).map((r) => (r === "/index" ? "/index" : r));
   // Catch-all 404 routes ([...rest]) are not pages either: they only re-serve the static /404 page through the middleware so that malformed
   // token paths get the token headers (phase 007). Listed by name so a new catch-all cannot slip past Lighthouse unnoticed; /404 is measured.
-  const CATCH_ALL_404 = ["/book/cancel/[...rest]"];
+  const CATCH_ALL_404 = ["/book/cancel/[...rest]", "/c/[...rest]"];
   const catchAll = routes("").filter((r) => r.includes("[..."));
   const dynamicRoutes = routes("").filter((r) => r.includes("[") && !r.includes("[..."));
   const lhciUrls = lhci.ci.collect.url.map((u) => new URL(u).pathname.replace(/\.html$/, ""));
@@ -87,7 +87,7 @@ describe("every route is under Lighthouse", () => {
       assert.ok(lhci.ci.assert.assertMatrix.some((a) => new RegExp(a.matchingUrlPattern).test(`http://localhost${r}.html`) && a.aggregationMethod === "median"), `${r} matches no median assertion block`);
     });
   test("the SSR routes (no built HTML for LHCI) are covered by scripts/lighthouse-ssr.mjs: master, 12-photo rail, salon, sorted view; run in CI with 3 runs", () => {
-    assert.deepEqual(dynamicRoutes.sort(), ["/book/[slug]", "/book/cancel/[token]", "/book/s/[slug]", "/r/[token]"]);
+    assert.deepEqual(dynamicRoutes.sort(), ["/book/[slug]", "/book/cancel/[token]", "/book/s/[slug]", "/c/[token]", "/r/[token]"]);
     const script = read("scripts/lighthouse-ssr.mjs");
     const pages = JSON.parse(/const PAGES = (\[.*?\]);/.exec(script)[1]);
     assert.ok(pages.some((p) => /^\/book\/[a-z0-9-]+$/.test(p)), "a master page");

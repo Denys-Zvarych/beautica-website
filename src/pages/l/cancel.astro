@@ -26,6 +26,13 @@ import { API_BASE } from "../../lib/appLinks";
     data-h-closed={t("cancel.closedTitle")}
     data-h-notfound={t("cancel.notfoundTitle")}
     data-h-error={t("cancel.errorTitle")}
+    data-ro-title-cancelled={t("cancel.doneTitle")}
+    data-ro-title-completed={t("cancel.ro.completedTitle")}
+    data-ro-title-notcompleted={t("cancel.ro.notCompletedTitle")}
+    data-ro-title-other={t("cancel.ro.otherTitle")}
+    data-ro-text-cancelled={t("cancel.ro.cancelledText")}
+    data-ro-text-completed={t("cancel.ro.completedText")}
+    data-ro-text-notcompleted={t("cancel.ro.notCompletedText")}
   >
     <div class="state" id="st-loading" role="status">
       <p class="vt-prose">{t("cancel.loading")}</p>
@@ -37,6 +44,8 @@ import { API_BASE } from "../../lib/appLinks";
         <div><dt>{t("cancel.master")}</dt><dd id="c-master"></dd></div>
         <div><dt>{t("cancel.service")}</dt><dd id="c-service"></dd></div>
         <div><dt>{t("cancel.when")}</dt><dd id="c-when"></dd></div>
+        <div id="c-salon-row" hidden><dt>{t("cancel.salon")}</dt><dd id="c-salon"></dd></div>
+        <div id="c-address-row" hidden><dt>{t("cancel.address")}</dt><dd id="c-address"></dd></div>
       </dl>
       <p class="vt-body" id="c-until"></p>
       <CtaButton type="button" id="c-confirm" spinner>{t("cancel.confirm")}</CtaButton>
@@ -45,6 +54,19 @@ import { API_BASE } from "../../lib/appLinks";
 
     <div class="state" id="st-cancelled" hidden>
       <p class="vt-prose">{t("cancel.doneText")}</p>
+    </div>
+
+    {/* Phase 435: read-only view for a booking that is not CONFIRMED (cancelled / declined / completed / no-show / unknown status). No cancel button. */}
+    <div class="state" id="st-readonly" hidden>
+      <dl class="facts vt-prose">
+        <div><dt>{t("cancel.master")}</dt><dd id="r-master"></dd></div>
+        <div><dt>{t("cancel.service")}</dt><dd id="r-service"></dd></div>
+        <div><dt>{t("cancel.when")}</dt><dd id="r-when"></dd></div>
+        <div id="r-salon-row" hidden><dt>{t("cancel.salon")}</dt><dd id="r-salon"></dd></div>
+        <div id="r-address-row" hidden><dt>{t("cancel.address")}</dt><dd id="r-address"></dd></div>
+      </dl>
+      <p class="vt-prose" id="r-text" hidden></p>
+      <div id="r-rebook" hidden><CtaButton href="/" id="r-rebook-link">{t("cancel.rebook")}</CtaButton></div>
     </div>
 
     <div class="state" id="st-closed" hidden>
@@ -108,6 +130,9 @@ import { API_BASE } from "../../lib/appLinks";
     display: flex;
     flex-direction: column;
   }
+  .facts div[hidden] {
+    display: none;
+  }
   .facts dt {
     font-size: var(--vt-fs-label);
     font-weight: var(--vt-fw-label);
@@ -120,7 +145,7 @@ import { API_BASE } from "../../lib/appLinks";
 </style>
 
 <script>
-  import { tokenFromPath, fetchInfo, cancelBooking, formatWhen, type CancelState } from "../../lib/guestCancel";
+  import { tokenFromPath, fetchInfo, cancelBooking, formatWhen, readonlyKind, safeRebookPath, factText, addressWithNote, type CancelState } from "../../lib/guestCancel";
   import { telegramStatus } from "../../scripts/booking/telegram-api";
   import { availabilityFromStatus, mountReminders } from "../../scripts/booking/reminder-channel";
 
@@ -130,11 +155,11 @@ import { API_BASE } from "../../lib/appLinks";
   const $ = (id: string) => document.getElementById(id)!;
   const confirmBtn = $("c-confirm") as HTMLButtonElement;
   const label = confirmBtn.querySelector<HTMLElement>(".lbl")!;
-  const show = (s: "loading" | CancelState) => {
+  const show = (s: "loading" | CancelState, heading?: string) => {
     for (const el of root.querySelectorAll<HTMLElement>(".state")) el.hidden = el.id !== `st-${s}`;
     const title = $("cancel-title");
     if (s !== "loading") {
-      title.textContent = root.dataset[`h${s[0]!.toUpperCase()}${s.slice(1)}`] ?? title.textContent;
+      title.textContent = heading ?? root.dataset[`h${s[0]!.toUpperCase()}${s.slice(1)}`] ?? title.textContent;
       title.focus();
     }
   };
@@ -155,6 +180,14 @@ import { API_BASE } from "../../lib/appLinks";
     }
   }
 
+  // Phase 435: optional salon / address facts, text only (textContent); a null or blank value keeps the row hidden.
+  function setOptionalFacts(prefix: "c" | "r", info: { salonName?: unknown; address?: unknown; locationNote?: unknown }) {
+    for (const [key, value] of [["salon", factText(info.salonName)], ["address", addressWithNote(info.address, info.locationNote)]] as const) {
+      $(`${prefix}-${key}`).textContent = value ?? "";
+      $(`${prefix}-${key}-row`).hidden = !value;
+    }
+  }
+
   async function load() {
     if (!token) return show("notfound");
     show("loading");
@@ -163,7 +196,23 @@ import { API_BASE } from "../../lib/appLinks";
       $("c-master").textContent = info.masterName;
       $("c-service").textContent = info.serviceName;
       $("c-when").textContent = formatWhen(info.startsAt);
+      setOptionalFacts("c", info);
       $("c-until").textContent = (root.dataset.until ?? "").replace("{time}", formatWhen(info.windowClosesAt));
+    }
+    if (info && state === "readonly") {
+      const kind = readonlyKind(info.status).toLowerCase();
+      $("r-master").textContent = info.masterName;
+      $("r-service").textContent = info.serviceName;
+      $("r-when").textContent = formatWhen(info.startsAt);
+      setOptionalFacts("r", info);
+      const text = $("r-text");
+      text.textContent = root.dataset[`roText${kind[0]!.toUpperCase()}${kind.slice(1)}`] ?? "";
+      text.hidden = !text.textContent;
+      const rebook = safeRebookPath(info.rebookPath);
+      if (rebook) $("r-rebook-link").setAttribute("href", rebook);
+      $("r-rebook").hidden = !rebook;
+      show(state, root.dataset[`roTitle${kind[0]!.toUpperCase()}${kind.slice(1)}`]);
+      return;
     }
     if (state === "confirm" && !remindersAsked) rc.setAttribute("data-reserve", "");
     show(state);

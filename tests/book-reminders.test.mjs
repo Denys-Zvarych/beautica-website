@@ -4,6 +4,7 @@ import { test, describe, before, after } from "node:test";
 import assert from "node:assert/strict";
 import { launch } from "./helpers/browser.mjs";
 import { bookPage, driveTo } from "./helpers/book.mjs";
+import { SHORT_TOKEN } from "./helpers/env.mjs";
 
 let browser;
 before(async () => (browser = await launch()));
@@ -137,6 +138,26 @@ const visibleAgain = (page) =>
   });
 
 describe("done screen, Telegram contract", () => {
+  test("short cancel link: cancelUrl https://beautica.app/c/{16} gives the Telegram link-token its 16-char token, no cancel link on the screen", async () => {
+    const env = await bookPage(browser, "tgdone-3131");
+    try {
+      const calls = await tgRoutes(env.page, { "link-token": () => [200, { url: OK_URL, expiresAt: "2026-11-02T10:30:00Z", alreadyLinked: false }] });
+      await stubTme(env.page);
+      await env.page.route("**/api/v1/book/tgdone-3131/booking", async (r) => {
+        if (r.request().method() !== "POST") return r.fallback();
+        const res = await r.fetch();
+        await r.fulfill({ response: res, json: { ...(await res.json()), cancelUrl: `https://beautica.app/c/${SHORT_TOKEN}`, telegram: { available: true, linked: false } } });
+      });
+      await toDone(env);
+      assert.equal(await env.page.locator("[data-screen=done] a[href*='/c/'], [data-screen=done] a[href*='/book/cancel']").count(), 0, "the done screen links no cancel page");
+      await pickTelegram(env.page);
+      await env.page.waitForURL(OK_URL);
+      assert.deepEqual(calls["link-token"].map((b) => JSON.parse(b)), [{ cancelToken: SHORT_TOKEN }], "the short token, unchanged, in the body only");
+    } finally {
+      await env.context.close();
+    }
+  });
+
   test("Telegram click: link-token body is {cancelToken} only, the browser goes to the returned t.me url", async () => {
     const env = await bookPage(browser, "tgdone-3131");
     try {
@@ -213,7 +234,7 @@ describe("done screen, Telegram contract", () => {
       await toDone(env);
       await env.page.getByText("Нагадування надходять у Telegram").waitFor({ state: "visible" });
       assert.equal(await env.page.locator('#done-reminders input[value=sms]').isVisible(), false);
-      await env.page.getByRole("button", { name: "Повернутися до SMS" }).click();
+      await env.page.getByRole("button", { name: "Відписатися від Telegram" }).click();
       await env.page.locator('#done-reminders input[value=sms]').waitFor({ state: "visible" });
       assert.equal(await env.page.locator('#done-reminders input[value=sms]').isChecked(), true);
       assert.deepEqual(calls.unlink.map((b) => JSON.parse(b)), [{ cancelToken: "123e4567-e89b-42d3-a456-426614174000" }]);

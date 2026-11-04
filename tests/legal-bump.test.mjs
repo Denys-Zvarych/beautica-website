@@ -42,10 +42,10 @@ describe("the version and the date shown on the legal pages come from the source
     const html = page("terms");
     assert.match(html, shown(version, updated), `/terms does not show «Версія ${version}» / ${updated} (${shownDate(updated)})`);
   });
-  test("the bump is the one the phase doc ships: terms 1.1 / 2026-10-29, privacy 1.4 / 2026-10-31 (the backend gate compares this version string)", () => {
-    assert.deepEqual(front(privacyMd), { version: "1.4", updated: "2026-10-31" });
+  test("the bump is the one the phase doc ships: terms 1.1 / 2026-10-29, privacy 1.5 / 2026-11-04 (the backend gate compares this version string)", () => {
+    assert.deepEqual(front(privacyMd), { version: "1.5", updated: "2026-11-04" });
     assert.deepEqual(front(termsMd), { version: "1.1", updated: "2026-10-29" });
-    assert.equal(PRIVACY_POLICY_VERSION, "2026-10-31");
+    assert.equal(PRIVACY_POLICY_VERSION, "2026-11-04");
   });
 });
 

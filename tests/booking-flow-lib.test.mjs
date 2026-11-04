@@ -2,7 +2,7 @@
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
 import { addDays, inWindow, kyivToday, maxMonthOffset, monthView, partOfDay, weekdayMon0, WINDOW_DAYS, kyivTime, kyivDay } from "../src/scripts/booking/calendar.ts";
-import { failFor, cancelPath } from "../src/scripts/booking/api.ts";
+import { failFor, cancelPath, cancelToken } from "../src/scripts/booking/api.ts";
 import { buildIcs } from "../src/scripts/booking/ics.ts";
 import { formatPhoneGrouped, nationalDigits } from "../src/lib/phone.ts";
 import { build } from "esbuild";
@@ -66,6 +66,16 @@ describe("API error mapping", () => {
     assert.equal(cancelPath("javascript:alert(1)"), null);
     assert.equal(cancelPath("https://beautica.app/book/cancel/" + "-".repeat(36)), null, "36 dashes is not a UUID");
     assert.equal(cancelPath(null), null);
+  });
+  test("the short cancel link /c/{16 alphanumerics} is kept (case-sensitive), cancelToken reads both forms", () => {
+    const id = "123e4567-e89b-42d3-a456-426614174000";
+    assert.equal(cancelPath("https://beautica.app/c/Ab3dEf7hJk9mNp2Q"), "/c/Ab3dEf7hJk9mNp2Q");
+    assert.equal(cancelPath("https://beautica.app/c/Ab3dEf7hJk9mNp2Q?x=1"), "/c/Ab3dEf7hJk9mNp2Q");
+    for (const bad of ["/c/Ab3dEf7hJk9mNp2", "/c/Ab3dEf7hJk9mNp2QQ", "/c/Ab3dEf7hJk9mNp2-", "/c/Ab3dEf7hJk9mNp2Q/x", "/c/"]) assert.equal(cancelPath(`https://beautica.app${bad}`), null, bad);
+    assert.equal(cancelToken("/c/Ab3dEf7hJk9mNp2Q"), "Ab3dEf7hJk9mNp2Q");
+    assert.equal(cancelToken(`/book/cancel/${id}`), id);
+    assert.equal(cancelToken("/c/short"), null);
+    assert.equal(cancelToken(null), null);
   });
 });
 
