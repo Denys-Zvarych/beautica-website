@@ -800,7 +800,7 @@ export async function initBooking(root: HTMLElement): Promise<{ open(): void }> 
   }
 
   // ------------------------------------------------------------------ done
-  /** The «Додати в календар» button: a real link to GET /api/ics (iOS shows Calendar's «Add event» sheet only for a file fetched from a URL).
+  /** The «Додати в календар» button: a real link to GET /api/ics (iOS shows Calendar's «Add event» sheet only for a file fetched from a URL and served `inline`, not `attachment`).
    *  The query holds the time, master, services and place only: no cancel link, phone or name (the cancel link arrives by SMS). */
   /** Keeps the /api/ics URL short: same limits as the endpoint (t 120, l 200, d 500), cut with «…». The endpoint cuts again if needed. */
   const cap = (v: string, max: number): string => (v.length > max ? `${v.slice(0, max - 1).replace(/[\uD800-\uDBFF]$/, "").trimEnd()}…` : v);

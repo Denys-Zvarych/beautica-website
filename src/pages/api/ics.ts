@@ -1,7 +1,6 @@
 // GET /api/ics?s=<start UTC>&e=<end UTC>&t=<summary>&l=<location>&d=<description>: the «Додати в календар» file (phase 025).
-// iOS Safari opens its native «Add event» sheet only for a text/calendar file fetched from a real https URL (not a blob / data: URL),
-// so the browser navigates here. The query carries only what the guest already sees on screen: the time, the master's name, the
-// services and the place. Never a cancel link, phone or guest name (the cancel link arrives by SMS). Nothing is stored or logged.
+// iOS Safari shows «Add event» only for a text/calendar file from a real https URL, so the browser navigates here; served `inline` (iOS 13+ sends attachments to Downloads).
+// The query carries only what the guest already sees (time, master, services, place), never a cancel link, phone or name. Nothing is stored or logged.
 import type { APIRoute } from "astro";
 import { buildIcs } from "../../scripts/booking/ics.ts";
 
@@ -30,8 +29,20 @@ function text(raw: string | null, max: number, required: boolean): string | null
 }
 
 export const GET: APIRoute = ({ url, request }) => {
-  // A page on another site must not be able to make a visitor's browser fetch calendar files from us (abuse); same-origin, typed URL and non-browser clients stay allowed.
+  // A page on another site must not make a visitor open calendar files with attacker-chosen text: Sec-Fetch-Site, plus an Origin/Referer host check for browsers without it (Safari <= 15).
+  // Compared with the request's own host; absent headers (typed URL, non-browser client) stay allowed, an unparsable one counts as foreign.
   if (request.headers.get("sec-fetch-site") === "cross-site") return forbidden();
+  for (const name of ["origin", "referer"]) {
+    const v = request.headers.get(name);
+    if (v === null) continue;
+    let host: string | null = null;
+    try {
+      host = new URL(v).host;
+    } catch {
+      /* unparsable: foreign */
+    }
+    if (host !== url.host) return forbidden();
+  }
   const q = url.searchParams;
   const s = q.get("s") ?? "";
   const e = q.get("e") ?? "";
@@ -48,7 +59,7 @@ export const GET: APIRoute = ({ url, request }) => {
   const body = buildIcs({ uid: crypto.randomUUID(), startsAt: start.toISOString(), minutes, summary, description, location });
   return new Response(body, {
     status: 200,
-    headers: { ...headers, "Content-Type": "text/calendar; charset=utf-8", "Content-Disposition": 'attachment; filename="beautica-booking.ics"' },
+    headers: { ...headers, "Content-Type": "text/calendar; charset=utf-8", "Content-Disposition": 'inline; filename="beautica-booking.ics"' },
   });
 };
 

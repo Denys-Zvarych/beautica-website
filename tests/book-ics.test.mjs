@@ -65,7 +65,7 @@ async function bookAndDownload(slug) {
     const link = env.page.getByRole("link", { name: "Додати в календар" });
     const href = await link.getAttribute("href");
     const [download] = await Promise.all([env.page.waitForEvent("download"), link.click()]);
-    // The browser saved the attachment (its name is asserted); the bytes are read with the page's own request context from the same href.
+    // The browser saved the file (its name is asserted); the bytes are read with the page's own request context from the same href.
     const res = await env.page.request.get(new URL(href, env.page.url()).href);
     assert.equal(res.status(), 200);
     const ics = await res.text();
