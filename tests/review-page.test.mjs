@@ -5,6 +5,7 @@ import assert from "node:assert/strict";
 import { launch } from "./helpers/browser.mjs";
 import { BASE, MOCK_API, rawRequest, requireBase } from "./helpers/env.mjs";
 import { bookPage, callsTo, mockLog, shot } from "./helpers/book.mjs";
+import { formatRating } from "../src/lib/booking/format.ts";
 
 requireBase();
 let browser;
@@ -17,6 +18,12 @@ const quiet = (env) => assert.deepEqual(env.problems.filter((p) => !/status of (
 const reviewPage = (token, opts = {}) => bookPage(browser, token, { path: `/r/${token}`, clock: false, ...opts });
 const visibleScreen = (page) => page.locator("[data-review-root] [data-screen]:not([hidden])").getAttribute("data-screen");
 const rate = (page, n, v) => page.locator(`[data-svc]`).nth(n).locator(`.starbtn[data-v="${v}"]`).click();
+const RATING = (avg, n) => `${formatRating(avg)} (${n})`; // the shared helper's format, mock invite avgRating 4.9 / reviewCount 128
+const submitAll = async (page, stars) => {
+  for (let i = 0; i < stars; i++) await rate(page, i, 5);
+  await page.click("#rv-submit");
+  await page.waitForSelector("[data-screen=success]:not([hidden])");
+};
 const POST_API = (token, tail) => `/api/v1/public/review-invites/${token}${tail}`;
 
 describe("headers and markup (token route)", () => {
@@ -112,9 +119,10 @@ describe("the form", () => {
     try {
       const { page } = env;
       assert.equal(await visibleScreen(page), "form");
-      assert.match(await text(page.locator(".strip")), /Ваш візит до майстра.*Оксана Коваленко.*Манікюр та педикюр.*4\.9.*\(128\)/);
+      assert.match(await text(page.locator("[data-screen=form] .strip")), /Ваш візит до майстра.*Оксана Коваленко.*Манікюр та педикюр.*4\.9.*\(128\)/);
       assert.match(await text(page.locator("[data-screen=form]")), /Інші клієнти побачать ваш відгук як Олена К\. Телефон ніхто не побачить\./);
       assert.equal(await page.locator("#rv-submit").isDisabled(), true);
+      const formatRated = await text(page.locator("[data-screen=form] .strip .rate"));
       await rate(page, 0, 4);
       assert.equal(await page.locator("[data-svc] .starbtn[data-v='4']").getAttribute("aria-checked"), "true");
       assert.equal(await page.locator("[data-svc] [data-word]").innerText(), "Добре");
@@ -127,6 +135,8 @@ describe("the form", () => {
       await page.waitForSelector("[data-screen=success]:not([hidden])");
       assert.equal(await visibleScreen(page), "success");
       assert.match(await text(page.locator("[data-screen=success]")), /Дякуємо за відгук!.*Майстер.*Оксана Коваленко.*24 жовтня 2026 · Манікюр\+гель лак/);
+      assert.equal(await text(page.locator("[data-screen=success] .strip .rate")), formatRated, "done card shows the rating exactly as the form strip did, in the shared helper's format");
+      assert.equal(formatRated, RATING(4.9, 128));
       assert.equal(new URL(page.url()).pathname, "/r/", "back / refresh cannot reuse the token");
       const posts = callsTo(await mockLog((e) => e.path.includes(token)), "POST", "/reviews");
       assert.equal(posts.length, 1);
@@ -196,8 +206,57 @@ describe("the form", () => {
     const env = await reviewPage(tok("rvsalon", 1));
     try {
       const { page } = env;
-      assert.match(await text(page.locator(".strip")), /Ваш візит до салону.*Салон «Лаванда»/);
+      assert.match(await text(page.locator("[data-screen=form] .strip")), /Ваш візит до салону.*Салон «Лаванда»/);
       assert.match(await text(page.locator("[data-svc]").nth(1)), /Педикюр класичний.*Ірина Мельник/);
+      quiet(env);
+    } finally {
+      await env.context.close();
+    }
+  });
+  test("salon name without the «Салон» prefix keeps the «Салон» caption on the done card", async () => {
+    const env = await reviewPage(tok("rvsalonplain", 3));
+    try {
+      const { page } = env;
+      await submitAll(page, 2);
+      assert.match(await text(page.locator("[data-screen=success] .strip")), /^Салон Студія «Лаванда» /);
+      quiet(env);
+    } finally {
+      await env.context.close();
+    }
+  });
+  test("salon name in capitals («САЛОН …») also drops the duplicate caption on the done card", async () => {
+    const env = await reviewPage(tok("rvsalonupper", 4));
+    try {
+      const { page } = env;
+      await submitAll(page, 2);
+      assert.match(await text(page.locator("[data-screen=success] .strip")), /^САЛОН «Лаванда» /);
+      quiet(env);
+    } finally {
+      await env.context.close();
+    }
+  });
+  test("salon link, done card: salon caption, salon name, the services line, and the rating exactly as the form strip showed it", async () => {
+    const env = await reviewPage(tok("rvsalon", 2));
+    try {
+      const { page } = env;
+      const formRate = await text(page.locator("[data-screen=form] .strip .rate"));
+      await submitAll(page, 2);
+      const strip = page.locator("[data-screen=success] .strip");
+      assert.match(await text(strip), /^Салон «Лаванда» Манікюр\+гель лак, Педикюр класичний /);
+      assert.equal(await text(strip.locator(".rate")), formRate);
+      assert.equal(formRate, RATING(4.9, 128));
+      quiet(env);
+    } finally {
+      await env.context.close();
+    }
+  });
+  test("done card avatar: the img src is on the media origin (and only then)", async () => {
+    const env = await reviewPage(tok("rvavatar", 2));
+    try {
+      const { page } = env;
+      await submitAll(page, 1);
+      const src = await page.locator("[data-screen=success] .strip .disc img").getAttribute("src");
+      assert.ok(src?.startsWith("https://media.beautica.test/"), `avatar src: ${src}`);
       quiet(env);
     } finally {
       await env.context.close();
@@ -208,12 +267,16 @@ describe("the form", () => {
     try {
       const { page } = env;
       assert.equal(await visibleScreen(page), "form");
-      const strip = await text(page.locator(".strip"));
+      const strip = await text(page.locator("[data-screen=form] .strip"));
       assert.match(strip, /Ваш візит до майстра.*Оксана Коваленко.*Манікюр\+гель лак$/);
-      assert.equal(await page.locator(".strip .rate").count(), 0);
+      assert.equal(await page.locator("[data-screen=form] .strip .rate").count(), 0);
       assert.equal(/NaN|undefined|null|\(0\)/.test(strip), false, strip);
-      const box = await page.locator(".strip").boundingBox();
+      const box = await page.locator("[data-screen=form] .strip").boundingBox();
       assert.ok(box && box.width > 0 && box.height > 0);
+      await submitAll(page, 1);
+      assert.equal(await page.locator("[data-screen=success] .strip").count(), 1, "the done card still shows the master strip");
+      assert.equal(await page.locator("[data-screen=success] .strip .rate").count(), 0, "no rating cluster on the done card either");
+      assert.equal(/NaN|undefined|null|\(0\)/.test(await text(page.locator("[data-screen=success]"))), false);
       quiet(env);
     } finally {
       await env.context.close();
@@ -465,7 +528,7 @@ describe("responsive", () => {
           return b;
         };
         const noScroll = async (where) => assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true, `${where}: no horizontal scroll at ${width}px`);
-        for (const sel of [".strip", "[data-svc]", ".starbtn", "#comment", "#rv-submit", "#rv-optout"]) await ok(sel);
+        for (const sel of ["[data-screen=form] .strip", "[data-svc]", ".starbtn", "#comment", "#rv-submit", "#rv-optout"]) await ok(sel);
         const star = await ok(".starbtn");
         assert.ok(star.width >= 48 && star.height >= 48, "star target >= 48 px");
         assert.ok((await ok("#rv-optout")).height >= 48);

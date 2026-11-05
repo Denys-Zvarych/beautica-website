@@ -19,13 +19,16 @@ interface Props {
 }
 const { name, subtitle, avatarUrl, rating, reviewCount, salonMaster = false, label, showRating = true } = Astro.props;
 const role = subtitle?.trim() || t(salonMaster ? "book.strip.roleSalonMaster" : "book.strip.roleIndependent");
+// The caption «Салон» would repeat a name that already starts with «Салон» («Салон Салон «Лаванда»»): drop it then (case-insensitive, name trimmed).
+const caption = label ?? t("book.strip.label");
+const dupCaption = caption.trim().toLowerCase() === "салон" && name.trim().toLowerCase().startsWith("салон");
 const shown = reviewCount > 0 ? rating : null;
 ---
 
 <div class="strip">
   <span class="disc" aria-hidden="true">{avatarUrl ? <img src={avatarUrl} alt="" width="52" height="52" loading="lazy" decoding="async" referrerpolicy="no-referrer" /> : <Icon name="person" />}</span>
   <div class="txt">
-    <p class="t-fb sec">{label ?? t("book.strip.label")}</p>
+    {!dupCaption && <p class="t-fb sec">{caption}</p>}
     <p class="t-sub13 ellipsis">{name}</p>
     <div class="sub">
       <span class="t-fb muted ellipsis">{role}</span>
