@@ -28,6 +28,10 @@
     {
       "version": "2026-11-04.1",
       "sha256": "01ce448c4e05b59036b3ff6db2ae6fd560dc8327c46df87298e0dfdac6fd647b"
+    },
+    {
+      "version": "2026-11-05",
+      "sha256": "714614c2578c2008e20af6a1f8b7ee62f51fe98f7a388aaed7b695fbb2eda984"
     }
   ]
 }
