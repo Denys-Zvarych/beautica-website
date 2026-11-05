@@ -125,7 +125,7 @@ describe(".ics control characters cannot inject properties (phase 015 audit)", (
   const ics = buildIcs({ uid: "u", startsAt: "2026-10-23T12:00:00+03:00", minutes: 30, summary: evil, description: evil, location: evil }, new Date("2026-10-22T10:00:00Z"));
   test("every TEXT value: no raw CR/LF/control char survives; no unfolded line starts with an injected property", () => {
     const lines = ics.replace(/\r\n /g, "").split("\r\n");
-    const allowed = /^(BEGIN:VCALENDAR|VERSION|PRODID|CALSCALE|BEGIN:VEVENT|UID|DTSTAMP|DTSTART|DTEND|SUMMARY|DESCRIPTION|LOCATION|END:VEVENT|END:VCALENDAR|)(:|$)/;
+    const allowed = /^(BEGIN:VCALENDAR|VERSION|PRODID|CALSCALE|METHOD|BEGIN:VEVENT|UID|DTSTAMP|DTSTART|DTEND|SUMMARY|DESCRIPTION|LOCATION|BEGIN:VALARM|ACTION|TRIGGER|END:VALARM|END:VEVENT|END:VCALENDAR|)(:|$)/;
     for (const l of lines) assert.ok(allowed.test(l), `unexpected line: ${l}`);
     assert.equal(/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f\u2028\u2029]/.test(ics.replace(/\r\n/g, "")), false);
     assert.equal(/\n/.test(ics.replace(/\r\n/g, "")), false, "no bare LF");

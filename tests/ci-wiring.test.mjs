@@ -57,12 +57,13 @@ describe("every spec runs on pull requests", () => {
     assert.match(pkg.scripts["test:contract"], /claims-pins\.test\.mjs/);
     assert.match(pkg.scripts["test:contract"], /booking-config\.test\.mjs/);
   });
-  test("every step that runs specs, browsers or Lighthouse has a timeout-minutes (<= 5; the lhci step <= 14)", () => {
+  test("every step that runs specs, browsers or Lighthouse has a timeout-minutes (<= 5; the npm test step <= 8; the lhci step <= 14)", () => {
     const heavy = steps.filter((s) => /run-tests\.mjs|npm test|lighthouse|lhci|measure-cls|test:contract|test:static/.test(s.text));
     assert.ok(heavy.length >= 8, `found ${heavy.length} heavy steps: the parser is broken`);
     for (const s of heavy) {
       const t = Number(/timeout-minutes:\s*(\d+)/.exec(s.text)?.[1]);
-      const limit = /lhci autorun/.test(s.text) ? 14 : 5; // lhci over 10 pages x 3 runs takes ~5.5 min on a runner; its job allows 15; lighthouse-ssr is split in two steps (3 + 2 pages) to stay within 5
+      // npm test (792 tests) takes ~305 s on a runner, just over 5 min: its step allows 8 (PR #30).
+      const limit = /lhci autorun/.test(s.text) ? 14 : /^\s*run: npm test\s*$/m.test(s.text) ? 8 : 5; // lhci over 10 pages x 3 runs takes ~5.5 min on a runner; its job allows 15; lighthouse-ssr is split in two steps (3 + 2 pages) to stay within 5
       assert.ok(t >= 1 && t <= limit, `step "${s.text.split("\n")[0]}" has timeout-minutes ${t || "none"}`);
     }
   });

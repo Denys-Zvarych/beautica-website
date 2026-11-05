@@ -156,7 +156,7 @@ jobs:
 
       # The booking specs are slow (real browser flows, axe): each runs as its own command so every step stays well under 5 minutes.
       - name: Tests (flows, /api/delete-request contract, headers + SEO, link-page SSR; without the slow booking specs)
-        timeout-minutes: 5
+        timeout-minutes: 8
         run: npm test
         env:
           TEST_EXCLUDE: booking-flow.test,booking-flow-b,book-compact,book-axe,booking-privacy,book-salon-wizard,review-page,book-blocked,book-reminders

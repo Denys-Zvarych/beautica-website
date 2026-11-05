@@ -256,25 +256,65 @@
   gap: var(--vt-space-sm);
 }
 .calwrap {
-  display: flex;
-  justify-content: center;
+  display: grid;
+  grid-template-columns: 1fr 1fr; /* both choices ALWAYS on one row, equal width */
+  gap: var(--vt-space-sm);
+}
+.calwrap .t-label {
+  grid-column: 1 / -1;
+  margin: 0;
+  text-align: center;
 }
 .calbtn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: var(--vt-space-sm);
+  gap: var(--vt-space-xs);
   min-height: var(--vt-size-cta);
-  padding: 0 var(--vt-space-md);
+  min-width: 0;
+  padding: var(--vt-space-xs) var(--vt-space-sm);
   cursor: pointer;
   text-decoration: none;
   border-radius: var(--vt-radius-button);
   background: var(--vt-color-base);
   border: var(--vt-app-hair) solid color-mix(in srgb, var(--vt-color-accent) 35%, transparent);
-  box-shadow: 0 0 var(--vt-space-sm) color-mix(in srgb, var(--vt-color-shadow-dark-button) 45%, transparent); /* borderedButton */
+  position: relative;
+  isolation: isolate;
+  transition: transform var(--vt-dur-fast) var(--vt-ease);
   color: var(--vt-color-accent-deep);
-  --icon-size: var(--vt-app-icon-17);
+  --icon-size: var(--vt-app-icon-22);
   --icon-gap: 0;
+}
+.calbtn .t-strong115 {
+  font-size: var(--vt-fs-label); /* small enough that «Google Календар» is one line from 393 px (iPhone 15) up; two lines inside the button below */
+  min-width: 0;
+  text-align: start;
+  line-height: 1.2; /* a long label wraps inside the button (two lines) instead of clipping */
+}
+/* borderedButton shadow lives on a layer so the lift can leave it in place (same technique as CtaButton). */
+.calbtn::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  box-shadow: 0 0 var(--vt-space-sm) color-mix(in srgb, var(--vt-color-shadow-dark-button) 45%, transparent);
+  transition: transform var(--vt-dur-fast) var(--vt-ease);
+}
+/* Lift: same as CtaButton (rises, shadow stays); keyboard focus gets the same lift (the global focus ring stays). */
+.calbtn:focus-visible {
+  transform: translateY(calc(var(--vt-lift) * -1));
+}
+.calbtn:focus-visible::before {
+  transform: translateY(var(--vt-lift));
+}
+@media (hover: hover) {
+  .calbtn:hover {
+    transform: translateY(calc(var(--vt-lift) * -1));
+  }
+  .calbtn:hover::before {
+    transform: translateY(var(--vt-lift));
+  }
 }
 .calbtn:active {
   transform: scale(0.97);
@@ -684,27 +724,7 @@
 }
 
 
-/* ---------- compact confirm / done card (phase 025): one merged card, label column + value ---------- */
-.kv {
-  display: grid;
-  grid-template-columns: calc(var(--vt-space-xl) * 2 - var(--vt-space-sm)) 1fr;
-  column-gap: var(--vt-space-sm);
-  align-items: baseline;
-  padding: calc(var(--vt-space-sm) - var(--vt-space-xs) / 2) 0;
-}
-.kv .v {
-  min-width: 0;
-}
-.kv .v p {
-  margin: 0;
-}
-.kv .t-value-12 {
-  font-size: var(--vt-fs-input);
-}
-.kv .t-fb {
-  font-size: var(--vt-fs-body);
-  margin-top: calc(var(--vt-space-xs) / 2);
-}
+/* ---------- compact confirm / done card (phase 025): one merged card; the .kv row lives in recap.css ---------- */
 .sumcard .rule {
   margin: calc(var(--vt-space-sm) + var(--vt-space-xs)) 0;
 }

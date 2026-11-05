@@ -24,6 +24,10 @@
     {
       "version": "2026-11-04",
       "sha256": "f448e9ad85f58a936bf79ad035b25611464cbfb5878b45d51953b547fcf81391"
+    },
+    {
+      "version": "2026-11-04.1",
+      "sha256": "01ce448c4e05b59036b3ff6db2ae6fd560dc8327c46df87298e0dfdac6fd647b"
     }
   ]
 }

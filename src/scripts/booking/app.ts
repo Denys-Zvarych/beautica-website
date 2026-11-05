@@ -6,7 +6,6 @@ import { formatPhoneGrouped, nationalDigits } from "../../lib/phone";
 import { WINDOW_DAYS, addDays, dayLong, dayShort, daysBetween, inWindow, kyivDay, kyivTime, kyivToday, maxMonthOffset, monthLabel, monthView, partOfDay, weekdayMon0, weekdayShort, type Part } from "./calendar";
 import { cancelPath, cancelToken, createBooking, getAvailability, getBookableDays, sendOtp, verifyOtp, type Fail, type Result, type Slot, type TelegramAvailability } from "./api";
 import { mountTurnstile, type Widget } from "./turnstile";
-import { calendarAdd } from "../../lib/icons/strokePaths";
 import { closeRounded, errorOutline, eventAvailable, expandMoreRounded, schedule } from "../../lib/icons/materialPaths";
 import { track } from "../track";
 import { mountReminders } from "./reminder-channel";
@@ -15,6 +14,9 @@ import { cleanComment, cleanName, typingName } from "../../lib/booking/text.ts";
 import type { Core, RecapView, SalonFlow, Svc } from "./salon";
 import { clearMarker, createLedger, mayExist, saveMarker } from "./uncertain";
 import type { SalonInfo } from "../../lib/booking/types";
+import { el, lrow } from "./recap-row";
+import { brandMarks } from "../../lib/icons/brandMarks";
+import { calendarLinks, calendarOrder } from "./calendar-links";
 import "../../styles/book-flow.css"; // step styles ship with the island: the profile pages do not carry them
 
 type Step = "profile" | "services" | "masters" | "date" | "time" | "contact" | "otp" | "confirm" | "done";
@@ -27,13 +29,6 @@ const fmt = (s: string, vars: Record<string, string | number>) => s.replace(/\{(
 function icon(path: string, stroke = false): string {
   return `<svg class="mi${stroke ? " stroke" : ""}" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="${path}"></path></svg>`;
 }
-function el<K extends keyof HTMLElementTagNameMap>(tag: K, cls = "", text = ""): HTMLElementTagNameMap[K] {
-  const e = document.createElement(tag);
-  if (cls) e.className = cls;
-  if (text) e.textContent = text;
-  return e;
-}
-
 /**
  * Adopts the steps, then wires them. Master link: the server-rendered steps sit in a <template> (no DOM until the visitor opens the flow).
  * Salon link: the page carries none of it; the steps are the static fragment /book-steps/salon and the catalogue / masters come from the
@@ -687,15 +682,6 @@ export async function initBooking(root: HTMLElement): Promise<{ open(): void }> 
   }
 
   // ------------------------------------------------------------------ confirm (BookingSummaryCards + BookingRecap)
-  /** A label + value row of the compact summary cards (60 px label column, optional muted detail line). */
-  function lrow(label: string, value: string, detail = ""): string {
-    const row = el("div", "kv");
-    const val = el("div", "v");
-    val.append(el("p", "t-value-12", value));
-    if (detail) val.append(el("p", "t-fb muted w600", detail));
-    row.append(el("span", "t-label", label), val);
-    return row.outerHTML;
-  }
   /** The master link's own view of the booking (the picked services, the live day and time, the one note). */
   const masterView = (): RecapView => ({ services: chosen(), day: st.day!, slot: st.slot!, head: true });
   /** One compact summary (confirm and done): address, «Коли» on one line, one row per service (name, duration, price), «Разом». */
@@ -800,27 +786,29 @@ export async function initBooking(root: HTMLElement): Promise<{ open(): void }> 
   }
 
   // ------------------------------------------------------------------ done
-  /** The «Додати в календар» button: a real link to GET /api/ics (iOS shows Calendar's «Add event» sheet only for a file fetched from a URL and served `inline`, not `attachment`).
-   *  The query holds the time, master, services and place only: no cancel link, phone or name (the cancel link arrives by SMS). */
-  /** Keeps the /api/ics URL short: same limits as the endpoint (t 120, l 200, d 500), cut with «…». The endpoint cuts again if needed. */
-  const cap = (v: string, max: number): string => (v.length > max ? `${v.slice(0, max - 1).replace(/[\uD800-\uDBFF]$/, "").trimEnd()}…` : v);
+  /** The «Додати в календар» chooser: Google opens its "new event" page (any browser, incl. in-app webviews such as Telegram), the Apple link (GET /api/ics, served `inline`)
+   *  is for iPhone / macOS. Order by device, both always reachable. Content: time, master, services and place only: no cancel link, phone or name (the cancel link arrives by SMS). */
   function calendarButton(b: { startsAt: string; minutes: number; master: string; services: string }): HTMLElement {
     const wrap = el("div", "calwrap");
-    const start = new Date(b.startsAt);
-    const q = new URLSearchParams({
-      s: start.toISOString().replace(/\.\d{3}Z$/, "Z"),
-      e: new Date(start.getTime() + b.minutes * 60000).toISOString().replace(/\.\d{3}Z$/, "Z"),
-      t: cap(fmt(S.icsSummary, { master: b.master }), 120),
-      d: cap(fmt(S.icsDescription, { services: b.services }), 500),
-    });
-    const where = [salonName, city, address].filter(Boolean).join(", ");
-    if (where) q.set("l", cap(where, 200));
-    const btn = el("a", "calbtn");
-    btn.href = `/api/ics?${q}`;
-    btn.rel = "noopener";
-    btn.innerHTML = `${icon(calendarAdd, true)}<span class="t-strong115"></span>`;
-    $("span", btn).textContent = S.calendar;
-    wrap.append(btn);
+    wrap.append(el("p", "t-label", S.calendar));
+    const links = calendarLinks({
+      startsAt: b.startsAt,
+      minutes: b.minutes,
+      title: fmt(S.icsSummary, { master: b.master }),
+      description: fmt(S.icsDescription, { services: b.services }),
+      location: [salonName, city, address].filter(Boolean).join(", "),
+    }, navigator.userAgent);
+    const labels = { google: S.calendarGoogle, apple: S.calendarApple } as const;
+    for (const kind of calendarOrder(navigator.userAgent)) {
+      const btn = el("a", "calbtn");
+      btn.href = links[kind];
+      btn.dataset.cal = kind;
+      btn.rel = "noopener noreferrer";
+      if (kind !== "apple") btn.target = "_blank";
+      btn.innerHTML = `<svg class="mi" viewBox="0 0 24 24" aria-hidden="true" focusable="false">${brandMarks[kind === "google" ? "google-calendar" : "apple-calendar"]}</svg><span class="t-strong115"></span>`;
+      $("span", btn).textContent = labels[kind];
+      wrap.append(btn);
+    }
     return wrap;
   }
   function renderDone(b: { startsAt: string; durationMinutes: number; cancelUrl: string | null; telegram: TelegramAvailability | null }): void {

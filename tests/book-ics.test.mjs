@@ -3,9 +3,11 @@
 import { test, describe, before, after } from "node:test";
 import assert from "node:assert/strict";
 import { launch } from "./helpers/browser.mjs";
+import { uk } from "./helpers/env.mjs";
 import { bookPage, mockLog, driveTo } from "./helpers/book.mjs";
 import { parseIcs } from "./helpers/ics-parse.mjs";
 import { buildIcs } from "../src/scripts/booking/ics.ts";
+import { calendarLinks, calendarOrder } from "../src/scripts/booking/calendar-links.ts";
 import { CANCEL_URL, FOREIGN_CANCEL_URL } from "./helpers/mock-api.mjs";
 
 const TOKEN = (u) => new URL(u).pathname.split("/").pop();
@@ -62,7 +64,7 @@ async function bookAndDownload(slug) {
     await env.page.click("#cta-confirm");
     await env.page.waitForSelector("#done-card", { state: "visible" });
     const before = await snapshot(env.page);
-    const link = env.page.getByRole("link", { name: "Додати в календар" });
+    const link = env.page.getByRole("link", { name: uk.book.done.calendarApple });
     const href = await link.getAttribute("href");
     const [download] = await Promise.all([env.page.waitForEvent("download"), link.click()]);
     // The browser saved the file (its name is asserted); the bytes are read with the page's own request context from the same href.
@@ -134,4 +136,105 @@ describe("GET /api/ics: over-long real bookings are cut, not rejected (phase 025
     for (const v of ["same-origin", "none", "same-site"]) assert.equal((await call({ ...times, t: "A" }, { "sec-fetch-site": v })).status, 200, v);
     assert.equal((await call({ ...times, t: "A" })).status, 200);
   });
+});
+
+describe("calendar chooser: Google / Apple .ics (works in in-app webviews)", () => {
+  const ev = { startsAt: "2026-11-08T12:00:00.000Z", minutes: 90, title: "Запис до Оксани", description: "Запис через Beautica. Послуги: A, B.", location: "Київ, вул. Хрещатик" };
+  const links = calendarLinks(ev);
+  test("Google link: TEMPLATE with UTC dates, ctz, text, details, location", () => {
+    const u = new URL(links.google);
+    assert.equal(u.origin + u.pathname, "https://calendar.google.com/calendar/render");
+    assert.equal(u.searchParams.get("action"), "TEMPLATE");
+    assert.equal(u.searchParams.get("ctz"), "Europe/Kyiv");
+    assert.equal(u.searchParams.get("dates"), "20261108T120000Z/20261108T133000Z");
+    assert.equal(u.searchParams.get("text"), ev.title);
+    assert.equal(u.searchParams.get("details"), ev.description);
+    assert.equal(u.searchParams.get("location"), ev.location);
+    assert.deepEqual(Object.keys(links).sort(), ["apple", "google"]);
+  });
+  test("Android: Google link is an intent:// to the Calendar app with the exact https template as fallback; iOS / desktop keep plain https", () => {
+    const https = links.google;
+    const droid = "Mozilla/5.0 (Linux; Android 14; Pixel 8; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/126.0.0.0 Mobile Safari/537.36 Instagram 300.0";
+    const href = calendarLinks(ev, droid).google;
+    const [head, frag] = href.split("#");
+    const hu = new URL(https);
+    assert.equal(head, `intent://${hu.host}${hu.pathname}${hu.search}`);
+    assert.match(frag, /^Intent;scheme=https;package=com\.google\.android\.calendar;S\.browser_fallback_url=[^;]+;end$/);
+    assert.equal(decodeURIComponent(frag.match(/S\.browser_fallback_url=([^;]+);end/)[1]), https);
+    assert.equal(new URL("https://x" + head.slice("intent://calendar.google.com".length)).searchParams.get("dates"), "20261108T120000Z/20261108T133000Z");
+    assert.equal(calendarLinks(ev, droid).apple, links.apple, "the .ics link is untouched");
+    for (const ua of ["Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 Mobile/15E148 Safari/604.1", "Mozilla/5.0 (X11; Linux x86_64) Chrome/126.0.0.0 Safari/537.36", ""]) assert.equal(calendarLinks(ev, ua).google, https, ua);
+  });
+  test("apple link stays /api/ics; long input is capped (t 120, l 200, d 500)", () => {
+    assert.match(links.apple, /^\/api\/ics\?s=/);
+    const l = calendarLinks({ ...ev, title: "М".repeat(300), description: "Д".repeat(900), location: "Л".repeat(400) });
+    assert.equal(new URL(l.google).searchParams.get("text").length, 120);
+    assert.equal(new URL(l.google).searchParams.get("details").length, 500);
+    assert.equal(new URL(l.google).searchParams.get("location").length, 200);
+  });
+  test("the file has METHOD:PUBLISH and a -PT1H display alarm, and still no URL / name / phone", () => {
+    const ics = buildIcs(base, now);
+    assert.match(ics, /\r\nMETHOD:PUBLISH\r\n/);
+    assert.match(ics, /BEGIN:VALARM\r\nACTION:DISPLAY\r\nDESCRIPTION:[^\r]+\r\nTRIGGER:-PT1H\r\nEND:VALARM/);
+    parseIcs(ics);
+  });
+  test("order: Apple devices -> .ics first; Android, desktop, Chrome on Linux -> Google first; always both", () => {
+    const UAS = {
+      safari: ["Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1", "apple"],
+      mac: ["Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Safari/605.1.15", "apple"],
+      android: ["Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Mobile Safari/537.36", "google"],
+      linux: ["Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36", "google"],
+    };
+    for (const [n, [ua, first]] of Object.entries(UAS)) {
+      const o = calendarOrder(ua);
+      assert.equal(o[0], first, n);
+      assert.deepEqual([...o].sort(), ["apple", "google"], n);
+    }
+  });
+  test("done screen: two links (Google new tab, Apple .ics), both noopener noreferrer, >= 48 px, no cancel link / phone / name", async () => {
+    const env = await bookPage(browser, "oksana-ab12", { width: 360 });
+    try {
+      await driveTo(env.page, "confirm", { contact: { name: "Календар" } });
+      await env.page.click("#cta-confirm");
+      await env.page.waitForSelector("#done-card", { state: "visible" });
+      const rows = await env.page.locator("[data-screen=done] .calbtn").evaluateAll((as) => as.map((a) => ({ k: a.dataset.cal, href: a.href, target: a.target, rel: a.rel, r: a.getBoundingClientRect().toJSON() })));
+      assert.deepEqual(rows.map((r) => r.k).sort(), ["apple", "google"]);
+      assert.ok(Math.abs(rows[0].r.y - rows[1].r.y) < 1 && Math.abs(rows[0].r.width - rows[1].r.width) < 1, "ONE row at 360 px, equal width");
+      assert.equal(await env.page.evaluate(() => [...document.querySelectorAll("[data-screen=done] .calbtn .t-strong115")].every((e) => e.scrollWidth <= e.clientWidth + 1)), true, "labels not clipped");
+      if (process.env.CAL_SHOT) await env.page.locator("#done-card").screenshot({ path: process.env.CAL_SHOT });
+      for (const r of rows) {
+        assert.ok(r.r.width > 0 && r.r.height >= 47.99, `${r.k} box ${r.r.height}`);
+        assert.equal(/cancel|\+?380|50\d{7}/.test(decodeURIComponent(r.href)), false, r.href);
+        assert.equal(r.rel, "noopener noreferrer");
+        if (r.k === "google") assert.equal(r.target, "_blank");
+      }
+      assert.equal(await env.page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
+    } finally {
+      await env.context.close();
+    }
+  });
+
+  const UA_PLATFORM = {
+    iphone: ["Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1", ["apple", "google"]],
+    mac: ["Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Safari/605.1.15", ["apple", "google"]],
+    android: ["Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Mobile Safari/537.36", ["google", "apple"]],
+    linux: ["Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36", ["google", "apple"]],
+  };
+  for (const [name, [userAgent, order]] of Object.entries(UA_PLATFORM))
+    test(`done screen on ${name}: buttons render ${order.join(" then ")} (left to right), Google href ${name === "android" ? "is an intent://" : "is https"}, no cancel token or phone in either href`, async () => {
+      const env = await bookPage(browser, "oksana-ab12", { width: 393, userAgent });
+      try {
+        await driveTo(env.page, "confirm", { contact: { name: "Порядок" } });
+        await env.page.click("#cta-confirm");
+        await env.page.waitForSelector("#done-card", { state: "visible" });
+        const btns = await env.page.locator("[data-screen=done] .calbtn").evaluateAll((as) => as.map((a) => ({ k: a.dataset.cal, x: a.getBoundingClientRect().x, href: a.getAttribute("href") })));
+        assert.deepEqual(btns.sort((a, b) => a.x - b.x).map((b) => b.k), order);
+        const google = btns.find((b) => b.k === "google").href;
+        assert.equal(google.startsWith(name === "android" ? "intent://calendar.google.com/calendar/render?" : "https://calendar.google.com/calendar/render?"), true, google);
+        if (name === "android") assert.match(google, /;package=com\.google\.android\.calendar;S\.browser_fallback_url=https%3A%2F%2Fcalendar\.google\.com%2F[^;]+;end$/);
+        for (const b of btns) assert.equal(/cancel|123e4567|\+?380|50\d{7}/i.test(decodeURIComponent(b.href)), false, b.href);
+      } finally {
+        await env.context.close();
+      }
+    });
 });

@@ -25,9 +25,9 @@ const termsMd = read("src/content/legal/uk/terms.md");
 const KB = 1024;
 
 /** What LegalPage.astro prints: «Версія X» and «<label>: <time datetime>d month yyyy</time>». */
-const shownDate = (iso) => new Date(iso).toLocaleDateString("uk-UA", { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" });
+const shownDate = (iso) => new Date(iso.slice(0, 10)).toLocaleDateString("uk-UA", { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" });
 /** The meta line of LegalPage as built (Astro adds data-astro-cid-* attributes to every element). */
-const shown = (version, iso) => new RegExp(`<span[^>]*>${uk.legal.version.replace("{version}", version).replace(/\./g, "\\.")}</span><span[^>]*>[^<]*<time datetime="${iso}"[^>]*>${shownDate(iso).replace(/\./g, "\\.")}</time>`);
+const shown = (version, iso) => new RegExp(`<span[^>]*>${uk.legal.version.replace("{version}", version).replace(/\./g, "\\.")}</span><span[^>]*>[^<]*<time datetime="${iso.slice(0, 10)}"[^>]*>${shownDate(iso).replace(/\./g, "\\.")}</time>`);
 const visibleText = (html) => html.replace(/<(script|style)[\s\S]*?<\/\1>/g, "").replace(/<head>[\s\S]*?<\/head>/, "").replace(/<[^>]+>/g, " ");
 
 describe("the version and the date shown on the legal pages come from the sources of truth", () => {
@@ -42,10 +42,10 @@ describe("the version and the date shown on the legal pages come from the source
     const html = page("terms");
     assert.match(html, shown(version, updated), `/terms does not show «Версія ${version}» / ${updated} (${shownDate(updated)})`);
   });
-  test("the bump is the one the phase doc ships: terms 1.1 / 2026-10-29, privacy 1.5 / 2026-11-04 (the backend gate compares this version string)", () => {
-    assert.deepEqual(front(privacyMd), { version: "1.5", updated: "2026-11-04" });
+  test("the bump is the one the phase doc ships: terms 1.1 / 2026-10-29, privacy 1.6 / 2026-11-04.1 (the backend gate compares this version string)", () => {
+    assert.deepEqual(front(privacyMd), { version: "1.6", updated: "2026-11-04.1" });
     assert.deepEqual(front(termsMd), { version: "1.1", updated: "2026-10-29" });
-    assert.equal(PRIVACY_POLICY_VERSION, "2026-11-04");
+    assert.equal(PRIVACY_POLICY_VERSION, "2026-11-04.1");
   });
 });
 

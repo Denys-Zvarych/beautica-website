@@ -5,13 +5,14 @@
 // these are glyphs inside our own chips, not official badges. Inline SVG only: no requests, no raster.
 import * as M from "../lib/icons/materialPaths";
 import { calendarAdd, starOutline } from "../lib/icons/strokePaths";
+import { brandMarks, type BrandMark } from "../lib/icons/brandMarks";
 // Material set (booking-link pages): the app's own glyphs, subset of MaterialIcons-Regular.otf (src/lib/icons/materialPaths.ts).
 export type MaterialIconName =
   | "star" | "spa" | "person" | "person-outline" | "done" | "schedule" | "arrow-back-ios" | "keyboard-arrow-down" | "expand-more-rounded"
   | "error-outline" | "chevron-right" | "chevron-left" | "phone" | "location-on" | "swap-vert" | "alternate-email" | "event-busy"
   | "event-available" | "check-circle" | "auto-awesome" | "arrow-forward" | "add" | "reviews" | "photo-camera-back" | "mail-read"
   | "edit-calendar" | "design-services" | "person-baseline" | "close-rounded";
-export type IconName = "google-play" | "app-store" | "arrow-back" | "mail" | "close" | "check" | "expand-more" | "calendar-add" | "star-outline" | "telegram" | "sms" | MaterialIconName;
+export type IconName = "google-play" | "app-store" | "arrow-back" | "mail" | "close" | "check" | "expand-more" | "calendar-add" | "star-outline" | "telegram" | "sms" | BrandMark | MaterialIconName;
 interface Props {
   name: IconName;
   /** "lg" = 32 px glyph (success badge). Default unchanged. */
@@ -23,6 +24,7 @@ const { name, size, draw = false } = Astro.props;
 const stroked = name === "check"; // drawn as a stroke (so it can animate), not a filled path
 const outlined = name === "calendar-add"; // Material Symbols calendar_add_on: drawn as strokes (the Symbols font is 15 MB; no glyph source to subset)
 const materialPath = (M as Record<string, string>)[name.replace(/-(\w)/g, (_, c: string) => c.toUpperCase())];
+const brand = name in brandMarks; // full-colour calendar marks (own colours, not currentColor)
 const chev = name === "expand-more"; // disclosure chevron: turns over while its <details> is open
 const nudge = name === "arrow-back"; // directional glyph: slides toward its direction when the parent link is hovered/focused
 const paths: Record<string, string> = {
@@ -49,7 +51,9 @@ const paths: Record<string, string> = {
 
 <span class:list={["icon", { nudge, chev, lg: size === "lg", draw }]} aria-hidden="true">
   {
-    outlined ? (
+    brand ? (
+      <svg viewBox="0 0 24 24" width="1.25em" height="1.25em" xmlns="http://www.w3.org/2000/svg" focusable="false" set:html={brandMarks[name as BrandMark]} />
+    ) : outlined ? (
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg" focusable="false">
         <path d={calendarAdd}></path>
       </svg>

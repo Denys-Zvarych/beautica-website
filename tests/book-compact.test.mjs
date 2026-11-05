@@ -73,8 +73,13 @@ describe("done @393x660", () => {
       const disc = await p.locator("[data-screen=done] .hero .disc").boundingBox();
       assert.ok(Math.abs(disc.width - 48) <= 1 && Math.abs(disc.height - 48) <= 1, `disc ${disc.width}x${disc.height}`);
       const h2 = await p.locator("[data-screen=done] h2").boundingBox();
-      const cal = await p.locator("[data-screen=done] .calbtn").boundingBox();
-      for (const [name, b] of [["disc", disc], ["heading", h2], ["calendar link", cal]]) assert.ok(Math.abs(b.x + b.width / 2 - W / 2) <= 2, `${name} centred: ${b.x + b.width / 2}`);
+      const cal = await p.locator("[data-screen=done] .calwrap").boundingBox();
+      for (const [name, b] of [["disc", disc], ["heading", h2], ["calendar chooser", cal]]) assert.ok(Math.abs(b.x + b.width / 2 - W / 2) <= 2, `${name} centred: ${b.x + b.width / 2}`);
+      const btns = await p.locator("[data-screen=done] .calbtn").evaluateAll((as) => as.map((a) => a.getBoundingClientRect().toJSON()));
+      assert.equal(btns.length, 2);
+      assert.ok(Math.abs(btns[0].y - btns[1].y) < 1 && Math.abs(btns[0].width - btns[1].width) < 1, "both calendar buttons on ONE row, equal width");
+      assert.ok(Math.abs((btns[0].x + btns[1].x + btns[1].width) / 2 - W / 2) <= 2, "the pair is centred");
+      if (process.env.CAL_SHOT) await p.locator("#done-card").screenshot({ path: process.env.CAL_SHOT });
       assert.equal(await p.locator("[data-screen=done] h2").evaluate((e) => Math.round(parseFloat(getComputedStyle(e).fontSize))), 21);
       const m = await doneHeight(p);
       console.log("done SMS height:", Math.round(m.height));

@@ -5,7 +5,7 @@
 import { test, describe, before, after } from "node:test";
 import assert from "node:assert/strict";
 import { launch } from "./helpers/browser.mjs";
-import { BASE, MOCK_API, rawRequest, requireBase } from "./helpers/env.mjs";
+import { BASE, MOCK_API, rawRequest, requireBase, uk } from "./helpers/env.mjs";
 import { callsTo, mockLog, shot } from "./helpers/book.mjs";
 import { wizAssign, wizMasterId, GUEST_TOKEN } from "./helpers/mock-api.mjs";
 import { M1, M2, M3, S1, S2, S3, S4, salonPage, pickServices, openAll, toggleMaster, chip, clickAndLoadDays, nextMaster, days, pickDay, pickSlot, scheduleMaster, verifyOtp, toConfirm } from "./helpers/salon.mjs";
@@ -220,9 +220,9 @@ describe("016: the whole story, one booking per master", () => {
       assert.equal(await done.count(), 3, "the salon address card + one per master");
       assert.equal(await page.locator("#done-list a[data-done-cancel], #done-list a[href*='/book/cancel']").count(), 0, "no cancel link");
       assert.equal(/Скасувати|не пізніше ніж за 2 години/.test(await text(page.locator("[data-screen=done]"))), false, "no cancel text / button");
-      const cals = page.getByRole("link", { name: "Додати в календар" });
+      const cals = page.getByRole("link", { name: uk.book.done.calendarApple });
       assert.equal(await cals.count(), 2, "one calendar link per master");
-      assert.equal(await page.getByRole("button", { name: "Додати в календар" }).count(), 0);
+      assert.equal(await page.getByRole("button", { name: uk.book.done.calendarApple }).count(), 0);
       const hrefs = await cals.evaluateAll((a) => a.map((x) => x.getAttribute("href")));
       for (const h of hrefs) assert.equal(new URL(h, "https://x.example").pathname, "/api/ics");
       assert.equal(hrefs.some((h) => /cancel|123e4567/.test(decodeURIComponent(h))), false, "no cancel token in a calendar URL");
@@ -274,7 +274,14 @@ describe("016: the whole story, one booking per master", () => {
       await page.waitForSelector("#done-list [data-done]", { state: "visible" });
       const posts = callsTo(await mockLog(), "POST", "/book/s/wiz-c409-0001/masters/");
       assert.deepEqual(posts.map((p) => p.path.split("/masters/")[1].split("/")[0]), [M1.id, M2.id, M2.id], "master 1 is posted ONCE; master 2 twice");
-      assert.equal(await page.locator("#done-list .calbtn").count(), 2, "both bookings done, one calendar link each");
+      assert.equal(await page.locator("#done-list .calbtn[data-cal=apple]").count(), 2, "both bookings done, one calendar link each");
+      assert.equal(await page.locator("#done-list .calbtn[data-cal=google]").count(), 2, "both bookings done, one Google link each too");
+      const withCal = page.locator("#done-list [data-done]").filter({ has: page.locator(".calbtn") });
+      assert.equal(await withCal.count(), 2, "two booking cards carry calendar buttons (the salon recap card has none)");
+      for (const item of await withCal.all()) {
+        const [a, b] = await item.locator(".calbtn").evaluateAll((els) => els.map((e) => e.getBoundingClientRect().toJSON()));
+        assert.ok(Math.abs(a.y - b.y) < 1 && a.width > 0 && b.width > 0, "the two calendar buttons share one row");
+      }
       noProblems(env);
     } finally {
       await env.context.close();
@@ -324,7 +331,7 @@ describe("016: every step renders at 360 / 768 / 1280 (non-zero boxes, no sidewa
         await noScroll("confirm");
         await page.click("#cta-confirm");
         await page.waitForSelector("#done-list [data-done]", { state: "visible" });
-        for (const sel of ["#done-list .calbtn", "#done-list .sumcard"]) await visible(sel);
+        for (const sel of ["#done-list .calbtn[data-cal=apple]", "#done-list .sumcard"]) await visible(sel);
         await shot(page, `salon-${width}-5-done`);
         await noScroll("done");
         noProblems(env);

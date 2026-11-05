@@ -3,7 +3,7 @@
 import { test, describe, before, after } from "node:test";
 import assert from "node:assert/strict";
 import { launch, visibleBox } from "./helpers/browser.mjs";
-import { BASE, MOCK_API } from "./helpers/env.mjs";
+import { BASE, MOCK_API, uk } from "./helpers/env.mjs";
 import { bookPage, mockLog, callsTo, driveTo, fillContact, pickableDay, shot, toggleConsent, SVC_ID } from "./helpers/book.mjs";
 import { PRIVACY_POLICY_VERSION } from "../src/config/legal.mjs";
 import { UMAMI_SCRIPT_SRC, UMAMI_HOST_URL, CF_BEACON_SRC } from "../src/config/analytics.mjs";
@@ -109,21 +109,45 @@ describe("happy path: one service", () => {
       assert.equal(await page.locator("[data-screen=done] a[href*='/book/cancel']").count(), 0, "no link to the cancel page");
       assert.equal(await page.getByRole("button", { name: /Скасувати/ }).count(), 0);
       assert.equal(/Скасувати запис|не пізніше ніж за 2 години/.test(done), false, done);
-      const cal = page.getByRole("link", { name: "Додати в календар" });
+      const cal = page.getByRole("link", { name: uk.book.done.calendarApple });
       assert.equal(await cal.count(), 1);
       assert.equal(new URL(await cal.getAttribute("href"), "https://x.example").pathname, "/api/ics");
-      assert.equal(await page.getByRole("button", { name: "Додати в календар" }).count(), 0, "a link, not a button");
+      assert.equal(await page.getByRole("button", { name: uk.book.done.calendarApple }).count(), 0, "a link, not a button");
       assert.equal(done.includes("Керуйте записами"), false, "no install block: the done step is the design's");
       assert.equal(await page.locator("[data-screen=done] .chip").count(), 0);
-      assert.ok(await visibleBox(page.locator("[data-screen=done] .calbtn svg")), "calendar glyph is drawn");
-      const paint = await page.locator("[data-screen=done] .calbtn svg").evaluate((s) => { const c = getComputedStyle(s); return { fill: c.fill, stroke: c.stroke, w: c.strokeWidth }; });
-      assert.equal(paint.fill, "none", "a stroke glyph is an outline, not a filled blob");
-      assert.notEqual(paint.stroke, "none");
-      assert.ok(parseFloat(paint.w) >= 1.5);
+      for (const k of ["google", "apple"]) assert.ok(await visibleBox(page.locator(`[data-screen=done] .calbtn[data-cal=${k}] svg`)), `${k} calendar mark is drawn`);
+      const marks = await page.locator("[data-screen=done] .calbtn svg").evaluateAll((svgs) => svgs.map((s) => ({ colours: [...new Set([...s.querySelectorAll("[fill]")].map((e) => e.getAttribute("fill")))].length, w: s.getBoundingClientRect().width })));
+      for (const m of marks) assert.ok(m.colours >= 3 && m.w >= 20, "a full-colour brand mark of icon size: " + JSON.stringify(m));
+      const rows = await page.locator("[data-screen=done] .calbtn").evaluateAll((as) => as.map((a) => a.getBoundingClientRect().toJSON()));
+      assert.equal(rows.length, 2);
+      assert.ok(Math.abs(rows[0].y - rows[1].y) < 1 && Math.abs(rows[0].width - rows[1].width) < 1, "both buttons on ONE row, equal width");
+      for (const r of rows) assert.ok(r.height >= 47.99, "button >= 48 px: " + r.height);
+      assert.equal(await page.evaluate(() => [...document.querySelectorAll("[data-screen=done] .calbtn .t-strong115")].every((e) => e.scrollWidth <= e.clientWidth + 1)), true, "labels are not clipped");
       // The success screen has no «На головну» button (removed by request): no such text, no bare link to "/" left on it.
       assert.equal(await page.locator("[data-screen=done]").getByText("На головну").count(), 0);
       assert.equal(await page.locator("[data-screen=done] a[href='/']:not([hidden])").count(), 0);
     });
+  });
+
+  test("done at 393 px (iPhone 15) and wider: each calendar label is ONE line, buttons on one row, >= 48 px", async () => {
+    for (const width of [360, 393, 430, 768]) {
+      await withPage("oksana-ab12", { width, height: 852 }, async ({ page }) => {
+        await driveTo(page, "confirm", { contact: { name: "Календар" } });
+        await page.click("#cta-confirm");
+        await page.waitForSelector("#done-card", { state: "visible" });
+        const m = await page.locator("[data-screen=done] .calbtn").evaluateAll((as) => as.map((a) => {
+          const l = a.querySelector(".t-strong115");
+          const lh = parseFloat(getComputedStyle(l).lineHeight) || parseFloat(getComputedStyle(l).fontSize) * 1.2;
+          return { y: a.getBoundingClientRect().y, h: a.getBoundingClientRect().height, lines: Math.round(l.getBoundingClientRect().height / lh) };
+        }));
+        assert.equal(m.length, 2);
+        if (width >= 393) assert.deepEqual(m.map((x) => x.lines), [1, 1], `${width}: labels on one line`);
+        else assert.ok(m.every((x) => x.lines <= 2), "360: at most two lines inside the button");
+        assert.ok(Math.abs(m[0].y - m[1].y) < 1, `${width}: one row`);
+        for (const x of m) assert.ok(x.h >= 47.99, `${width}: >= 48 px (${x.h})`);
+        if ((width === 393 || width === 360) && process.env.CAL_SHOT_DIR) await page.locator("#done-card").screenshot({ path: `${process.env.CAL_SHOT_DIR}/calendar-row-${width}.png` });
+      });
+    }
   });
 
   test("phase 025: the calendar file (GET /api/ics from the done link) has the booking's time and place and NO cancel link, phone or guest name", async () => {
@@ -131,7 +155,7 @@ describe("happy path: one service", () => {
       await driveTo(page, "confirm", { contact: { name: "Календар" } });
       await page.click("#cta-confirm");
       await page.waitForSelector("#done-card", { state: "visible" });
-      const href = await page.getByRole("link", { name: "Додати в календар" }).getAttribute("href");
+      const href = await page.getByRole("link", { name: uk.book.done.calendarApple }).getAttribute("href");
       const res = await page.request.get(new URL(href, page.url()).href);
       assert.equal(res.status(), 200);
       assert.match(res.headers()["content-type"], /^text\/calendar/);
