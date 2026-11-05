@@ -1,5 +1,6 @@
 @import "./remind.css";
 @import "./recap.css";
+@import "./tile.css";
 /* ---------- Latin core for the link pages ----------
    fonts.css declares the whole Latin face (letters, accents, symbols: 31-39 KB per family) and every page needs it for spaces and digits. These
    pages show Ukrainian text only, so they redeclare the same family with a small subset (src/fonts, pyftsubset of the same file: space, digits,
@@ -110,7 +111,6 @@
 .t-stat { font: var(--vt-fw-stat-value) var(--vt-fs-stat-value) / normal var(--vt-font-display); color: var(--vt-color-text); }
 .t-avg { font: var(--vt-fw-heading) var(--vt-app-fs-43) / 1 var(--vt-font-display); color: var(--vt-color-text); }
 .t-body { font: var(--vt-fw-body) var(--vt-fs-body) / var(--vt-lh-body) var(--vt-font-body); color: var(--vt-color-text-secondary); }
-.t-strong { font: var(--vt-fw-body-strong) var(--vt-fs-body) / var(--vt-lh-body) var(--vt-font-body); color: var(--vt-color-text); }
 .t-strong11 { font: var(--vt-fw-body-strong) var(--vt-fs-label) / var(--vt-lh-body) var(--vt-font-body); color: var(--vt-color-text); }
 .t-strong115 { font: var(--vt-fw-body-strong) var(--vt-app-fs-115) / var(--vt-lh-body) var(--vt-font-body); color: var(--vt-color-text); }
 .t-input { font: var(--vt-fw-input) var(--vt-fs-input) / normal var(--vt-font-body); color: var(--vt-color-text); }
@@ -453,89 +453,6 @@ a.tab {
   --icon-gap: 0;
 }
 
-/* ---------- CatalogueServiceTile ---------- */
-.stile {
-  display: flex;
-  align-items: center;
-  gap: var(--vt-space-md);
-  width: 100%;
-  border: 0;
-  text-align: start;
-  font: inherit;
-  color: inherit;
-  cursor: pointer;
-  padding: calc(var(--vt-space-sm) + var(--vt-space-xs) / 2) calc(var(--vt-space-sm) + var(--vt-space-xs));
-  border-radius: var(--vt-radius-field);
-  background: var(--vt-color-base);
-  box-shadow: var(--vt-shadow-extruded-small);
-  transition: background var(--vt-dur-fast) var(--vt-ease);
-  min-height: var(--vt-touch-min);
-}
-.stile.ro {
-  cursor: default;
-}
-.stile[aria-pressed="true"] {
-  background: var(--vt-color-base-emphasis);
-}
-.stile:active:not(.ro) {
-  box-shadow: none;
-}
-.stile .info {
-  flex: 1;
-  min-width: 0;
-}
-.stile .name {
-  display: block;
-}
-.stile .meta {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: calc(var(--vt-space-xs) / 2) var(--vt-space-xs);
-  margin-top: calc(var(--vt-space-xs) - var(--vt-app-hair));
-}
-.stile .dur,
-.shelf .dur {
-  display: inline-flex;
-  align-items: center;
-  gap: calc(var(--vt-space-xs) - var(--vt-app-hair));
-  --icon-size: var(--vt-app-icon-12);
-  --icon-gap: 0;
-}
-.stile .dur .icon,
-.shelf .dur .mi {
-  color: var(--bk-text-muted);
-}
-.chk {
-  flex: none;
-  width: var(--vt-app-check);
-  height: var(--vt-app-check);
-  border-radius: 50%;
-  background: var(--vt-color-base);
-  box-shadow: var(--vt-app-shadow-inset);
-  display: grid;
-  place-items: center;
-  color: var(--vt-color-cream);
-  --icon-size: var(--vt-app-icon-18);
-  --icon-gap: 0;
-}
-.chk .icon {
-  opacity: 0;
-  transform: scale(0.4);
-  transition:
-    transform var(--vt-dur-base) var(--vt-ease),
-    opacity var(--vt-dur-fast) var(--vt-ease);
-}
-.stile[aria-pressed="true"] .chk,
-.chk-row input:checked + .chk {
-  background: var(--vt-gradient-accent);
-  box-shadow: var(--vt-app-shadow-check);
-}
-.stile[aria-pressed="true"] .chk .icon,
-.chk-row input:checked + .chk .icon {
-  opacity: 1;
-  transform: none;
-}
 .chk-row {
   display: flex;
   gap: var(--vt-space-md);
