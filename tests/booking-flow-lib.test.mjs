@@ -2,7 +2,7 @@
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
 import { addDays, inWindow, kyivToday, maxMonthOffset, monthView, partOfDay, weekdayMon0, WINDOW_DAYS, kyivTime, kyivDay } from "../src/scripts/booking/calendar.ts";
-import { failFor, cancelPath } from "../src/scripts/booking/api.ts";
+import { failFor, cancelPath, cancelToken } from "../src/scripts/booking/api.ts";
 import { buildIcs } from "../src/scripts/booking/ics.ts";
 import { formatPhoneGrouped, nationalDigits } from "../src/lib/phone.ts";
 import { build } from "esbuild";
@@ -67,6 +67,16 @@ describe("API error mapping", () => {
     assert.equal(cancelPath("https://beautica.app/book/cancel/" + "-".repeat(36)), null, "36 dashes is not a UUID");
     assert.equal(cancelPath(null), null);
   });
+  test("the short cancel link /c/{16 alphanumerics} is kept (case-sensitive), cancelToken reads both forms", () => {
+    const id = "123e4567-e89b-42d3-a456-426614174000";
+    assert.equal(cancelPath("https://beautica.app/c/Ab3dEf7hJk9mNp2Q"), "/c/Ab3dEf7hJk9mNp2Q");
+    assert.equal(cancelPath("https://beautica.app/c/Ab3dEf7hJk9mNp2Q?x=1"), "/c/Ab3dEf7hJk9mNp2Q");
+    for (const bad of ["/c/Ab3dEf7hJk9mNp2", "/c/Ab3dEf7hJk9mNp2QQ", "/c/Ab3dEf7hJk9mNp2-", "/c/Ab3dEf7hJk9mNp2Q/x", "/c/"]) assert.equal(cancelPath(`https://beautica.app${bad}`), null, bad);
+    assert.equal(cancelToken("/c/Ab3dEf7hJk9mNp2Q"), "Ab3dEf7hJk9mNp2Q");
+    assert.equal(cancelToken(`/book/cancel/${id}`), id);
+    assert.equal(cancelToken("/c/short"), null);
+    assert.equal(cancelToken(null), null);
+  });
 });
 
 describe(".ics", () => {
@@ -85,24 +95,22 @@ describe(".ics", () => {
   });
 });
 
-describe(".ics cancel link (phase 015)", () => {
+describe(".ics carries no cancel link (phase 025)", () => {
   const URL_ = "https://beautica.app/book/cancel/123e4567-e89b-42d3-a456-426614174000";
   const base = { uid: "u", startsAt: "2026-10-23T12:00:00+03:00", minutes: 30, summary: "S", description: "Послуги: A.", location: "Київ" };
   const now = new Date("2026-10-22T10:00:00Z");
   const unfold = (t) => t.replace(/\r\n /g, "");
-  test("url adds a URL property and the description line; all lines CRLF, <= 75 octets, unfolds to the exact URL", () => {
-    const ics = buildIcs({ ...base, description: `Послуги: A.\nСкасувати запис: ${URL_}`, url: URL_ }, now);
-    const flat = unfold(ics);
-    assert.ok(flat.includes(`\r\nURL:${URL_}\r\n`), "URL property, unescaped URI");
-    assert.ok(flat.includes(`DESCRIPTION:Послуги: A.\\nСкасувати запис: ${URL_}\r\n`), "cancel line in DESCRIPTION after an escaped newline");
+  test("a stray url field is ignored: no URL property, no cancel URL anywhere; all lines CRLF, <= 75 octets", () => {
+    const ics = buildIcs({ ...base, url: URL_ }, now);
+    assert.equal(/^URL:/m.test(unfold(ics)), false);
+    assert.equal(unfold(ics).includes("book/cancel"), false);
     assert.ok(ics.split("\r\n").every((l) => Buffer.byteLength(l) <= 75), "no line over 75 octets");
     assert.equal(/[^\r]\n/.test(ics), false, "no bare LF");
     assert.ok(ics.endsWith("\r\n"));
   });
-  test("no url: output identical to the pre-015 file (no URL line)", () => {
-    const ics = buildIcs(base, now);
-    assert.equal(/^URL:/m.test(ics), false);
-    assert.equal(ics, buildIcs({ ...base, url: undefined }, now));
+  test("output is identical with or without a url field", () => {
+    assert.equal(buildIcs({ ...base, url: URL_ }, now), buildIcs(base, now));
+    assert.equal(/^URL:/m.test(buildIcs(base, now)), false);
   });
   test("folding counts octets: 3- and 4-octet characters never push a line past 75 and are not split", () => {
     const d = "₴".repeat(60) + "😀".repeat(30);
@@ -117,7 +125,7 @@ describe(".ics control characters cannot inject properties (phase 015 audit)", (
   const ics = buildIcs({ uid: "u", startsAt: "2026-10-23T12:00:00+03:00", minutes: 30, summary: evil, description: evil, location: evil }, new Date("2026-10-22T10:00:00Z"));
   test("every TEXT value: no raw CR/LF/control char survives; no unfolded line starts with an injected property", () => {
     const lines = ics.replace(/\r\n /g, "").split("\r\n");
-    const allowed = /^(BEGIN:VCALENDAR|VERSION|PRODID|CALSCALE|BEGIN:VEVENT|UID|DTSTAMP|DTSTART|DTEND|SUMMARY|DESCRIPTION|LOCATION|END:VEVENT|END:VCALENDAR|)(:|$)/;
+    const allowed = /^(BEGIN:VCALENDAR|VERSION|PRODID|CALSCALE|METHOD|BEGIN:VEVENT|UID|DTSTAMP|DTSTART|DTEND|SUMMARY|DESCRIPTION|LOCATION|BEGIN:VALARM|ACTION|TRIGGER|END:VALARM|END:VEVENT|END:VCALENDAR|)(:|$)/;
     for (const l of lines) assert.ok(allowed.test(l), `unexpected line: ${l}`);
     assert.equal(/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f\u2028\u2029]/.test(ics.replace(/\r\n/g, "")), false);
     assert.equal(/\n/.test(ics.replace(/\r\n/g, "")), false, "no bare LF");
@@ -127,17 +135,15 @@ describe(".ics control characters cannot inject properties (phase 015 audit)", (
 });
 function unfoldAll(t) { return t.replace(/\r\n /g, ""); }
 
-describe(".ics URL property is validated; C1 controls stripped (phase 015 audit 2)", () => {
+describe(".ics never emits a URL property; C1 controls stripped (phase 025)", () => {
   const b = { uid: "u", startsAt: "2026-10-23T12:00:00+03:00", minutes: 30, summary: "S", description: "D", location: "" };
   const now = new Date("2026-10-22T10:00:00Z");
-  test("an unsafe url emits no URL line; http(s) incl. localhost is kept", () => {
-    for (const bad of ["x\r\nATTENDEE:y", "https://a.b/c\r\nATTENDEE:y", "javascript:alert(1)", "https://a b", "x"]) {
-      const ics = buildIcs({ ...b, url: bad }, now);
-      assert.equal(/^URL:/m.test(ics), false, bad);
-      assert.equal(ics.includes("ATTENDEE"), false, bad);
+  test("no url value, safe or unsafe, ever produces a URL line", () => {
+    for (const u of ["x\r\nATTENDEE:y", "https://a.b/c\r\nATTENDEE:y", "javascript:alert(1)", "https://a b", "x", "http://localhost:3000/book/cancel/x", "https://beautica.app/book/cancel/x"]) {
+      const ics = buildIcs({ ...b, url: u }, now);
+      assert.equal(/^URL:/m.test(ics), false, u);
+      assert.equal(ics.includes("ATTENDEE"), false, u);
     }
-    assert.ok(buildIcs({ ...b, url: "http://localhost:3000/book/cancel/x" }, now).includes("URL:http://localhost:3000/book/cancel/x\r\n"));
-    assert.ok(buildIcs({ ...b, url: "https://beautica.app/book/cancel/x" }, now).includes("\r\nURL:https://beautica.app/"));
   });
   test("C1 control characters are removed from TEXT values", () => {
     const ics = buildIcs({ ...b, summary: "a\u0080b\u009fc\u0090d" }, now);

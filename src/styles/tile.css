@@ -1,0 +1,134 @@
+/* The service tile (.stile) and its check circle (.chk): ONE source for the booking flow / profiles (book.css imports it) and the guest cancel page
+   (imports it directly, without book.css: its Latin-core @font-face would add two font files to a token page). No @font-face here.
+   Moved verbatim from book.css; the checkbox variant (label.stile with a real input) is the only addition. */
+/* ---------- CatalogueServiceTile ---------- */
+.t-strong { font: var(--vt-fw-body-strong) var(--vt-fs-body) / var(--vt-lh-body) var(--vt-font-body); color: var(--vt-color-text); }
+.stile {
+  --bk-text-muted: var(--vt-color-text-secondary); /* same as .phone in book.css (muted is decoration only) */
+}
+.stile {
+  display: flex;
+  align-items: center;
+  gap: var(--vt-space-md);
+  width: 100%;
+  border: 0;
+  text-align: start;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  padding: calc(var(--vt-space-sm) + var(--vt-space-xs) / 2) calc(var(--vt-space-sm) + var(--vt-space-xs));
+  border-radius: var(--vt-radius-field);
+  background: var(--vt-color-base);
+  box-shadow: var(--vt-shadow-extruded-small);
+  transition: background var(--vt-dur-fast) var(--vt-ease);
+  min-height: var(--vt-touch-min);
+}
+.stile.ro {
+  cursor: default;
+}
+.stile[aria-pressed="true"] {
+  background: var(--vt-color-base-emphasis);
+}
+.stile:active:not(.ro) {
+  box-shadow: none;
+}
+.stile .info {
+  flex: 1;
+  min-width: 0;
+}
+.stile .name {
+  display: block;
+}
+.stile .meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: calc(var(--vt-space-xs) / 2) var(--vt-space-xs);
+  margin-top: calc(var(--vt-space-xs) - var(--vt-app-hair));
+}
+.stile .dur,
+.shelf .dur {
+  display: inline-flex;
+  align-items: center;
+  gap: calc(var(--vt-space-xs) - var(--vt-app-hair));
+  --icon-size: var(--vt-app-icon-12);
+  --icon-gap: 0;
+}
+.stile .dur .icon,
+.shelf .dur .mi {
+  color: var(--bk-text-muted);
+}
+.chk {
+  flex: none;
+  width: var(--vt-app-check);
+  height: var(--vt-app-check);
+  border-radius: 50%;
+  background: var(--vt-color-base);
+  box-shadow: var(--vt-app-shadow-inset);
+  display: grid;
+  place-items: center;
+  color: var(--vt-color-cream);
+  --icon-size: var(--vt-app-icon-18);
+  --icon-gap: 0;
+}
+.chk .icon {
+  opacity: 0;
+  transform: scale(0.4);
+  transition:
+    transform var(--vt-dur-base) var(--vt-ease),
+    opacity var(--vt-dur-fast) var(--vt-ease);
+}
+.stile[aria-pressed="true"] .chk,
+.chk-row input:checked + .chk {
+  background: var(--vt-gradient-accent);
+  box-shadow: var(--vt-app-shadow-check);
+}
+.stile[aria-pressed="true"] .chk .icon,
+.chk-row input:checked + .chk .icon {
+  opacity: 1;
+  transform: none;
+}
+
+/* Checkbox variant (guest cancel page): a real <input type="checkbox"> inside the label; the tile mirrors its state like aria-pressed does on the button. */
+.stile input {
+  position: absolute;
+  opacity: 0;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  cursor: pointer;
+}
+label.stile {
+  position: relative;
+}
+.stile:has(input:checked) {
+  background: var(--vt-color-base-emphasis);
+}
+.stile:has(input:checked) .chk {
+  background: var(--vt-gradient-accent);
+  box-shadow: var(--vt-app-shadow-check);
+}
+.stile:has(input:checked) .chk .icon {
+  opacity: 1;
+  transform: none;
+}
+.stile:has(input:focus-visible) .chk {
+  outline: medium solid var(--vt-color-accent-deep);
+  outline-offset: var(--vt-space-xs);
+}
+.stile.off,
+.stile.off input {
+  cursor: default;
+}
+.stile.off {
+  box-shadow: none;
+}
+.stile .why {
+  display: block;
+  margin-top: calc(var(--vt-space-xs) - var(--vt-app-hair));
+  color: var(--vt-color-text-secondary);
+}
+.stile .why[hidden] {
+  display: none;
+}

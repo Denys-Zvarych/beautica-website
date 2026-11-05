@@ -256,25 +256,65 @@
   gap: var(--vt-space-sm);
 }
 .calwrap {
-  display: flex;
-  justify-content: flex-end;
+  display: grid;
+  grid-template-columns: 1fr 1fr; /* both choices ALWAYS on one row, equal width */
+  gap: var(--vt-space-sm);
+}
+.calwrap .t-label {
+  grid-column: 1 / -1;
+  margin: 0;
+  text-align: center;
 }
 .calbtn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: var(--vt-space-sm);
+  gap: var(--vt-space-xs);
   min-height: var(--vt-size-cta);
-  padding: 0 var(--vt-space-md);
+  min-width: 0;
+  padding: var(--vt-space-xs) var(--vt-space-sm);
   cursor: pointer;
   text-decoration: none;
   border-radius: var(--vt-radius-button);
   background: var(--vt-color-base);
   border: var(--vt-app-hair) solid color-mix(in srgb, var(--vt-color-accent) 35%, transparent);
-  box-shadow: 0 0 var(--vt-space-sm) color-mix(in srgb, var(--vt-color-shadow-dark-button) 45%, transparent); /* borderedButton */
+  position: relative;
+  isolation: isolate;
+  transition: transform var(--vt-dur-fast) var(--vt-ease);
   color: var(--vt-color-accent-deep);
-  --icon-size: var(--vt-app-icon-17);
+  --icon-size: var(--vt-app-icon-22);
   --icon-gap: 0;
+}
+.calbtn .t-strong115 {
+  font-size: var(--vt-fs-label); /* small enough that «Google Календар» is one line from 393 px (iPhone 15) up; two lines inside the button below */
+  min-width: 0;
+  text-align: start;
+  line-height: 1.2; /* a long label wraps inside the button (two lines) instead of clipping */
+}
+/* borderedButton shadow lives on a layer so the lift can leave it in place (same technique as CtaButton). */
+.calbtn::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  box-shadow: 0 0 var(--vt-space-sm) color-mix(in srgb, var(--vt-color-shadow-dark-button) 45%, transparent);
+  transition: transform var(--vt-dur-fast) var(--vt-ease);
+}
+/* Lift: same as CtaButton (rises, shadow stays); keyboard focus gets the same lift (the global focus ring stays). */
+.calbtn:focus-visible {
+  transform: translateY(calc(var(--vt-lift) * -1));
+}
+.calbtn:focus-visible::before {
+  transform: translateY(var(--vt-lift));
+}
+@media (hover: hover) {
+  .calbtn:hover {
+    transform: translateY(calc(var(--vt-lift) * -1));
+  }
+  .calbtn:hover::before {
+    transform: translateY(var(--vt-lift));
+  }
 }
 .calbtn:active {
   transform: scale(0.97);
@@ -469,64 +509,6 @@
   color: var(--vt-color-cream);
   --icon-size: var(--vt-app-icon-34);
   --icon-gap: 0;
-}
-.reveal {
-  animation: reveal calc(var(--vt-dur-base) * 2) var(--vt-ease) both;
-}
-@keyframes reveal {
-  from {
-    opacity: 0;
-    transform: translateY(var(--vt-space-md));
-  }
-  to {
-    opacity: 1;
-    transform: none;
-  }
-}
-.cta2 {
-  display: flex;
-  width: 100%;
-  align-items: center;
-  justify-content: center;
-  gap: var(--vt-space-sm);
-  min-height: var(--vt-size-cta);
-  padding: 0 var(--vt-space-sm);
-  border: 0;
-  cursor: pointer;
-  text-decoration: none;
-  border-radius: var(--vt-radius-button);
-  background: var(--vt-color-base);
-  color: var(--vt-color-accent-deep);
-  position: relative;
-  isolation: isolate;
-  transition: transform var(--vt-dur-fast) var(--vt-ease);
-  --icon-size: var(--vt-space-lg);
-  --icon-gap: 0;
-}
-/* The shadow is a pseudo-element: pressing fades it out (opacity), nothing animates box-shadow. */
-.cta2::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  z-index: -1;
-  border-radius: inherit;
-  pointer-events: none;
-  box-shadow: var(--vt-shadow-extruded-button);
-  transition: opacity var(--vt-dur-fast) var(--vt-ease);
-}
-.cta2:active {
-  transform: scale(0.98);
-}
-.cta2:active::before {
-  opacity: 0;
-}
-@media (hover: hover) {
-  .cta2:hover {
-    transform: translateY(calc(var(--vt-lift) * -1));
-  }
-}
-.cta2:focus-visible {
-  transform: translateY(calc(var(--vt-lift) * -1));
 }
 .install {
   display: flex;
@@ -740,15 +722,92 @@
   flex-direction: column;
   gap: var(--vt-space-xl);
 }
-.okline {
+
+
+/* ---------- compact confirm / done card (phase 025): one merged card; the .kv row lives in recap.css ---------- */
+.sumcard .rule {
+  margin: calc(var(--vt-space-sm) + var(--vt-space-xs)) 0;
+}
+/* The master strip inside a merged card loses its own card chrome (the outer card is the card). */
+.sumcard .strip {
+  padding: 0;
+  gap: calc(var(--vt-space-sm) + var(--vt-space-xs));
+  background: none;
+  border: 0;
+  box-shadow: none;
+}
+.sumcard .strip .disc {
+  width: calc(var(--vt-space-xl) + var(--vt-space-md));
+  height: calc(var(--vt-space-xl) + var(--vt-space-md));
+}
+.sumcard .recap-row {
+  gap: var(--vt-space-sm);
+  padding: var(--vt-space-sm) 0;
+}
+.sumcard .recap-row .grow {
   display: flex;
+  align-items: baseline;
+  gap: var(--vt-space-sm);
+}
+.sumcard .recap-row .grow .t-fb {
+  margin-top: 0;
+  flex: none;
+}
+.sumcard .recap-row .grow .t-strong11 {
+  font-size: var(--vt-app-fs-125);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sumcard .recap-row .t-accent-11 {
+  font-size: var(--vt-app-fs-125);
+}
+.sumcard .recap-sum {
+  margin: calc(var(--vt-space-sm) - var(--vt-space-xs) / 2) 0 calc(var(--vt-space-sm) + var(--vt-space-xs) / 2);
+}
+.sumcard .field textarea {
+  padding: calc(var(--vt-space-sm) + var(--vt-space-xs) / 2) var(--vt-space-md);
+}
+/* Done screen (phase 025): tighter rows than the confirm card, 16 px gutters, success disc + heading + subtitle centred in a column. */
+[data-screen="done"] .body {
+  padding-top: calc(var(--vt-space-sm) + var(--vt-space-xs));
+}
+[data-screen="done"] .pad-h,
+[data-screen="confirm"] .pad-h {
+  padding-inline: var(--vt-space-md);
+}
+[data-screen="done"] .sumcard .rule {
+  margin: var(--vt-space-sm) 0;
+}
+[data-screen="done"] .sumcard .recap-row {
+  padding: calc(var(--vt-space-xs) + var(--vt-app-hair)) 0;
+}
+[data-screen="done"] .sumcard .kv {
+  padding: var(--vt-space-xs) 0;
+}
+.hero {
+  display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: var(--vt-space-xs);
-  margin: var(--vt-space-sm) 0 0;
-  color: var(--vt-color-success);
-  --icon-size: var(--vt-app-icon-18);
+  text-align: center;
+}
+.hero .disc {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: calc(var(--vt-space-xl) + var(--vt-space-md));
+  height: calc(var(--vt-space-xl) + var(--vt-space-md));
+  border-radius: 50%;
+  background: var(--vt-color-accent);
+  color: var(--vt-color-cream);
+  --icon-size: var(--vt-app-icon-30);
   --icon-gap: 0;
 }
-.appt .calwrap {
-  justify-content: stretch;
+.hero h2 {
+  margin: calc(var(--vt-space-xs) + var(--vt-space-xs) / 2) 0 0;
+  font: var(--vt-fw-heading) var(--vt-fs-heading) / var(--vt-lh-heading) var(--vt-font-display);
+}
+.hero + p {
+  margin-top: calc(var(--vt-space-xs) / 2);
+  font-size: var(--vt-fs-body);
 }

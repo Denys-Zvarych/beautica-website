@@ -57,12 +57,13 @@ describe("every spec runs on pull requests", () => {
     assert.match(pkg.scripts["test:contract"], /claims-pins\.test\.mjs/);
     assert.match(pkg.scripts["test:contract"], /booking-config\.test\.mjs/);
   });
-  test("every step that runs specs, browsers or Lighthouse has a timeout-minutes (<= 5; the lhci step <= 14)", () => {
+  test("every step that runs specs, browsers or Lighthouse has a timeout-minutes (<= 5; the npm test step <= 8; the lhci step <= 14)", () => {
     const heavy = steps.filter((s) => /run-tests\.mjs|npm test|lighthouse|lhci|measure-cls|test:contract|test:static/.test(s.text));
     assert.ok(heavy.length >= 8, `found ${heavy.length} heavy steps: the parser is broken`);
     for (const s of heavy) {
       const t = Number(/timeout-minutes:\s*(\d+)/.exec(s.text)?.[1]);
-      const limit = /lhci autorun/.test(s.text) ? 14 : 5; // lhci over 10 pages x 3 runs takes ~5.5 min on a runner; its job allows 15; lighthouse-ssr is split in two steps (3 + 2 pages) to stay within 5
+      // npm test (792 tests) takes ~305 s on a runner, just over 5 min: its step allows 8 (PR #30).
+      const limit = /lhci autorun/.test(s.text) ? 14 : /^\s*run: npm test\s*$/m.test(s.text) ? 8 : 5; // lhci over 10 pages x 3 runs takes ~5.5 min on a runner; its job allows 15; lighthouse-ssr is split in two steps (3 + 2 pages) to stay within 5
       assert.ok(t >= 1 && t <= limit, `step "${s.text.split("\n")[0]}" has timeout-minutes ${t || "none"}`);
     }
   });
@@ -76,7 +77,7 @@ describe("every route is under Lighthouse", () => {
   const staticRoutes = routes("").filter((r) => !r.includes("[") && !r.startsWith("/book-steps/")).map((r) => (r === "/index" ? "/index" : r));
   // Catch-all 404 routes ([...rest]) are not pages either: they only re-serve the static /404 page through the middleware so that malformed
   // token paths get the token headers (phase 007). Listed by name so a new catch-all cannot slip past Lighthouse unnoticed; /404 is measured.
-  const CATCH_ALL_404 = ["/book/cancel/[...rest]"];
+  const CATCH_ALL_404 = ["/book/cancel/[...rest]", "/c/[...rest]"];
   const catchAll = routes("").filter((r) => r.includes("[..."));
   const dynamicRoutes = routes("").filter((r) => r.includes("[") && !r.includes("[..."));
   const lhciUrls = lhci.ci.collect.url.map((u) => new URL(u).pathname.replace(/\.html$/, ""));
@@ -87,7 +88,7 @@ describe("every route is under Lighthouse", () => {
       assert.ok(lhci.ci.assert.assertMatrix.some((a) => new RegExp(a.matchingUrlPattern).test(`http://localhost${r}.html`) && a.aggregationMethod === "median"), `${r} matches no median assertion block`);
     });
   test("the SSR routes (no built HTML for LHCI) are covered by scripts/lighthouse-ssr.mjs: master, 12-photo rail, salon, sorted view; run in CI with 3 runs", () => {
-    assert.deepEqual(dynamicRoutes.sort(), ["/book/[slug]", "/book/cancel/[token]", "/book/s/[slug]", "/r/[token]"]);
+    assert.deepEqual(dynamicRoutes.sort(), ["/book/[slug]", "/book/cancel/[token]", "/book/s/[slug]", "/c/[token]", "/r/[token]"]);
     const script = read("scripts/lighthouse-ssr.mjs");
     const pages = JSON.parse(/const PAGES = (\[.*?\]);/.exec(script)[1]);
     assert.ok(pages.some((p) => /^\/book\/[a-z0-9-]+$/.test(p)), "a master page");
@@ -132,6 +133,14 @@ describe("phase 018 (legal bump, legal fonts) is guarded on every PR", () => {
     assert.match(pkg.scripts["test:static"], /tests\/legal-bump\.test\.mjs/);
     assert.equal(steps.find((x) => /npm run test:static/.test(x.text))?.job, "site");
     assert.equal(excluded.some((x) => "legal-bump.test.mjs".includes(x)), false, "legal-bump must not be in TEST_EXCLUDE");
+  });
+});
+
+describe("phase 021 (privacy 1.4, Telegram section) is guarded on every PR", () => {
+  test("privacy-telegram.test.mjs runs after the build in the server-less site job: test:static (dist checks) and test:contract (backend-pinned, REQUIRE_BACKEND)", () => {
+    assert.match(pkg.scripts["test:static"], /tests\/privacy-telegram\.test\.mjs/);
+    assert.match(pkg.scripts["test:contract"], /tests\/privacy-telegram\.test\.mjs/);
+    assert.equal(excluded.some((x) => "privacy-telegram.test.mjs".includes(x)), false);
   });
 });
 

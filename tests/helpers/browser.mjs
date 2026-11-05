@@ -18,7 +18,8 @@ export async function launch() {
  */
 export async function open(browser, { width = 360, height = 800, ...opts } = {}) {
   const context = await browser.newContext({ viewport: { width, height }, ...opts });
-  context.setDefaultTimeout(10_000); // a broken feature fails in 10 s, not 30
+  context.setDefaultTimeout(15_000); // a broken feature fails in 15 s, not 30
+  context.setDefaultNavigationTimeout(60_000); // wrangler cold-starts a route and a loaded runner stalls navigations: wait on the condition, not a tight clock
   const external = [];
   const problems = [];
   await context.route(
@@ -56,10 +57,18 @@ const CORS = { "access-control-allow-origin": BASE, "access-control-allow-method
  */
 export async function mockCancelApi(context, handlers) {
   const calls = [];
+  calls.telegram = []; // phase 024: the cancel page also asks POST /api/v1/book/telegram/status; kept apart so `calls` stays the cancel API only
   await context.route(`${API_ORIGIN}/**`, async (route) => {
     const req = route.request();
     if (req.method() === "OPTIONS") return route.fulfill({ status: 204, headers: CORS });
-    calls.push({ method: req.method(), url: req.url(), headers: req.headers() });
+    if (new URL(req.url()).pathname.startsWith("/api/v1/book/telegram/")) {
+      calls.telegram.push({ method: req.method(), url: req.url(), headers: req.headers(), body: req.postData() });
+      // Default = Telegram unavailable (the block stays hidden, no 404 noise); a test passes handlers.telegram(req) to say otherwise.
+      const t = handlers.telegram ? await handlers.telegram(req) : { status: 200, json: { available: false, linked: false, offerChoice: false } };
+      if (t === "abort") return route.abort("failed");
+      return route.fulfill({ status: t.status, headers: { ...CORS, ...(t.json ? { "content-type": "application/json" } : {}) }, body: t.json ? JSON.stringify(t.json) : undefined });
+    }
+    calls.push({ method: req.method(), url: req.url(), headers: req.headers(), body: req.postData() });
     const h = handlers[req.method().toLowerCase()];
     const out = h ? await h(req) : { status: 404 };
     if (out === "abort") return route.abort("failed");

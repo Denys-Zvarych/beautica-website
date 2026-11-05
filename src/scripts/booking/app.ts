@@ -4,17 +4,19 @@
 import { formatDuration, formatPriceFrom, pluralServices } from "../../lib/booking/format";
 import { formatPhoneGrouped, nationalDigits } from "../../lib/phone";
 import { WINDOW_DAYS, addDays, dayLong, dayShort, daysBetween, inWindow, kyivDay, kyivTime, kyivToday, maxMonthOffset, monthLabel, monthView, partOfDay, weekdayMon0, weekdayShort, type Part } from "./calendar";
-import { cancelPath, createBooking, getAvailability, getBookableDays, sendOtp, verifyOtp, type Fail, type Result, type Slot } from "./api";
-import { buildIcs, downloadIcs } from "./ics";
+import { cancelPath, cancelToken, createBooking, getAvailability, getBookableDays, sendOtp, verifyOtp, type Fail, type Result, type Slot, type TelegramAvailability } from "./api";
 import { mountTurnstile, type Widget } from "./turnstile";
-import { calendarAdd } from "../../lib/icons/strokePaths";
 import { closeRounded, errorOutline, eventAvailable, expandMoreRounded, schedule } from "../../lib/icons/materialPaths";
 import { track } from "../track";
+import { mountReminders } from "./reminder-channel";
 import { hydrateIcons } from "./icons";
 import { cleanComment, cleanName, typingName } from "../../lib/booking/text.ts";
 import type { Core, RecapView, SalonFlow, Svc } from "./salon";
 import { clearMarker, createLedger, mayExist, saveMarker } from "./uncertain";
 import type { SalonInfo } from "../../lib/booking/types";
+import { el, lrow } from "./recap-row";
+import { brandMarks } from "../../lib/icons/brandMarks";
+import { calendarLinks, calendarOrder } from "./calendar-links";
 import "../../styles/book-flow.css"; // step styles ship with the island: the profile pages do not carry them
 
 type Step = "profile" | "services" | "masters" | "date" | "time" | "contact" | "otp" | "confirm" | "done";
@@ -27,13 +29,6 @@ const fmt = (s: string, vars: Record<string, string | number>) => s.replace(/\{(
 function icon(path: string, stroke = false): string {
   return `<svg class="mi${stroke ? " stroke" : ""}" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="${path}"></path></svg>`;
 }
-function el<K extends keyof HTMLElementTagNameMap>(tag: K, cls = "", text = ""): HTMLElementTagNameMap[K] {
-  const e = document.createElement(tag);
-  if (cls) e.className = cls;
-  if (text) e.textContent = text;
-  return e;
-}
-
 /**
  * Adopts the steps, then wires them. Master link: the server-rendered steps sit in a <template> (no DOM until the visitor opens the flow).
  * Salon link: the page carries none of it; the steps are the static fragment /book-steps/salon and the catalogue / masters come from the
@@ -224,10 +219,13 @@ export async function initBooking(root: HTMLElement): Promise<{ open(): void }> 
       const noSum = salon && step === "services";
       total.append(el("span", "t-strong", S.total), el("span", "t-fb muted", formatDuration(t.minutes)), el("span", "sp"), ...(noSum ? [] : [el("span", "t-price-md", formatPriceFrom(t.price))]));
       box.append(rule, total);
-      if (step === "time" && st.slot && st.day) {
-        const w = el("div", "chosen");
+      if (step === "time") {
+        // Always present on the time step: before a slot is picked it is an invisible placeholder of the same height, so picking one never pushes the CTA down.
+        const picked = !!(st.slot && st.day);
+        const w = el("div", picked ? "chosen" : "chosen ph");
         w.innerHTML = icon(eventAvailable);
-        w.append(el("span", "t-fb sec", S.booking), el("span", "t-accent-11 ellipsis grow", shortWindow()));
+        w.append(el("span", "t-fb sec", S.booking), el("span", "t-accent-11 ellipsis grow", picked ? shortWindow() : "\u00a0"));
+        if (!picked) w.setAttribute("aria-hidden", "true");
         box.append(w);
       }
     }
@@ -450,8 +448,6 @@ export async function initBooking(root: HTMLElement): Promise<{ open(): void }> 
   comment?.addEventListener("input", () => {
     const clean = comment.value.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, "");
     if (clean !== comment.value) comment.value = clean;
-    $("#counter").textContent = fmt(S.counter, { n: comment.value.length });
-    if (st.step === "confirm") recap($("#confirm-card"), false); // the summary shows the note as it is typed
   });
   let prevDigits = "";
   phone.addEventListener("input", (e) => {
@@ -686,35 +682,26 @@ export async function initBooking(root: HTMLElement): Promise<{ open(): void }> 
   }
 
   // ------------------------------------------------------------------ confirm (BookingSummaryCards + BookingRecap)
-  function lrow(label: string, value: string, detail = ""): string {
-    const d = el("div", "lrow");
-    d.append(el("span", "lbl t-label", label), el("span", "val t-value-12", value));
-    if (detail) d.append(el("span", "det t-fb muted w600", detail));
-    return d.outerHTML;
-  }
   /** The master link's own view of the booking (the picked services, the live day and time, the one note). */
-  const masterView = (): RecapView => ({ services: chosen(), day: st.day!, slot: st.slot!, head: true, comment: comment ? cleanComment(comment.value) : "" });
-  function recap(into: HTMLElement, compact: boolean, v: RecapView = masterView()): void {
+  const masterView = (): RecapView => ({ services: chosen(), day: st.day!, slot: st.slot!, head: true });
+  /** One compact summary (confirm and done): address, «Коли» on one line, one row per service (name, duration, price), «Разом». */
+  function recap(into: HTMLElement, v: RecapView = masterView()): void {
     const t = totals(v.services);
-    const sep = `<div class="rule${compact ? " dense" : ""}"></div>`;
-    let h = "";
+    const sep = `<div class="rule"></div>`;
+    let h = lrow(S.whenLabel, `${dayLong(v.day)} · ${kyivTime(v.slot.startsAt)}–${kyivTime(v.slot.endsAt)}`);
     if (v.head) {
-      if (salonName) h += lrow(S.salonLabel, salonName) + sep;
+      if (salonName) h += lrow(S.salonLabel, salonName);
       // Independent masters have a street address (and a note): the app's «Адреса» row; otherwise just the city.
-      if (address) h += lrow(S.addressLabel, [city, address].filter(Boolean).join(", "), note) + sep;
-      else if (city) h += lrow(S.cityLabel, city) + sep;
+      if (address) h += lrow(S.addressLabel, [city, address].filter(Boolean).join(", "), note);
+      else if (city) h += lrow(S.cityLabel, city);
     }
-    h += lrow(S.dateLabel, dayLong(v.day)) + `<div class="g-sm"></div>` + lrow(S.timeLabel, `${kyivTime(v.slot.startsAt)}–${kyivTime(v.slot.endsAt)}`) + sep;
-    if (!compact && v.comment) h += lrow(S.commentRow, v.comment) + sep;
+    h += sep;
     into.innerHTML = h;
-    const head = el("div", "row");
-    head.append(el("span", "t-label", S.servicesLabel), el("span", "sp"), el("span", "t-fb muted", pluralServices(t.n)));
-    into.append(head, el("div", "g-xs"));
     v.services.forEach((s, i, all) => {
-      const row = el("div", `recap-row${compact ? " dense" : ""}`);
+      const row = el("div", "recap-row dense");
       const grow = el("div", "grow");
-      grow.append(el("div", compact ? "t-strong11" : "t-strong115", s.name), el("div", "t-fb muted", formatDuration(s.minutes)));
-      row.append(grow, el("span", compact ? "t-accent-11" : "t-accent-12", priceText(s)));
+      grow.append(el("div", "t-strong11", s.name), el("div", "t-fb muted", formatDuration(s.minutes)));
+      row.append(grow, el("span", "t-accent-11", priceText(s)));
       into.append(row);
       if (i < all.length - 1) into.append(el("div", "recap-div"));
     });
@@ -725,10 +712,8 @@ export async function initBooking(root: HTMLElement): Promise<{ open(): void }> 
     into.append(el("div", "recap-sum"), sum);
   }
   function renderConfirm(): void {
-    $("#c-name").textContent = `${cleanName(name.value)} ${cleanName(surname.value)}`;
-    $("#c-phone").textContent = formatPhoneGrouped(st.phone);
     if (salon) salon.renderConfirm();
-    else recap($("#confirm-card"), false);
+    else recap($("#confirm-card"));
     view("#submit-error", false);
     if (unsure.has("")) showUncertain();
   }
@@ -801,43 +786,38 @@ export async function initBooking(root: HTMLElement): Promise<{ open(): void }> 
   }
 
   // ------------------------------------------------------------------ done
-  /** The «Додати в календар» button: the .ics carries the booking's own cancel link (a bearer token: only in the file the guest downloads). */
-  function calendarButton(b: { startsAt: string; minutes: number; master: string; services: string; cancelAbs: string | null }): HTMLElement {
+  /** The «Додати в календар» chooser: Google opens its "new event" page (any browser, incl. in-app webviews such as Telegram), the Apple link (GET /api/ics, served `inline`)
+   *  is for iPhone / macOS. Order by device, both always reachable. Content: time, master, services and place only: no cancel link, phone or name (the cancel link arrives by SMS). */
+  function calendarButton(b: { startsAt: string; minutes: number; master: string; services: string }): HTMLElement {
     const wrap = el("div", "calwrap");
-    const btn = el("button", "calbtn");
-    btn.type = "button";
-    btn.innerHTML = `${icon(calendarAdd, true)}<span class="t-strong115"></span>`;
-    $("span", btn).textContent = S.calendar;
-    btn.addEventListener("click", () => {
-      const base = fmt(S.icsDescription, { services: b.services });
-      downloadIcs(
-        buildIcs({
-          uid: crypto.randomUUID(),
-          startsAt: b.startsAt,
-          minutes: b.minutes,
-          summary: fmt(S.icsSummary, { master: b.master }),
-          description: b.cancelAbs ? `${base}\n${fmt(S.icsCancel, { url: b.cancelAbs })}` : base,
-          location: [salonName, city].filter(Boolean).join(", "),
-          ...(b.cancelAbs ? { url: b.cancelAbs } : {}),
-        }),
-        "beautica-booking.ics",
-      );
-    });
-    wrap.append(btn);
+    wrap.append(el("p", "t-label", S.calendar));
+    const links = calendarLinks({
+      startsAt: b.startsAt,
+      minutes: b.minutes,
+      title: fmt(S.icsSummary, { master: b.master }),
+      description: fmt(S.icsDescription, { services: b.services }),
+      location: [salonName, city, address].filter(Boolean).join(", "),
+    }, navigator.userAgent);
+    const labels = { google: S.calendarGoogle, apple: S.calendarApple } as const;
+    for (const kind of calendarOrder(navigator.userAgent)) {
+      const btn = el("a", "calbtn");
+      btn.href = links[kind];
+      btn.dataset.cal = kind;
+      btn.rel = "noopener noreferrer";
+      if (kind !== "apple") btn.target = "_blank";
+      btn.innerHTML = `<svg class="mi" viewBox="0 0 24 24" aria-hidden="true" focusable="false">${brandMarks[kind === "google" ? "google-calendar" : "apple-calendar"]}</svg><span class="t-strong115"></span>`;
+      $("span", btn).textContent = labels[kind];
+      wrap.append(btn);
+    }
     return wrap;
   }
-  function renderDone(b: { startsAt: string; durationMinutes: number; cancelUrl: string | null }): void {
+  function renderDone(b: { startsAt: string; durationMinutes: number; cancelUrl: string | null; telegram: TelegramAvailability | null }): void {
     const card = $("#done-card");
-    recap(card, true);
+    recap(card);
     const minutes = totals().minutes || b.durationMinutes;
     const cPath = cancelPath(b.cancelUrl);
-    const cancelAbs = cPath ? location.origin + cPath : null;
-    card.append(el("div", "rule dense"), calendarButton({ startsAt: b.startsAt, minutes, master: masterName, services: chosen().map((s) => s.name).join(", "), cancelAbs }));
-    const cancel = $<HTMLAnchorElement>("#done-cancel");
-    if (cPath) {
-      cancel.href = cPath;
-      cancel.hidden = false;
-    }
+    card.append(el("div", "rule"), calendarButton({ startsAt: b.startsAt, minutes, master: masterName, services: chosen().map((s) => s.name).join(", ") }));
+    mountReminders({ root: document.getElementById("done-reminders"), api, token: cancelToken(cPath), telegram: b.telegram, navigate: (u) => location.assign(u), track });
   }
 
   if (salonMode) {

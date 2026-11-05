@@ -1,3 +1,6 @@
+@import "./remind.css";
+@import "./recap.css";
+@import "./tile.css";
 /* ---------- Latin core for the link pages ----------
    fonts.css declares the whole Latin face (letters, accents, symbols: 31-39 KB per family) and every page needs it for spaces and digits. These
    pages show Ukrainian text only, so they redeclare the same family with a small subset (src/fonts, pyftsubset of the same file: space, digits,
@@ -99,7 +102,6 @@
 .t-heading { font: var(--vt-fw-heading) var(--vt-fs-heading) / var(--vt-lh-heading) var(--vt-font-display); color: var(--vt-color-text); }
 .t-heading-lg { font: var(--vt-fw-heading) var(--vt-app-fs-23) / var(--vt-lh-heading) var(--vt-font-display); color: var(--vt-color-text); }
 .t-title { font: var(--vt-fw-subheading) var(--vt-fs-subheading) / normal var(--vt-font-display); color: var(--vt-color-text); } /* pageTitle = subheading */
-.t-sub13 { font: var(--vt-fw-subheading) var(--vt-fs-input) / normal var(--vt-font-display); color: var(--vt-color-text); }
 .t-sub15 { font: var(--vt-fw-subheading) var(--vt-app-fs-15) / normal var(--vt-font-display); color: var(--vt-color-text); }
 .t-sub12 { font: var(--vt-fw-subheading) var(--vt-fs-body) / normal var(--vt-font-display); color: var(--vt-color-text); }
 .t-sub11 { font: var(--vt-fw-subheading) var(--vt-fs-label) / normal var(--vt-font-display); color: var(--vt-color-text); }
@@ -109,26 +111,15 @@
 .t-stat { font: var(--vt-fw-stat-value) var(--vt-fs-stat-value) / normal var(--vt-font-display); color: var(--vt-color-text); }
 .t-avg { font: var(--vt-fw-heading) var(--vt-app-fs-43) / 1 var(--vt-font-display); color: var(--vt-color-text); }
 .t-body { font: var(--vt-fw-body) var(--vt-fs-body) / var(--vt-lh-body) var(--vt-font-body); color: var(--vt-color-text-secondary); }
-.t-body11 { font: var(--vt-fw-body) var(--vt-fs-label) / var(--vt-lh-body) var(--vt-font-body); color: var(--vt-color-text-secondary); }
-.t-strong { font: var(--vt-fw-body-strong) var(--vt-fs-body) / var(--vt-lh-body) var(--vt-font-body); color: var(--vt-color-text); }
 .t-strong11 { font: var(--vt-fw-body-strong) var(--vt-fs-label) / var(--vt-lh-body) var(--vt-font-body); color: var(--vt-color-text); }
 .t-strong115 { font: var(--vt-fw-body-strong) var(--vt-app-fs-115) / var(--vt-lh-body) var(--vt-font-body); color: var(--vt-color-text); }
 .t-input { font: var(--vt-fw-input) var(--vt-fs-input) / normal var(--vt-font-body); color: var(--vt-color-text); }
-.t-label { font: var(--vt-fw-label) var(--vt-fs-label) / normal var(--vt-font-body); letter-spacing: var(--vt-ls-label); color: var(--bk-text-muted); }
 .t-link { font: var(--vt-fw-label) var(--vt-fs-label) / normal var(--vt-font-body); color: var(--vt-color-accent-deep); }
-.t-fb { font: var(--vt-fw-label) var(--vt-fs-label) / 1.4 var(--vt-font-body); }
-.t-fb.muted { color: var(--bk-text-muted); }
-.t-fb.sec { color: var(--vt-color-text-secondary); }
-.t-fb.deep { color: var(--vt-color-accent-deep); }
-.t-fb.err { color: var(--bk-text-error); }
-.t-fb.w600 { font-weight: 600; }
-.t-fb.w800 { font-weight: 800; }
 .t-stat-cap { font: var(--vt-fw-label) var(--vt-fs-label) / normal var(--vt-font-body); letter-spacing: var(--vt-ls-stat-caption); color: var(--vt-color-text-secondary); }
 .t-price-md { font: 800 var(--vt-fs-subheading) / var(--vt-lh-body) var(--vt-font-body); color: var(--vt-color-accent-deep); } /* bookPriceMd */
 .t-accent-12 { font: 800 var(--vt-fs-body) / var(--vt-lh-body) var(--vt-font-body); color: var(--vt-color-accent-deep); } /* bookAccentBold15 */
 .t-accent-11 { font: 800 var(--vt-fs-label) / var(--vt-lh-body) var(--vt-font-body); color: var(--vt-color-accent-deep); }
 .t-name-13w800 { font: 800 var(--vt-fs-input) / var(--vt-lh-body) var(--vt-font-body); color: var(--vt-color-text); } /* bookName16w800 */
-.t-value-12 { font: var(--vt-fw-label) var(--vt-fs-body) / 1.3 var(--vt-font-body); color: var(--vt-color-text); } /* bookCardValue15 */
 .t-value-11 { font: var(--vt-fw-label) var(--vt-fs-label) / 1.3 var(--vt-font-body); color: var(--vt-color-text); } /* bookCardValue135 */
 .t-otp { font: var(--vt-fw-heading) var(--vt-fs-heading) / normal var(--vt-font-display); color: var(--vt-color-accent); } /* otpDigit */
 .t-cal-num { font: var(--vt-fw-subheading) var(--vt-fs-body) / var(--vt-lh-body) var(--vt-font-body); } /* bodyStrong15 w600 */
@@ -462,89 +453,6 @@ a.tab {
   --icon-gap: 0;
 }
 
-/* ---------- CatalogueServiceTile ---------- */
-.stile {
-  display: flex;
-  align-items: center;
-  gap: var(--vt-space-md);
-  width: 100%;
-  border: 0;
-  text-align: start;
-  font: inherit;
-  color: inherit;
-  cursor: pointer;
-  padding: calc(var(--vt-space-sm) + var(--vt-space-xs) / 2) calc(var(--vt-space-sm) + var(--vt-space-xs));
-  border-radius: var(--vt-radius-field);
-  background: var(--vt-color-base);
-  box-shadow: var(--vt-shadow-extruded-small);
-  transition: background var(--vt-dur-fast) var(--vt-ease);
-  min-height: var(--vt-touch-min);
-}
-.stile.ro {
-  cursor: default;
-}
-.stile[aria-pressed="true"] {
-  background: var(--vt-color-base-emphasis);
-}
-.stile:active:not(.ro) {
-  box-shadow: none;
-}
-.stile .info {
-  flex: 1;
-  min-width: 0;
-}
-.stile .name {
-  display: block;
-}
-.stile .meta {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: calc(var(--vt-space-xs) / 2) var(--vt-space-xs);
-  margin-top: calc(var(--vt-space-xs) - var(--vt-app-hair));
-}
-.stile .dur,
-.shelf .dur {
-  display: inline-flex;
-  align-items: center;
-  gap: calc(var(--vt-space-xs) - var(--vt-app-hair));
-  --icon-size: var(--vt-app-icon-12);
-  --icon-gap: 0;
-}
-.stile .dur .icon,
-.shelf .dur .mi {
-  color: var(--bk-text-muted);
-}
-.chk {
-  flex: none;
-  width: var(--vt-app-check);
-  height: var(--vt-app-check);
-  border-radius: 50%;
-  background: var(--vt-color-base);
-  box-shadow: var(--vt-app-shadow-inset);
-  display: grid;
-  place-items: center;
-  color: var(--vt-color-cream);
-  --icon-size: var(--vt-app-icon-18);
-  --icon-gap: 0;
-}
-.chk .icon {
-  opacity: 0;
-  transform: scale(0.4);
-  transition:
-    transform var(--vt-dur-base) var(--vt-ease),
-    opacity var(--vt-dur-fast) var(--vt-ease);
-}
-.stile[aria-pressed="true"] .chk,
-.chk-row input:checked + .chk {
-  background: var(--vt-gradient-accent);
-  box-shadow: var(--vt-app-shadow-check);
-}
-.stile[aria-pressed="true"] .chk .icon,
-.chk-row input:checked + .chk .icon {
-  opacity: 1;
-  transform: none;
-}
 .chk-row {
   display: flex;
   gap: var(--vt-space-md);
@@ -693,6 +601,9 @@ a.tab {
 .shelf .dur {
   margin-top: calc(var(--vt-space-xs) / 2);
 }
+.shelf .chosen.ph {
+  visibility: hidden;
+}
 .shelf .chosen {
   display: flex;
   align-items: center;
@@ -805,25 +716,8 @@ a.tab {
 }
 
 /* ---------- misc ---------- */
-.errcard {
-  display: flex;
-  gap: var(--vt-space-sm);
-  align-items: flex-start;
-  padding: calc(var(--vt-space-sm) + var(--vt-space-xs));
-  border-radius: var(--vt-radius-card);
-  background: var(--vt-color-base);
-  border: var(--vt-app-hair) solid var(--vt-color-faint);
-  box-shadow: var(--vt-shadow-bordered-card);
-  color: var(--vt-color-error);
-  --icon-size: var(--vt-app-icon-18);
-  --icon-gap: 0;
-}
-.errcard .icon,
 .banner .icon {
   margin-top: var(--vt-app-hair);
-}
-.errcard .t-fb {
-  flex: 1;
 }
 .banner {
   display: flex;
@@ -961,13 +855,13 @@ a.tab {
   margin: 0;
 }
 
+.pt-sm { padding-top: var(--vt-space-sm); }
 .pt-md { padding-top: var(--vt-space-md); }
 .pt-lg { padding-top: var(--vt-space-lg); }
 .pb-md { padding-bottom: var(--vt-space-md); }
 .pb-lg { padding-bottom: var(--vt-space-lg); }
 .pb-xl { padding-bottom: var(--vt-space-xl); }
 .mb-md { margin-bottom: var(--vt-space-md); }
-.mt-md { margin-top: var(--vt-space-md); }
 .rel { position: relative; }
 .back-abs {
   position: absolute;
@@ -993,9 +887,6 @@ a.tab {
 }
 #otp-resend-btn {
   padding-left: var(--vt-space-xs);
-}
-.cta2 .vt-cta {
-  color: var(--vt-color-accent-deep);
 }
 
 /* NeumorphicButton overlay: the button face is lighter top-left (camel) and darker bottom-right (mocha), as in the app. */

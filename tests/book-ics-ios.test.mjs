@@ -1,9 +1,11 @@
-// Fix `ios-otp-autofill-ics` QA: «Додати в календар» routes by device. iOS Safari ignores `<a download>` on blobs, so iPhone / iPad / iPadOS
-// (Macintosh UA + touch) share the .ics as a File, or navigate to a data:text/calendar URL; every other device keeps the blob download.
+// Phase 025: «Додати в календар» is the SAME plain link on every platform (iOS Safari opens Calendar's «Add event» sheet only for a text/calendar
+// file fetched from a real https URL; blobs / data: / the share sheet are gone). So on iPhone, iPadOS and desktop the done screen must hold
+// <a href="/api/ics?..."> and no script may intercept it (no share API call, no blob URL, no data: navigation).
 // Plus the OTP step is ONE autofill target (autocomplete=one-time-code, maxlength=6) whose cells mirror a whole-code single input event.
 import { test, describe, before, after } from "node:test";
 import assert from "node:assert/strict";
 import { launch } from "./helpers/browser.mjs";
+import { uk } from "./helpers/env.mjs";
 import { bookPage, driveTo } from "./helpers/book.mjs";
 
 const UA = {
@@ -12,129 +14,58 @@ const UA = {
   desktop: "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
 };
 
-/** Init script (runs before the page): fake share API per `cfg.share` and a log in window.__ics. Navigation to data: is recorded and cancelled via the Navigation API. */
-const stubs = (cfg) => `(${(c) => {
-  window.__ics = { shared: [], canShareCalls: 0, navs: [], navTypes: [] };
-  if (c.touch != null) Object.defineProperty(navigator, "maxTouchPoints", { get: () => c.touch });
-  if (c.share === "absent") {
-    delete Navigator.prototype.share;
-    delete Navigator.prototype.canShare;
-    Object.defineProperty(navigator, "share", { value: undefined, configurable: true });
-    Object.defineProperty(navigator, "canShare", { value: undefined, configurable: true });
-  } else {
-    navigator.canShare = (d) => (window.__ics.canShareCalls++, c.canShare !== false && Array.isArray(d?.files));
-    navigator.share = (d) => {
-      window.__ics.shared.push({ n: d.files.length, type: d.files[0].type, name: d.files[0].name, size: d.files[0].size, text: null, files: d.files });
-      const p = c.share === "resolve" ? Promise.resolve() : Promise.reject(new DOMException("x", c.share === "abort" ? "AbortError" : "NotAllowedError"));
-      window.__ics.settled = p.catch(() => {}).then(() => new Promise((r) => setTimeout(r, 0))); // after the page's own .catch handler ran
-      return p;
-    };
-  }
-  window.navigation?.addEventListener("navigate", (e) => {
-    if (e.destination.url.startsWith("data:")) {
-      window.__ics.navs.push(e.destination.url);
-      window.__ics.navTypes.push(e.navigationType); // "push" adds a history entry, "replace" overwrites the confirmation
-      e.preventDefault(); // stay on the page
-    }
-  });
-  window.__blobs = 0;
+/** Init script: records every share / canShare / blob / data: navigation attempt, so "none happened" is a real assertion. */
+const spies = `(${() => {
+  window.__ics = { shareCalls: 0, blobs: 0, dataNavs: 0 };
+  navigator.share = () => (window.__ics.shareCalls++, Promise.resolve());
+  navigator.canShare = () => (window.__ics.shareCalls++, true);
   const create = URL.createObjectURL.bind(URL);
-  URL.createObjectURL = (b) => (window.__blobs++, create(b));
-}})(${JSON.stringify(cfg)})`;
+  URL.createObjectURL = (b) => (window.__ics.blobs++, create(b));
+  window.navigation?.addEventListener("navigate", (e) => e.destination.url.startsWith("data:") && window.__ics.dataNavs++);
+}})()`;
 
 let browser;
 before(async () => (browser = await launch()));
 after(async () => browser?.close());
 
-/** Books through the real flow up to the success screen, taps «Додати в календар». */
-async function tapCalendar(slug, { ua, cfg }) {
-  const env = await bookPage(browser, slug, { userAgent: ua, hasTouch: ua !== UA.desktop, init: stubs(cfg) });
+/** Books through the real flow up to the success screen and reads the calendar control. */
+async function doneScreen(ua) {
+  const env = await bookPage(browser, "oksana-ab12", { userAgent: ua, hasTouch: ua !== UA.desktop, init: spies });
   try {
-    await driveTo(env.page, "confirm", { contact: { name: "Айос", phone: slug === "oksana-ab12" ? "500000031" : "500000032" } });
+    await driveTo(env.page, "confirm", { contact: { name: "Айос", phone: "500000031" } });
     await env.page.click("#cta-confirm");
     await env.page.waitForSelector("#done-card", { state: "visible" });
-    const download = env.page.waitForEvent("download", { timeout: 1500 }).catch(() => null);
-    await env.page.getByRole("button", { name: "Додати в календар" }).click();
-    // wait on a condition: either the share/data nav was observed, or (desktop) the download event
-    const d = await download;
-    await env.page.waitForFunction(() => window.__ics.shared.length + window.__ics.navs.length + window.__blobs > 0);
-    const out = await env.page.evaluate(async () => {
-      await window.__ics.settled; // a rejected share has been handled by the page by now: absence assertions are not racing it
-      const f = window.__ics.shared[0]?.files[0];
-      return { ...window.__ics, files: undefined, blobs: window.__blobs, fileText: f ? await f.text() : null, url: location.href };
+    const control = env.page.getByRole("link", { name: uk.book.done.calendarApple });
+    const tag = await control.evaluate((e) => e.tagName);
+    const href = await control.getAttribute("href");
+    // Intercept but pass the REAL endpoint response through (inline text/calendar opens the iOS Calendar sheet and keeps the page where it is), and assert its real header so a regression to `attachment` goes red; then look at what the click ran.
+    let real;
+    await env.page.route("**/api/ics?**", async (r) => {
+      const res = await r.fetch();
+      real = { status: res.status(), type: res.headers()["content-type"], disposition: res.headers()["content-disposition"] };
+      await r.fulfill({ response: res });
     });
-    return { ...out, download: d ? d.suggestedFilename() : null, problems: env.problems };
+    const [download] = await Promise.all([env.page.waitForEvent("download"), control.click()]);
+    assert.equal(real?.status, 200);
+    assert.match(real.type, /^text\/calendar/);
+    assert.match(real.disposition, /^inline/, "real /api/ics must answer content-disposition: inline");
+    assert.equal(download.suggestedFilename(), "beautica-booking.ics");
+    const spy = await env.page.evaluate(() => window.__ics);
+    return { tag, href, spy, buttons: await env.page.getByRole("button", { name: new RegExp(`${uk.book.done.calendarGoogle}|${uk.book.done.calendarApple}`) }).count() };
   } finally {
     await env.context.close();
   }
 }
 
-describe("add to calendar on iOS", () => {
-  test("iPhone: share sheet gets exactly one text/calendar .ics File; no navigation, no blob download", async () => {
-    const r = await tapCalendar("oksana-ab12", { ua: UA.iphone, cfg: { share: "resolve" } });
-    assert.equal(r.shared.length, 1, "share called once");
-    assert.equal(r.shared[0].n, 1, "one file");
-    assert.equal(r.shared[0].type, "text/calendar");
-    assert.match(r.shared[0].name, /\.ics$/);
-    assert.match(r.fileText, /^BEGIN:VCALENDAR\r\n[\s\S]*END:VCALENDAR\r\n$/, "the file is the real calendar text");
-    assert.deepEqual(r.navs, [], "no data: navigation after a successful share");
-    assert.equal(r.blobs, 0, "no blob URL");
-    assert.equal(r.download, null);
-  });
-
-  test("iPhone: the user dismisses the sheet (AbortError) -> nothing else happens", async () => {
-    const r = await tapCalendar("oksana-ab12", { ua: UA.iphone, cfg: { share: "abort" } });
-    assert.equal(r.shared.length, 1);
-    assert.deepEqual(r.navs, [], "AbortError must not navigate");
-    assert.equal(r.blobs, 0);
-  });
-
-  test("iPhone: share rejects with another error -> falls back to a data:text/calendar navigation carrying the file", async () => {
-    const r = await tapCalendar("oksana-ab12", { ua: UA.iphone, cfg: { share: "fail" } });
-    assert.equal(r.shared.length, 1);
-    assert.equal(r.navs.length, 1);
-    assert.match(r.navs[0], /^data:text\/calendar;charset=utf-8,BEGIN%3AVCALENDAR/);
-    assert.deepEqual(r.navTypes, ["push"], "the data: fallback adds a history entry, so Back returns to the confirmation");
-    assert.match(decodeURIComponent(r.navs[0].split(",").slice(1).join(",")), /^BEGIN:VCALENDAR\r\n[\s\S]*SUMMARY:[\s\S]*END:VCALENDAR\r\n$/);
-    assert.equal(r.blobs, 0);
-  });
-
-  test("iPhone: canShare says no for files -> data:text/calendar navigation, share never called", async () => {
-    const r = await tapCalendar("oksana-ab12", { ua: UA.iphone, cfg: { share: "resolve", canShare: false } });
-    assert.equal(r.shared.length, 0);
-    assert.equal(r.navs.length, 1);
-    assert.match(r.navs[0], /^data:text\/calendar/);
-  });
-
-  test("iPhone: no Web Share API at all -> data:text/calendar navigation", async () => {
-    const r = await tapCalendar("oksana-ab12", { ua: UA.iphone, cfg: { share: "absent" } });
-    assert.equal(r.navs.length, 1);
-    assert.match(r.navs[0], /^data:text\/calendar/);
-  });
-
-  test("iPadOS (Macintosh UA + 5 touch points) is treated as iOS: share used, no blob download", async () => {
-    const r = await tapCalendar("oksana-ab12", { ua: UA.ipados, cfg: { share: "resolve", touch: 5 } });
-    assert.equal(r.shared.length, 1);
-    assert.equal(r.blobs, 0);
-    assert.equal(r.download, null);
-  });
-
-  test("a Mac (Macintosh UA, no touch) is NOT iOS: blob download, share not called", async () => {
-    const r = await tapCalendar("oksana-ab12", { ua: UA.ipados, cfg: { share: "resolve", touch: 0 } });
-    assert.equal(r.shared.length, 0);
-    assert.equal(r.blobs, 1);
-  });
-});
-
-describe("add to calendar elsewhere", () => {
-  test("desktop: blob <a download> still used (download event, .ics name) and share is NOT called", async () => {
-    const r = await tapCalendar("oksana-ab12", { ua: UA.desktop, cfg: { share: "resolve" } });
-    assert.equal(r.shared.length, 0, "navigator.share untouched on desktop");
-    assert.equal(r.canShareCalls, 0);
-    assert.equal(r.blobs, 1);
-    assert.deepEqual(r.navs, []);
-    assert.equal(r.download, "beautica-booking.ics");
-  });
+describe("add to calendar is a plain link to /api/ics on every platform", () => {
+  for (const [name, ua] of Object.entries(UA))
+    test(`${name}: <a href="/api/ics?..."> and no share sheet, blob or data: navigation`, async () => {
+      const r = await doneScreen(ua);
+      assert.equal(r.tag, "A");
+      assert.match(r.href, /^\/api\/ics\?s=\d{4}-\d\d-\d\dT\d\d%3A\d\d%3A\d\dZ&e=/);
+      assert.equal(r.buttons, 0, "not a <button>");
+      assert.deepEqual(r.spy, { shareCalls: 0, blobs: 0, dataNavs: 0 });
+    });
 });
 
 describe("OTP step is a single iOS-autofill target", () => {

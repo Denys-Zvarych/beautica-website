@@ -4,13 +4,22 @@
 import type { APIRoute } from "astro";
 import { env } from "cloudflare:workers";
 import { bookingConfig } from "../../../lib/booking/config";
+import { isValidCancelToken } from "../../../lib/guestCancel";
 import { TOKEN_CSP } from "../../../lib/securityHeaders";
 
 export const prerender = false;
 
 const PROD_API = "https://api.beautica.app";
 
-export const GET: APIRoute = async ({ request }) => {
+const assets404 = (request: Request) =>
+  (env as unknown as { ASSETS: { fetch(r: Request): Promise<Response> } }).ASSETS.fetch(new Request(new URL("/404", request.url)));
+
+export const GET: APIRoute = async ({ request, params }) => {
+  // Invalid token: the same 404 as [...rest].ts (served through the middleware, which adds the token-route headers).
+  if (!isValidCancelToken(params.token)) {
+    const nf = await assets404(request);
+    return new Response(request.method === "HEAD" ? null : await nf.text(), { status: 404, headers: new Headers({ "Content-Type": "text/html; charset=utf-8" }) });
+  }
   const cfg = bookingConfig();
   const assets = (env as unknown as { ASSETS: { fetch(r: Request): Promise<Response> } }).ASSETS;
   const shell = await assets.fetch(new Request(new URL("/l/cancel", request.url)));

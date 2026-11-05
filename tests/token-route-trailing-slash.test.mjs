@@ -3,7 +3,7 @@
 import { test, describe, before, after } from "node:test";
 import assert from "node:assert/strict";
 import { launch, open } from "./helpers/browser.mjs";
-import { BASE, TOKEN, rawRequest, requireBase, uk } from "./helpers/env.mjs";
+import { BASE, TOKEN, SHORT_TOKEN, rawRequest, requireBase, uk } from "./helpers/env.mjs";
 import { tokenFromPath } from "../src/lib/guestCancel.ts";
 
 requireBase();
@@ -11,6 +11,7 @@ requireBase();
 const SHAPES = [
   // The cancel page has one h1 that follows its state (loading, then the state shown): any of its headings proves the page rendered.
   { path: `/book/cancel/${TOKEN}`, h1: ["Скасування запису", uk.cancel.confirmTitle, uk.cancel.doneTitle, uk.cancel.closedTitle, uk.cancel.notfoundTitle, uk.cancel.errorTitle] },
+  { path: `/c/${SHORT_TOKEN}`, h1: ["Скасування запису", uk.cancel.confirmTitle, uk.cancel.doneTitle, uk.cancel.closedTitle, uk.cancel.notfoundTitle, uk.cancel.errorTitle] },
   { path: `/bookings/${TOKEN}`, h1: "Ваш запис у Beautica" },
   { path: `/bookings/${TOKEN}/review`, h1: "Залиште відгук" },
   { path: "/invite/accept?token=abc123", h1: "Вас запросили до Beautica" },
@@ -49,5 +50,8 @@ describe("trailing slash on token routes", () => {
     assert.equal(tokenFromPath(`/book/cancel/${TOKEN}`), TOKEN);
     assert.equal(tokenFromPath(`/book/cancel/${TOKEN}/`), TOKEN);
     assert.equal(tokenFromPath(`/book/cancel/${TOKEN}/x`), null);
+    assert.equal(tokenFromPath(`/c/${SHORT_TOKEN}`), SHORT_TOKEN);
+    assert.equal(tokenFromPath(`/c/${SHORT_TOKEN}/`), SHORT_TOKEN);
+    assert.equal(tokenFromPath(`/c/${SHORT_TOKEN}x`), null);
   });
 });

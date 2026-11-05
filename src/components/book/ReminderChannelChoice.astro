@@ -1,0 +1,146 @@
+---
+// Booking success screen (phase 022; reused by the cancel page, phase 024; segmented SMS | Telegram picker since phase 025).
+// Hidden in the HTML; src/scripts/booking/reminder-channel.ts shows exactly one state (linked status or the SMS / Telegram choice)
+// and only when the backend says Telegram is available. All copy is server-rendered here, so the script only toggles `hidden`.
+import NeuCard from "../NeuCard.astro";
+import Icon from "../Icon.astro";
+import { t } from "../../i18n/t";
+import "../../styles/remind.css";
+---
+
+<div class="remind reveal" id="done-reminders" hidden>
+  <NeuCard bordered pad="md">
+    <div data-r-linked hidden>
+      <p class="okline t-fb"><Icon name="check-circle" />{t("book.done.reminders.linked")}</p>
+      <div class="gap"></div>
+      <button type="button" class="cta2" data-r-unlink><span class="vt-cta">{t("book.done.reminders.backToSms")}</span></button>
+    </div>
+    <div data-r-choice hidden>
+      <p class="t-sub13 ttl" id="reminders-h">{t("book.done.reminders.heading")}</p>
+      <div class="seg" role="group" aria-labelledby="reminders-h">
+        <label><input type="radio" name="reminder-channel" value="sms" data-v="sms" checked aria-describedby="reminders-desc" /><Icon name="sms" /><span>{t("book.done.reminders.sms")}</span></label>
+        <label><input type="radio" name="reminder-channel" value="telegram" data-v="telegram" aria-describedby="reminders-desc" /><Icon name="telegram" /><span>{t("book.done.reminders.telegram")}</span></label>
+      </div>
+      <p class="t-fb muted desc" id="reminders-desc" aria-live="polite">
+        <span data-r-desc="sms">{t("book.done.reminders.smsDesc")}</span>
+        <span data-r-desc="telegram" data-off>{t("book.done.reminders.telegramDesc")}</span>
+      </p>
+      <button type="button" class="cta2 connect" data-r-connect hidden><Icon name="telegram" /><span class="vt-cta">{t("book.done.reminders.connect")}</span></button>
+    </div>
+    <p class="t-body11" data-r-unavailable hidden>{t("book.done.reminders.unavailable")}</p>
+    <div class="errcard mt-md" role="alert" data-r-error hidden>
+      <Icon name="error-outline" />
+      <span class="t-fb err">
+        <span data-r-err="rate" hidden>{t("book.done.reminders.tooMany")}</span>
+        <span data-r-err="fail" hidden>{t("book.done.reminders.failed")}</span>
+        <span data-r-err="unlink" hidden>{t("book.done.reminders.unlinkFailed")}</span>
+      </span>
+    </div>
+  </NeuCard>
+</div>
+
+<style>
+  .gap {
+    height: var(--vt-space-sm);
+  }
+  .ttl {
+    margin-bottom: var(--vt-space-sm);
+  }
+  /* Segmented control: the selected face is a pseudo-element, so only its opacity animates. */
+  .seg {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: calc(var(--vt-space-xs) - var(--vt-app-hair));
+    padding: calc(var(--vt-space-xs) - var(--vt-app-hair));
+    background: var(--vt-color-base);
+    border-radius: var(--vt-radius-field);
+    box-shadow: var(--vt-app-shadow-inset);
+  }
+  .seg label {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: var(--vt-touch-min);
+    padding: 0 var(--vt-space-sm);
+    border-radius: calc(var(--vt-radius-field) - var(--vt-space-xs));
+    background: transparent;
+    cursor: pointer;
+    font: var(--vt-fw-label) var(--vt-fs-input) var(--vt-font-body);
+    letter-spacing: var(--vt-ls-cta);
+    color: var(--vt-color-text-secondary);
+    -webkit-tap-highlight-color: transparent;
+    transition: color var(--vt-dur-fast) var(--vt-ease);
+    --icon-size: var(--vt-app-icon-18);
+    --icon-gap: var(--vt-space-sm);
+  }
+  .seg label::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    background: var(--vt-gradient-accent);
+    box-shadow: var(--vt-shadow-extruded-small);
+    opacity: 0;
+    transition: opacity var(--vt-dur-fast) var(--vt-ease);
+  }
+  .seg label > :global(*) {
+    position: relative;
+  }
+  .seg label:has(input:checked) {
+    color: var(--vt-color-cream);
+  }
+  .seg label:has(input:checked)::before {
+    opacity: 1;
+  }
+  .seg input {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    opacity: 0;
+    cursor: inherit;
+  }
+  .seg label:has(input:focus-visible) {
+    outline: medium solid var(--vt-color-accent-deep);
+    outline-offset: var(--vt-space-xs);
+  }
+  .seg label:has(input:disabled) {
+    cursor: default;
+    opacity: 0.6;
+  }
+  @media (hover: hover) {
+    .seg label:has(input:not(:checked):not(:disabled)):hover {
+      color: var(--vt-color-accent-deep);
+    }
+  }
+  /* Both descriptions share one grid cell: the cell is as tall as the taller one, the other is only visibility:hidden, so swapping never reflows. */
+  .desc {
+    display: grid;
+    margin: calc(var(--vt-space-sm) - var(--vt-space-xs) / 2) 0 0;
+    padding-inline: var(--vt-space-xs);
+  }
+  .desc > span {
+    grid-area: 1 / 1;
+  }
+  .desc > span[data-off] {
+    visibility: hidden;
+  }
+  .connect {
+    margin-top: calc(var(--vt-space-sm) - var(--vt-space-xs) / 2);
+    min-height: var(--vt-touch-min);
+    --icon-size: var(--vt-app-icon-18);
+    --icon-gap: 0;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .seg button,
+    .seg label::before,
+    .reveal,
+    .remind :global(.cta2),
+    .remind :global(.cta2::before) {
+      transition: none;
+      animation: none;
+    }
+  }
+</style>

@@ -23,7 +23,6 @@ describe("stated numbers equal the backend's", gate, () => {
   test("cancel window: every place the site says «N годин» equals BookingSmsProperties.cancelWindowHours", () => {
     const backend = javaInt("BookingSmsProperties", "cancelWindowHours");
     const copy = [
-      ["uk.json book.done.cancelRule", uk.book.done.cancelRule],
       ["uk.json cancel.closedText", uk.cancel.closedText],
       ["privacy.md §3", read("src/content/legal/uk/privacy.md").split("\n").find((l) => /не пізніше ніж за \d+ годин/.test(l))],
     ];
@@ -45,16 +44,17 @@ describe("stated numbers equal the backend's", gate, () => {
 });
 
 describe("the ledger rows added for the booking pages still point at the line they claim", gate, () => {
-  const pin = (needle) => ledgerRows.find((r) => r[0].startsWith("Guest booking") && r[3] === "live" && r[1].includes(needle));
+  const pin = (needle, claim = "Guest booking") => ledgerRows.find((r) => r[0].startsWith(claim) && r[3] === "live" && r[1].includes(needle));
   const cases = [
-    ["src:src/i18n/uk.json", /cancelWindowHours\s*=\s*2\b/],
+    // phase 025 removed the cancel rule from the done page: the 2-hour window now lives on the privacy page (and l/cancel#st-closed)
+    ["privacy#guest", /cancelWindowHours\s*=\s*2\b/, "Guest booking: privacy page states the same 2-hour"],
     ["calendar.ts", /availabilityMaxDays\s*=\s*60\b/],
     ["app.ts#st.picked", /MAX_SERVICES_PER_VISIT\s*=\s*10\b/],
     ["BookingFlow.astro", /_maxComment\s*=\s*500\b/],
   ];
-  for (const [needle, re] of cases)
+  for (const [needle, re, claim] of cases)
     test(`row «${needle}»: the cited source line matches ${re}`, (t) => {
-      const row = pin(needle);
+      const row = pin(needle, claim);
       assert.ok(row, `no ledger row anchored at ${needle}`);
       const { file, line, absent } = sourceLine(row);
       if (absent) return t.skip("that sibling repo (mobile) is not checked out");
@@ -116,7 +116,7 @@ describe("legal bump (phase 018): stated numbers equal the backend's", gate, () 
     assert.equal(key("stale-after"), "72h");
     assert.match(privacy, /Посилання діє 14 днів від надсилання/);
     assert.equal(key("ttl"), "14d");
-    assert.match(privacy, /Кнопка працює 30 днів після надсилання SMS/);
+    assert.match(privacy, /Кнопка працює 30 днів після надсилання запрошення/);
     assert.match(be("review/invite/service/GuestReviewService.java"), /OPT_OUT_WINDOW\s*=\s*Duration\.ofDays\(30\)/);
     assert.match(privacy, /видаляється через 30 днів після закінчення дії посилання/);
     assert.match(be("review/invite/service/GuestReviewRetentionService.java"), /INVITE_RETENTION\s*=\s*Duration\.ofDays\(30\)/);

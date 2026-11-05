@@ -16,6 +16,18 @@
     {
       "version": "2026-10-29",
       "sha256": "90ee7243014e0b53d3eb093dbcb0d613b2af70182a2fd88f2239281534171ad8"
+    },
+    {
+      "version": "2026-10-31",
+      "sha256": "62e70017c222cab3a01727b11c2ef77d2454fb05faa23f0f6f1cf7a4921d73f6"
+    },
+    {
+      "version": "2026-11-04",
+      "sha256": "f448e9ad85f58a936bf79ad035b25611464cbfb5878b45d51953b547fcf81391"
+    },
+    {
+      "version": "2026-11-04.1",
+      "sha256": "01ce448c4e05b59036b3ff6db2ae6fd560dc8327c46df87298e0dfdac6fd647b"
     }
   ]
 }

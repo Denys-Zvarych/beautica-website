@@ -333,6 +333,6 @@ describe("3b. form limits on the page never exceed what the backend accepts", ga
     assert.equal(Number(/st\.picked\.size >= (\d+)\)/.exec(app)?.[1]), javaInt("SlotCalculationService", "MAX_SERVICES_PER_VISIT"));
   });
   test("the salon wizard's per-master comment box allows 500 characters as well", () => {
-    assert.match(html, /<textarea rows="3" maxlength="500"[^>]*data-appt-text/);
+    assert.match(html, /<textarea rows="\d+" maxlength="500"[^>]*data-appt-text/); // phase 025: the counter is gone, the attribute is the limit
   });
 });

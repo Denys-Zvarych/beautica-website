@@ -92,7 +92,7 @@ const js = safeJson({
   }
 
   {
-    invite && (
+    invite && strip && (
       <section class="screen" data-screen="success" hidden>
         <div class="body pt-lg">
           <div class="pad-h">
@@ -102,8 +102,10 @@ const js = safeJson({
             <div class="g-sm"></div>
             <p class="t-body11 centered reveal">{t("review.successSub")}</p>
             <div class="g-lg"></div>
-            <NeuCard bordered pad="sm" class="reveal">
-              <div class="lrow"><span class="lbl t-label">{t(salon ? "review.successSalon" : "review.successMaster")}</span><span class="val t-value-12">{invite.providerName}</span><span class="det t-fb muted w600">{[when, services.join(", ")].filter(Boolean).join(" · ")}</span></div>
+            <NeuCard bordered pad="md" class="reveal sumcard">
+              <MasterStrip {...strip} label={t(salon ? "review.successSalon" : "review.successMaster")} />
+              <div class="g-sm"></div>
+              <div class="lrow"><span class="det t-fb muted w600">{[when, services.join(", ")].filter(Boolean).join(" · ")}</span></div>
             </NeuCard>
             <div class="g-xl"></div>
             <a class="cta2" href="/"><span class="vt-cta">{t("review.home")}</span></a>
