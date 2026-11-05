@@ -13,15 +13,15 @@ Columns:
 
 | claim | page anchor | source | status |
 |---|---|---|---|
-| Client, independent master, salon master and salon admin can delete their account in the app (owner cannot) | delete-account#app | `../beautica-mobile/lib/features/auth/presentation/auth_selectors.dart:136` | live |
-| «Акаунт» → «Видалити акаунт» is the last row of the account page | delete-account#app | `../beautica-mobile/lib/features/settings/presentation/settings_screen.dart:411` | live |
-| Row label is «Видалити акаунт» | delete-account#app | `../beautica-mobile/lib/l10n/app_uk.arb:3008` | live |
+| Client, independent master, salon master and salon admin can delete their account in the app (owner cannot) | delete-account#app | `../beautica-mobile/lib/features/auth/presentation/auth_selectors.dart:138` | live |
+| «Акаунт» → «Видалити акаунт» is the last row of the account page | delete-account#app | `../beautica-mobile/lib/features/settings/presentation/settings_screen.dart:549` | live |
+| Row label is «Видалити акаунт» | delete-account#app | `../beautica-mobile/lib/l10n/app_uk.arb:3030` | live |
 | Salon owner has only «Видалити салон» on the account page | delete-account#app | `../beautica-mobile/lib/features/settings/presentation/settings_screen.dart:304` | live |
 | Client path starts at the hub row «Акаунт» | delete-account#app | `../beautica-mobile/lib/features/home/presentation/client_settings_hub_screen.dart:187` | live |
 | Salon admin opens settings from the profile tune button | delete-account#app | `../beautica-mobile/lib/features/salon/presentation/admin_own_profile_screen.dart:347` | live |
 | Client with more than 50 future bookings must cancel some first | delete-account#app | `../beautica-backend/src/main/java/com/beautica/user/ClientAccountDeletionService.java:77` | live |
 | Master with more than 500 future bookings must cancel some first | delete-account#app | `../beautica-backend/src/main/java/com/beautica/user/StaffAccountSelfDeletionService.java:73` | live |
-| Reply to a deletion request within 30 calendar days (policy commitment, no code behind it) | delete-account#request | `src/content/legal/uk/privacy.md:208` | live |
+| Reply to a deletion request within 30 calendar days (policy commitment, no code behind it) | delete-account#request | `src/content/legal/uk/privacy.md:219` | live |
 | Guest can cancel a booking until 2 hours before it starts | l/cancel#st-closed | `../beautica-backend/src/main/java/com/beautica/config/BookingSmsProperties.java:33` | live |
 | After that window the cancel is refused (422) and the guest is told to contact the master | l/cancel#st-closed | `../beautica-backend/src/main/java/com/beautica/booking/service/BookingCancellationService.java:150` | live |
 | A used or unknown cancel link answers 404 («вже використано або недійсне») | l/cancel#st-notfound | `../beautica-backend/src/main/java/com/beautica/booking/controller/PublicBookingController.java:234` | live |
@@ -52,9 +52,9 @@ Columns:
 | Reports (terms §7, privacy §2): the report comment holds at most 500 characters | privacy#data | `../beautica-backend/src/main/java/com/beautica/moderation/dto/CreateReportRequest.java:39` | live |
 | Reports (terms §7): reportable content = review, client review, portfolio photo, master/salon profile, client profile; reporting your own content is refused | terms#prohibited | `../docs/backend-phases/phase-395-ugc-content-reports.md:22` | live |
 | Reports (terms §7): every signed-in role may report; guests without an account write to support | terms#prohibited | `../docs/backend-phases/phase-395-ugc-content-reports.md:38` | live |
-| Reports (terms §7): reasons are spam, offensive, harassment, false info, sexual content, other (app labels «Спам або реклама», «Образливий зміст», «Переслідування або погрози», «Неправдива інформація», «Відвертий або сексуальний зміст», «Інше») | terms#prohibited | `../beautica-mobile/lib/l10n/app_uk.arb:7198` | live |
-| Reports (terms §7): the button in the app is «Поскаржитися» (on a photo «Поскаржитися на фото», on a client «Поскаржитися на клієнта») | terms#prohibited | `../beautica-mobile/lib/l10n/app_uk.arb:7190` | live |
-| Reports (terms §7): the report is anonymous, the author is not told who reported | terms#prohibited | `../beautica-mobile/lib/l10n/app_uk.arb:7234` | live |
+| Reports (terms §7): reasons are spam, offensive, harassment, false info, sexual content, other (app labels «Спам або реклама», «Образливий зміст», «Переслідування або погрози», «Неправдива інформація», «Відвертий або сексуальний зміст», «Інше») | terms#prohibited | `../beautica-mobile/lib/l10n/app_uk.arb:7223` | live |
+| Reports (terms §7): the button in the app is «Поскаржитися» (on a photo «Поскаржитися на фото», on a client «Поскаржитися на клієнта») | terms#prohibited | `../beautica-mobile/lib/l10n/app_uk.arb:7326` | live |
+| Reports (terms §7): the report is anonymous, the author is not told who reported | terms#prohibited | `../beautica-mobile/lib/l10n/app_uk.arb:7259` | live |
 | Reports (privacy §2): the team e-mail carries only report number, target type and id, reason and reporter id, never the comment or the review text | privacy#data | `../docs/backend-phases/phase-395-ugc-content-reports.md:35` | live |
 | Moderation (terms §4): 3 different clients with a completed visit at that master or salon hide a review automatically (staff do not count) | terms#reviews | `../beautica-backend/src/main/resources/application.yml:656` | live |
 | Moderation (terms §4): a hidden or removed review leaves public lists and the rating; the author still sees it in their own list; support can restore or remove | terms#reviews | `../docs/backend-phases/phase-396-ugc-moderation-takedown.md:28` | live |
@@ -90,3 +90,13 @@ Columns:
 | Telegram link is deleted with the guest data 12 months after the last visit | privacy#retention | `../beautica-backend/src/main/resources/application.yml:649` | live |
 | Telegram link is deleted 12 months after the bot was blocked (phase 409 D2, NOT SHIPPED: release gate) | privacy#retention | `../docs/backend-phases/phase-409-telegram-retention-erasure.md:20` | not-live |
 | Telegram link codes are deleted at most 2 days after they expire: 1 day past expiry, daily job (phase 409 D4, NOT SHIPPED: release gate) | privacy#retention | `../docs/backend-phases/phase-409-telegram-retention-erasure.md:25` | not-live |
+| In-app crash reports are on by default (opt-out switch) | privacy#data | `../beautica-mobile/lib/core/diagnostics/install_id.dart:93` | live |
+| In-app crash reports: no screenshots, no default PII | privacy#data | `../beautica-mobile/lib/core/diagnostics/crash_reporting.dart:194` | live |
+| In-app crash reports: emails, phones, tokens, SMS codes, long numbers are redacted before sending; request URLs reduced to a path without query | privacy#data | `../beautica-mobile/lib/core/diagnostics/crash_scrubber.dart:90` | live |
+| In-app crash reports: the install ID is random, rotates when reporting is switched off and on, and is sent only to Sentry (never to our backend) | privacy#data | `../beautica-mobile/lib/core/diagnostics/install_id.dart:81` | live |
+| In-app crash reports: IP storage off in Sentry, 30-day retention (Sentry free plan; mobile phase 410 M1, done 2026-11-05) | privacy#data | `../docs/mobile-phases/phase-410-R.3-crash-reporting.md:102` | live |
+| In-app crash reports: the opt-out switch is labelled «Надсилати звіти про збої» | privacy#data | `../beautica-mobile/lib/l10n/app_uk.arb:2940` | live |
+| In-app crash reports: the switch is on the «Акаунт» page (menu → «Акаунт» → switch; integration test covers client and independent master) | privacy#data | `../beautica-mobile/lib/l10n/app_uk.arb:2908` | live |
+| In-app crash reports: menu → «Акаунт» → switch «Надсилати звіти про збої» works for a client and an independent master | privacy#data | `../beautica-mobile/integration_test/crash_reports_toggle_flow_test.dart:104` | live |
+| In-app crash reports: menu → «Акаунт» → switch «Надсилати звіти про збої» works for an independent master (via its menu) | privacy#data | `../beautica-mobile/integration_test/crash_reports_toggle_flow_test.dart:166` | live |
+| Sentry transfer mechanism: Functional Software, Inc. is self-certified under the EU-U.S. Data Privacy Framework; Standard Contractual Clauses (Decision 2021/914) are the fallback (sentry.io/privacy + DPA 5.1.0 at sentry.io/legal/dpa, verified 2026-11-05) | privacy#transfers | `../docs/website-phases/phase-028-privacy-crash-diagnostics.md:34` | live |
