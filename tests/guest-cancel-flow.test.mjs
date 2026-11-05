@@ -590,3 +590,313 @@ describe("salon and address facts (phase 435)", () => {
     });
   });
 });
+
+// Phase 026: several services = the guest ticks what to cancel (src/pages/l/cancel.astro + src/lib/guestCancel.ts). Copy comes from uk.json (cancel.multi.*).
+describe("pick the services to cancel (phase 026)", () => {
+  const m = c.multi;
+  const fill = (s, v) => s.replace("{n}", v);
+  const item = (n, serviceName, h, status = "CONFIRMED", cancellable = true) => ({ bookingId: `b${n}`, serviceName, startsAt: `2030-03-05T${h}:00:00Z`, durationMinutes: 60, status, cancellable });
+  const A = item(1, "Манікюр з покриттям", "10");
+  const B = item(2, "Педикюр класичний", "11");
+  const C = item(3, "Догляд за бровами", "12");
+  const MULTI = { ...INFO, status: "CONFIRMED", items: [A, B, C] };
+  /** The mock backend's POST (stateful, like the real one): cancels the listed ids (no body = every open service) and answers in the GET shape. */
+  const cancelling = (base, bodies = []) => {
+    const gone = new Set();
+    return (req) => {
+      const sent = req.postData() ? JSON.parse(req.postData()).bookingIds : undefined;
+      bodies.push(sent);
+      for (const i of base.items) if (i.cancellable && (!sent || sent.includes(i.bookingId))) gone.add(i.bookingId);
+      const items = base.items.map((i) => (gone.has(i.bookingId) ? { ...i, status: "CANCELLED", cancellable: false } : i));
+      return ok({ ...base, items, cancellable: items.some((i) => i.cancellable) });
+    };
+  };
+  const row = (page, name) => page.locator("#c-rows label", { hasText: name });
+  const box = (page, name) => row(page, name).locator("input[type=checkbox]");
+  const cta = (page) => page.locator("#c-confirm");
+  const ctaText = async (page) => (await cta(page).innerText()).trim();
+  const posts = (calls) => calls.filter((x) => x.method === "POST");
+
+  test("nothing is ticked at first: every cancellable row is an unticked checkbox, the CTA is disabled and says «Скасувати»", async () => {
+    await run({ get: () => ok(MULTI) }, async ({ page, state, calls, problems }) => {
+      await state("confirm").waitFor({ state: "visible" });
+      await assertOnlyState(page, "confirm");
+      assert.equal(await page.locator("#c-rows input[type=checkbox]").count(), 3);
+      assert.equal(await page.locator("#c-rows input:checked").count(), 0, "nothing preselected");
+      assert.equal(await cta(page).isDisabled(), true);
+      assert.equal(await ctaText(page), m.confirmNone);
+      assert.equal(await page.getByRole("group", { name: m.hint }).isVisible(), true, "a fieldset named by the hint");
+      assert.deepEqual(await page.locator("#c-rows label .name").allInnerTexts(), [A, B, C].map((i) => i.serviceName), "ordered by time, one row per service");
+      assert.equal(await page.getByRole("heading", { level: 1 }).innerText(), m.title);
+      assert.equal(await page.locator("#c-facts [data-fact=service]").count(), 0, "the service row of the single view is replaced by the list");
+      assert.equal(await page.locator("#c-status").isVisible(), false, "no result line before any cancel");
+      assert.equal(posts(calls).length, 0);
+      assert.deepEqual(problems, []);
+    });
+  });
+
+  test("ticking updates the CTA label (1 / 2 / 5 / 11 services, uk plural) and unticking everything disables it again", async () => {
+    const many = { ...INFO, items: Array.from({ length: 11 }, (_, i) => item(i + 1, `Послуга ${i + 1}`, String(10 + (i % 10)).padStart(2, "0"))) };
+    await run({ get: () => ok(many) }, async ({ page, state }) => {
+      await state("confirm").waitFor({ state: "visible" });
+      const forms = [[1, m.confirmOne], [2, m.confirmFew], [5, m.confirmMany], [11, m.confirmMany]];
+      let ticked = 0;
+      for (const [n, form] of forms) {
+        for (; ticked < n; ticked++) await page.locator("#c-rows label").nth(ticked).click();
+        assert.equal(await ctaText(page), fill(form, n), `${n} ticked`);
+        assert.equal(await cta(page).isEnabled(), true);
+      }
+      for (let i = 0; i < 11; i++) await page.locator("#c-rows label").nth(i).click();
+      assert.equal(await ctaText(page), m.confirmNone);
+      assert.equal(await cta(page).isDisabled(), true);
+    });
+  });
+
+  test("the POST body is exactly the ticked ids (first + last, then the middle one alone), as JSON", async () => {
+    const bodies = [];
+    await run({ get: () => ok(MULTI), post: cancelling(MULTI, bodies) }, async ({ page, state, calls }) => {
+      await state("confirm").waitFor({ state: "visible" });
+      await row(page, A.serviceName).click();
+      await row(page, C.serviceName).click();
+      await cta(page).click();
+      await page.locator("#c-status").waitFor({ state: "visible" });
+      assert.equal(posts(calls).length, 1);
+      assert.equal(posts(calls)[0].url, API_ORIGIN + API_PATH);
+      assert.match(posts(calls)[0].headers["content-type"], /application\/json/);
+      assert.deepEqual(JSON.parse(posts(calls)[0].body), { bookingIds: ["b1", "b3"] });
+      // any service may be cancelled, a middle one too
+      await row(page, B.serviceName).click();
+      await cta(page).click();
+      await state("cancelled").waitFor({ state: "visible" });
+      assert.deepEqual(bodies, [["b1", "b3"], ["b2"]]);
+    });
+  });
+
+  test("not cancellable rows show their reason (cancelled / completed / too late) and cannot be ticked", async () => {
+    const info = { ...INFO, items: [A, item(2, "Знята послуга", "11", "CANCELLED", false), item(3, "Завершена послуга", "12", "COMPLETED", false), item(4, "Пізня послуга", "13", "CONFIRMED", false), item(5, "Відхилена послуга", "14", "DECLINED", false)] };
+    await run({ get: () => ok(info) }, async ({ page, state, calls }) => {
+      await state("confirm").waitFor({ state: "visible" });
+      for (const [name, reason] of [["Знята послуга", m.reasonCancelled], ["Завершена послуга", m.reasonCompleted], ["Пізня послуга", m.reasonLate], ["Відхилена послуга", m.reasonCancelled]]) {
+        assert.equal(await box(page, name).isDisabled(), true, `${name}: disabled`);
+        assert.equal(await row(page, name).locator(".why").isVisible(), true, `${name}: reason visible`);
+        assert.equal((await row(page, name).locator(".why").innerText()).trim(), reason, name);
+        await row(page, name).click({ force: true });
+        assert.equal(await box(page, name).isChecked(), false, `${name}: a click does not tick it`);
+      }
+      assert.equal(await row(page, A.serviceName).locator(".why").isVisible(), false, "a cancellable row has no reason");
+      assert.equal(await cta(page).isDisabled(), true, "clicking disabled rows leaves the CTA disabled");
+      assert.equal(posts(calls).length, 0);
+    });
+  });
+
+  test("a partial cancel re-renders from the answer: «Скасовано N з M», the rest stays selectable and unticked, the CTA is disabled again", async () => {
+    await run({ get: () => ok(MULTI), post: cancelling(MULTI) }, async ({ page, state, calls, problems }) => {
+      await state("confirm").waitFor({ state: "visible" });
+      await row(page, B.serviceName).click();
+      await cta(page).click();
+      const line = page.locator("#c-status");
+      await line.waitFor({ state: "visible" });
+      assert.equal((await line.innerText()).trim(), m.partial.replace("{done}", "1").replace("{total}", "3"));
+      await assertOnlyState(page, "confirm");
+      assert.equal(await box(page, B.serviceName).isDisabled(), true);
+      assert.equal((await row(page, B.serviceName).locator(".why").innerText()).trim(), m.reasonCancelled);
+      for (const i of [A, C]) {
+        assert.equal(await box(page, i.serviceName).isEnabled(), true, `${i.serviceName} still selectable`);
+        assert.equal(await box(page, i.serviceName).isChecked(), false, "nothing preselected after the re-render");
+      }
+      assert.equal(await cta(page).isDisabled(), true);
+      assert.equal(await ctaText(page), m.confirmNone);
+      assert.equal(await cta(page).getAttribute("aria-busy"), null, "no longer busy");
+      assert.equal(posts(calls).length, 1);
+      assert.deepEqual(problems, []);
+    });
+  });
+
+  test("the last open row cancelled shows the final «Запис скасовано» state (also all services at once)", async () => {
+    await run({ get: () => ok(MULTI), post: cancelling(MULTI) }, async ({ page, state }) => {
+      await state("confirm").waitFor({ state: "visible" });
+      await row(page, A.serviceName).click();
+      await row(page, B.serviceName).click();
+      await cta(page).click();
+      await page.locator("#c-status").waitFor({ state: "visible" });
+      await row(page, C.serviceName).click();
+      await cta(page).click();
+      await state("cancelled").waitFor({ state: "visible" });
+      await assertOnlyState(page, "cancelled");
+      await oneH1(page, "cancelled");
+      assert.equal(await page.getByText(c.doneText).isVisible(), true);
+    });
+    await run({ get: () => ok(MULTI), post: cancelling(MULTI) }, async ({ page, state }) => {
+      await state("confirm").waitFor({ state: "visible" });
+      for (const i of [A, B, C]) await row(page, i.serviceName).click();
+      await cta(page).click();
+      await state("cancelled").waitFor({ state: "visible" });
+      await assertOnlyState(page, "cancelled");
+    });
+  });
+
+  test("a POST 422 shows «closed»; a POST 404 «notfound»; a GET with only a too-late CONFIRMED service shows «closed»", async () => {
+    for (const [status, st] of [[422, "closed"], [404, "notfound"]])
+      await run({ get: () => ok(MULTI), post: () => ({ status }) }, async ({ page, state, problems }) => {
+        await state("confirm").waitFor({ state: "visible" });
+        await row(page, A.serviceName).click();
+        await cta(page).click();
+        await state(st).waitFor({ state: "visible" });
+        await assertOnlyState(page, st);
+        expected(problems, /status of \d\d\d/);
+      });
+    const late = { ...INFO, items: [item(1, "Пізня", "10", "CONFIRMED", false), item(2, "Знята", "11", "CANCELLED", false)] };
+    await run({ get: () => ok(late) }, async ({ page, state }) => {
+      await state("closed").waitFor({ state: "visible" });
+      await assertOnlyState(page, "closed");
+    });
+  });
+
+  test("a failed POST (500) shows «error»; Retry reloads the list with nothing ticked", async () => {
+    await run({ get: () => ok(MULTI), post: () => ({ status: 500 }) }, async ({ page, state, problems }) => {
+      await state("confirm").waitFor({ state: "visible" });
+      await row(page, A.serviceName).click();
+      await cta(page).click();
+      await state("error").waitFor({ state: "visible" });
+      await page.getByRole("button", { name: c.retry }).click();
+      await state("confirm").waitFor({ state: "visible" });
+      assert.equal(await page.locator("#c-rows input:checked").count(), 0);
+      assert.equal(await cta(page).isDisabled(), true);
+      expected(problems, /status of 500/);
+    });
+  });
+
+  test("an old backend without `items` keeps today's single-service view: no tick list, the service fact, the single button enabled", async () => {
+    await run({ get: () => ok(INFO), post: () => ({ status: 204 }) }, async ({ page, state, confirm, calls }) => {
+      await state("confirm").waitFor({ state: "visible" });
+      assert.equal(await page.locator("#c-svcs").isVisible(), false);
+      assert.equal(await page.locator("#c-rows input").count(), 0);
+      assert.equal(await page.locator("#c-facts [data-fact=service] .t-value-12").innerText(), INFO.serviceName);
+      assert.equal(await confirm.isEnabled(), true);
+      await oneH1(page, "confirm");
+      await confirm.click();
+      await state("cancelled").waitFor({ state: "visible" });
+      assert.equal(posts(calls)[0].body, null, "body-less POST");
+    });
+  });
+
+  test("a single-item visit keeps the old flow: no checkbox, «Так, скасувати запис», a POST with no body (answer in the GET shape works)", async () => {
+    const one = { ...INFO, items: [A] };
+    await run({ get: () => ok(one), post: cancelling(one) }, async ({ page, state, confirm, calls }) => {
+      await state("confirm").waitFor({ state: "visible" });
+      assert.equal(await page.locator("#c-svcs").isVisible(), false);
+      assert.equal(await page.locator("input[type=checkbox]").count(), 0);
+      assert.equal(await confirm.isEnabled(), true);
+      assert.equal(await page.locator("#c-facts [data-fact=service] .t-value-12").innerText(), INFO.serviceName);
+      await oneH1(page, "confirm");
+      await confirm.click();
+      await state("cancelled").waitFor({ state: "visible" });
+      assert.equal(posts(calls).length, 1);
+      assert.equal(posts(calls)[0].body, null, "no body for a single-service visit");
+    });
+  });
+
+  test("no POST is sent unless something is ticked (forced and scripted clicks on the disabled CTA)", async () => {
+    await run({ get: () => ok(MULTI), post: cancelling(MULTI) }, async ({ page, state, calls }) => {
+      await state("confirm").waitFor({ state: "visible" });
+      await cta(page).click({ force: true });
+      await cta(page).evaluate((b) => b.click());
+      // tick then untick: still nothing to send
+      await row(page, A.serviceName).click();
+      await row(page, A.serviceName).click();
+      await cta(page).click({ force: true });
+      await quiet(page);
+      assert.equal(posts(calls).length, 0, "no POST at all");
+      assert.equal(calls.length, 1, "only the GET");
+    });
+  });
+
+  test("the tick list works by keyboard alone (Space ticks the focused checkbox, Tab reaches the CTA, Enter sends)", async () => {
+    await run({ get: () => ok(MULTI), post: cancelling(MULTI) }, async ({ page, state, calls }) => {
+      await state("confirm").waitFor({ state: "visible" });
+      await box(page, B.serviceName).focus();
+      await page.keyboard.press("Space");
+      assert.equal(await box(page, B.serviceName).isChecked(), true);
+      assert.equal(await ctaText(page), fill(m.confirmOne, 1));
+      await cta(page).focus();
+      await page.keyboard.press("Enter");
+      await page.locator("#c-status").waitFor({ state: "visible" });
+      assert.deepEqual(JSON.parse(posts(calls)[0].body), { bookingIds: ["b2"] });
+    });
+  });
+
+  test("every row is at least 48 px tall at 360 px (disabled ones too) and the page does not scroll sideways", async () => {
+    const info = { ...INFO, items: [A, item(2, "Дуже довга назва послуги для перевірки переносу тексту у вузькому рядку", "11", "CONFIRMED", false), item(3, "Знята", "12", "CANCELLED", false)] };
+    for (const width of [360, 1280])
+      await run({ get: () => ok(info) }, async ({ page, state }) => {
+        await state("confirm").waitFor({ state: "visible" });
+        const rows = await page.locator("#c-rows label").evaluateAll((els) => els.map((e) => e.getBoundingClientRect().toJSON()));
+        assert.equal(rows.length, 3);
+        for (const r of rows) assert.ok(r.width > 0 && r.height >= 47.99, `@${width}: row ${r.width}x${r.height}`);
+        assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true, `@${width}: no horizontal scroll`);
+        const b = await cta(page).boundingBox();
+        assert.ok(b && b.height >= 47.99, "CTA is a 48 px target");
+      }, { width });
+  });
+
+  test("the result line is an aria-live region, announced with its text and focused after a partial cancel (also with reduced motion)", async () => {
+    await run({ get: () => ok(MULTI), post: cancelling(MULTI) }, async ({ page, state }) => {
+      await state("confirm").waitFor({ state: "visible" });
+      const line = page.locator("#c-status");
+      assert.equal(await line.getAttribute("role"), "status");
+      assert.equal(await line.getAttribute("aria-live"), "polite");
+      await row(page, A.serviceName).click();
+      await row(page, B.serviceName).click();
+      await cta(page).click();
+      await line.waitFor({ state: "visible" });
+      const text = m.partial.replace("{done}", "2").replace("{total}", "3");
+      assert.equal(await page.getByRole("status").filter({ hasText: text }).count(), 1, "the line is exposed as a status with the count");
+      assert.equal(await page.evaluate(() => document.activeElement?.id), "c-status", "focus moves to the result line");
+      assert.deepEqual(await axeViolations(page), []);
+    }, { reducedMotion: "reduce" });
+  });
+
+  test("the multi list has no axe violations at 360 px (ticked, with disabled rows)", async () => {
+    const info = { ...INFO, items: [A, B, item(3, "Завершена", "12", "COMPLETED", false), item(4, "Пізня", "13", "CONFIRMED", false)] };
+    await run({ get: () => ok(info) }, async ({ page, state }) => {
+      await state("confirm").waitFor({ state: "visible" });
+      await row(page, A.serviceName).click();
+      assert.deepEqual(await axeViolations(page), []);
+    });
+  });
+
+  test("the token and the booking ids never appear in any analytics or beacon request, nor in any URL but the API path", async () => {
+    const env = await open(browser, { width: 360 });
+    const urls = [];
+    env.page.on("request", (r) => urls.push({ url: r.url(), method: r.method(), body: r.postData() ?? "" }));
+    const calls = await mockCancelApi(env.context, { get: () => ok(MULTI), post: cancelling(MULTI) });
+    try {
+      await env.page.goto(BASE + PATH, { waitUntil: "networkidle" });
+      await env.page.locator("#st-confirm").waitFor({ state: "visible" });
+      await row(env.page, A.serviceName).click();
+      await cta(env.page).click();
+      await env.page.locator("#c-status").waitFor({ state: "visible" });
+      await env.page.waitForLoadState("networkidle");
+      assert.deepEqual(env.analytics, [], "no analytics script is even requested on this route");
+      assert.deepEqual(env.external, []);
+      // Strict allow-list: every http(s) request goes to this site (page assets) or to the API origin under /api/v1/book/. Any other origin fails.
+      const origin = (u) => new URL(u).origin;
+      const foreign = urls.filter((r) => /^https?:/.test(r.url) && origin(r.url) !== origin(BASE) && !(origin(r.url) === origin(API_ORIGIN) && new URL(r.url).pathname.startsWith("/api/v1/book/")));
+      assert.deepEqual(foreign.map((r) => `${r.method} ${r.url}`), [], "only same-origin assets and the API's /api/v1/book/ may be contacted");
+      assert.ok(urls.some((r) => origin(r.url) === origin(API_ORIGIN)), "the allow-list is not vacuous: the API was contacted");
+      assert.deepEqual(env.problems, [], "no console error: a beacon the CSP refused before it left the browser would show up here");
+      for (const r of urls) {
+        if (r.url === BASE + PATH) continue; // the document itself
+        if (r.url.startsWith(API_ORIGIN)) {
+          assert.ok(!/b[123]\b/.test(r.url), "booking ids are not in a URL");
+          continue;
+        }
+        assert.ok(!r.url.includes(TOKEN) && !/bookingIds/.test(r.url + r.body), `no token / ids in ${r.url}`);
+      }
+      assert.deepEqual(JSON.parse(calls.find((x) => x.method === "POST").body), { bookingIds: ["b1"] }, "ids travel in the POST body only");
+      assert.ok(!calls.some((x) => x.url.includes("b1")), "no cancel call has an id in its URL");
+    } finally {
+      await env.context.close();
+    }
+  });
+});

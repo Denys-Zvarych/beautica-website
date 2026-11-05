@@ -12,15 +12,19 @@ interface Props {
   priceFrom?: number;
   /** Salon services tab: the tile filters the masters tab (script adds role="button"); without script it stays a plain row. */
   filterId?: string;
+  /** Guest cancel page: a label row with a real checkbox (value = `id`), the booking-flow look. `time` replaces the price in the meta line; `note` is a reason line below it. Cloned by the page script. */
+  checkbox?: boolean;
+  time?: string;
+  note?: string;
 }
-const { name, price, duration, selectable = false, id, minutes, priceFrom, filterId } = Astro.props;
-const Tag = selectable ? "button" : "div";
+const { name, price, duration, selectable = false, id, minutes, priceFrom, filterId, checkbox = false, time, note } = Astro.props;
+const Tag = checkbox ? "label" : selectable ? "button" : "div";
 ---
 
 <Tag
-  class:list={["stile", { ro: !selectable }]}
-  type={selectable ? "button" : undefined}
-  aria-pressed={selectable ? "false" : undefined}
+  class:list={["stile", { ro: !selectable && !checkbox }]}
+  type={selectable && !checkbox ? "button" : undefined}
+  aria-pressed={selectable && !checkbox ? "false" : undefined}
   data-id={selectable ? id : undefined}
   data-name={selectable ? name : undefined}
   data-min={selectable ? minutes : undefined}
@@ -28,12 +32,14 @@ const Tag = selectable ? "button" : "div";
   data-label={selectable ? price : undefined}
   data-filter-id={filterId}
 >
-  {selectable && <span class="chk" aria-hidden="true"><Icon name="done" /></span>}
+  {checkbox && <input type="checkbox" value={id} />}
+  {(selectable || checkbox) && <span class="chk" aria-hidden="true"><Icon name="done" /></span>}
   <span class="info">
     <span class="t-strong name">{name}</span>
     <span class="meta">
-      <span class="t-fb deep">{price}</span>
+      {(!checkbox || price || time) && <span class="t-fb deep">{checkbox ? time : price}</span>}
       <span class="dur t-fb muted"><Icon name="schedule" />{duration}</span>
     </span>
+    {checkbox && <span class="why t-fb" hidden>{note}</span>}
   </span>
 </Tag>

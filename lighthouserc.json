@@ -71,7 +71,7 @@
           }
         },
         {
-          "_comment": "l/cancel only: read-only states, note, validation and the reminder picker grew its script (5460 B gz at 8516a42 > 5120); budget 6144",
+          "_comment": "l/cancel only: read-only states, note, validation and the reminder picker grew its script (5460 B gz at 8516a42 > 5120); phase 026 multi-service tick list adds the item logic (6563 B transferred uncompressed by the lhci static server, 2.9 KB gz, 4 requests, measured on /l/cancel.html; format chunk already inlined with ?own); budget 7168 = 6563 + ~600 B headroom (2026-11-05, architect). The README rule is JS <= 5 KB gz; this byte cap is only a regression tripwire. The next raise needs a gzip measurement in this comment.",
           "matchingUrlPattern": "http://[^/]+/l/cancel\\.html$",
           "aggregationMethod": "median",
           "assertions": {
@@ -81,7 +81,7 @@
             "cumulative-layout-shift": ["error", { "maxNumericValue": 0.005 }],
             "largest-contentful-paint": ["error", { "maxNumericValue": 2000 }],
             "total-blocking-time": ["error", { "maxNumericValue": 50 }],
-            "resource-summary:script:size": ["error", { "maxNumericValue": 6144 }],
+            "resource-summary:script:size": ["error", { "maxNumericValue": 7168 }],
             "resource-summary:font:count": ["error", { "maxNumericValue": 4 }],
             "resource-summary:font:size": ["error", { "maxNumericValue": 112640 }],
             "resource-summary:total:size": ["error", { "maxNumericValue": 153600 }]
