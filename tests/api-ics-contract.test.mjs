@@ -1,5 +1,5 @@
 // Phase 025: contract of GET /api/ics (src/pages/api/ics.ts) against `wrangler dev` - status codes, headers, validation, truncation, and that the
-// calendar file carries no cancel link, phone or guest name. No browser, no mock backend.
+// calendar file carries the cancel link only from a valid `c` token (own origin), never a phone or guest name. No browser, no mock backend.
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync, existsSync } from "node:fs";
@@ -28,9 +28,25 @@ describe("GET /api/ics: success", () => {
     assert.equal(p.VEVENT.DTSTART, "20261108T120000Z");
     assert.equal(p.VEVENT.DTEND, "20261108T133000Z");
   });
-  test("the file has no URL property, cancel text, phone or name even when the query has none of them to leak", async () => {
+  test("without c the file has no URL property, cancel text, phone or name", async () => {
     const body = await (await get(good)).text();
     assert.equal(/URL:|book\/cancel|Скасувати|\+380|ATTENDEE|ORGANIZER/.test(body), false, body);
+  });
+  test("c = short or legacy token -> URL property + DESCRIPTION line on the request's own origin", async () => {
+    for (const [c, path] of [["Ab3dEf7hJk9mNp2Q", "/c/Ab3dEf7hJk9mNp2Q"], ["123e4567-e89b-42d3-a456-426614174000", "/book/cancel/123e4567-e89b-42d3-a456-426614174000"]]) {
+      const res = await get({ ...good, c });
+      assert.equal(res.status, 200);
+      const p = parseIcs(await res.text());
+      assert.equal(p.VEVENT.URL, `${BASE}${path}`);
+      assert.ok(p.text.DESCRIPTION.endsWith(`Скасувати запис: ${BASE}${path}`), p.text.DESCRIPTION);
+    }
+  });
+  test("c is a token only: URLs, paths, wrong lengths, empty -> 400", async () => {
+    for (const c of ["https://evil.example/x", "/c/Ab3dEf7hJk9mNp2Q", "Ab3dEf7hJk9mNp2", "Ab3dEf7hJk9mNp2QX", "../x", "", "123e4567-e89b-42d3-a456-42661417400g"])
+      assert.equal((await get({ ...good, c })).status, 400, c);
+  });
+  test("a navigation from x-safari (no Origin/Referer, sec-fetch-site none) stays allowed", async () => {
+    assert.equal((await get({ ...good, c: "Ab3dEf7hJk9mNp2Q" }, { headers: { "sec-fetch-site": "none" } })).status, 200);
   });
   test("the live file is a PUBLISH calendar with one display alarm one hour before", async () => {
     const body = await (await get(good)).text();

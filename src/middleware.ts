@@ -13,8 +13,8 @@ export const onRequest = defineMiddleware(async (ctx, next) => {
   try {
     return await guard(ctx, next);
   } catch (err) {
-    const e = err as { name?: string; message?: string; stack?: string } | undefined;
-    console.error("middleware: unexpected", e?.name, e?.message, e?.stack);
+    // Name only: message and stack can echo the request URL, and /c/*, /book/cancel/*, /r/*, /api/ics?c= carry bearer tokens.
+    console.error("middleware: unexpected", (err as { name?: string } | undefined)?.name);
     return withSecurityHeaders(
       new Response("Internal Server Error", { status: 500, headers: { "Cache-Control": "no-store", "X-Robots-Tag": "noindex, nofollow" } }),
     );

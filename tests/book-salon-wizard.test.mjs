@@ -225,11 +225,11 @@ describe("016: the whole story, one booking per master", () => {
       assert.equal(await page.getByRole("button", { name: uk.book.done.calendarApple }).count(), 0);
       const hrefs = await cals.evaluateAll((a) => a.map((x) => x.getAttribute("href")));
       for (const h of hrefs) assert.equal(new URL(h, "https://x.example").pathname, "/api/ics");
-      assert.equal(hrefs.some((h) => /cancel|123e4567/.test(decodeURIComponent(h))), false, "no cancel token in a calendar URL");
+      for (const h of hrefs) assert.equal(/\/book\/cancel|https?:/.test(decodeURIComponent(h)), false, "only the bare token (c=), never a URL, in a calendar href (phase 030)");
       const res = await page.request.get(new URL(hrefs[1], page.url()).href);
       assert.equal(res.status(), 200);
       const ics = parseIcs(await res.text());
-      assert.equal("URL" in ics.VEVENT, false, "no cancel link in master 2's file");
+      assert.match(ics.VEVENT.URL, /\/book\/cancel\/123e4567-e89b-42d3-a456-426614174002$/, "master 2's own cancel link (phase 030)");
       assert.equal(ics.text.SUMMARY, "Запис до Ірина Мельник");
       assert.equal(await page.locator("#done-list").evaluate((e) => e.scrollWidth <= e.clientWidth), true);
       noProblems(env);
