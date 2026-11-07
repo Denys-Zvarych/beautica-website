@@ -200,7 +200,6 @@ describe("every step renders on phone, tablet and desktop", () => {
         await page.waitForSelector("#otp", { state: "visible" });
         await check("otp", ["#otp input", ".mail-tile"]);
         await page.locator("#otp input").fill("123456");
-        await page.click("#cta-otp");
         await page.waitForSelector("#confirm-card", { state: "visible" });
         await check("confirm", ["#confirm-card", ".strip", ".footer .cta"]);
         await page.click("#cta-confirm");
@@ -257,7 +256,6 @@ describe("parity with the app: category accordions, comment, address (backend 38
         await page.click("#cta-contact");
         await page.waitForSelector("#otp", { state: "visible" });
         await page.locator("#otp input").fill("123456");
-        await page.click("#cta-otp");
         await page.waitForSelector("#confirm-card", { state: "visible" });
         await page.fill("#comment", comment);
         const recap = await text(page.locator("#confirm-card"));
@@ -334,7 +332,6 @@ describe("control characters in guest text", () => {
       await page.click("#cta-contact");
       await page.waitForSelector("#otp", { state: "visible" });
       await page.locator("#otp input").fill("123456");
-      await page.click("#cta-otp");
       await page.waitForSelector("#confirm-card", { state: "visible" });
       await page.locator("#comment").evaluate((el) => { el.value = "а\u0007б\nв"; el.dispatchEvent(new Event("input", { bubbles: true })); });
       assert.equal(await page.inputValue("#comment"), "аб\nв");

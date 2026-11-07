@@ -107,7 +107,8 @@ export async function driveTo(page, step, { services = [SVC_ID.classic], slotInd
   await page.waitForSelector("#otp", { state: "visible" });
   if (code) await page.locator("#otp input").fill(code);
   if (step === "otp") return day;
-  await page.click("#cta-otp");
+  // A whole code filled in one go (autofill, phase 029) submits by itself; with no code the button does it.
+  if (!code) await page.click("#cta-otp");
   await page.waitForSelector("#confirm-card", { state: "visible" });
   return day;
 }

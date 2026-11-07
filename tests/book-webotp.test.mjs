@@ -86,7 +86,7 @@ describe("WebOTP", () => {
     }
   });
 
-  test("resend aborts the old request and starts a new one; manual submit aborts it", async () => {
+  test("resend aborts the old request and starts a new one; a submit aborts it", async () => {
     const env = await toOtp("pending", "500000034");
     try {
       await env.page.waitForFunction(() => window.__otp.calls.length === 1);
@@ -95,8 +95,7 @@ describe("WebOTP", () => {
       await env.page.click("#otp-resend-btn");
       await env.page.waitForFunction(() => window.__otp.calls.length === 2);
       assert.deepEqual(await env.page.evaluate(() => window.__otp.calls.map((c) => c.aborted)), [true, false]);
-      await env.page.locator("#otp input").fill("654321");
-      await env.page.click("#cta-otp");
+      await env.page.locator("#otp input").fill("654321"); // a whole code in one go submits by itself (phase 029): no tap
       await env.page.waitForSelector("#confirm-card", { state: "visible" });
       assert.deepEqual(await env.page.evaluate(() => window.__otp.calls.map((c) => c.aborted)), [true, true]);
       assert.equal((await verifies("+380500000034")).length, 1, "manual submit only; the aborted request never submits again");
@@ -211,8 +210,7 @@ describe("WebOTP", () => {
       await env.page.waitForTimeout(150);
       assert.equal(await env.page.locator("[data-screen=otp]").isVisible(), true);
       assert.deepEqual(env.problems, []);
-      await env.page.locator("#otp input").fill("123456");
-      await env.page.click("#cta-otp");
+      await env.page.locator("#otp input").fill("123456"); // submits by itself (phase 029)
       await env.page.waitForSelector("#confirm-card", { state: "visible" });
     } finally {
       await env.context.close();
