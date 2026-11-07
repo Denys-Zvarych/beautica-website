@@ -1,17 +1,19 @@
-// Phase 025 QA: the add-to-calendar file is a VALID iCalendar as a whole and carries NO cancel link, phone or guest name; the done screen
-// links to GET /api/ics (a plain <a href>, no token in it) and the bearer cancel link never reaches the file, the URL, analytics, storage or the network.
+// Phase 025 QA: the add-to-calendar file is a VALID iCalendar as a whole and carries the cancel link (phase 030: URL property + DESCRIPTION line) but NO phone or guest name; the done screen
+// links to GET /api/ics (a plain <a href> carrying only the cancel TOKEN as `c`) and the token never reaches analytics, storage, cookies, history or the backend.
 import { test, describe, before, after } from "node:test";
 import assert from "node:assert/strict";
 import { launch } from "./helpers/browser.mjs";
-import { uk } from "./helpers/env.mjs";
+import { BASE, uk } from "./helpers/env.mjs";
 import { bookPage, mockLog, driveTo } from "./helpers/book.mjs";
 import { parseIcs } from "./helpers/ics-parse.mjs";
-import { buildIcs } from "../src/scripts/booking/ics.ts";
-import { calendarLinks, calendarOrder } from "../src/scripts/booking/calendar-links.ts";
+import { buildIcs, CANCEL_LABEL } from "../src/scripts/booking/ics.ts";
+import { appleHref, calendarLinks, calendarOrder } from "../src/scripts/booking/calendar-links.ts";
 import { CANCEL_URL, FOREIGN_CANCEL_URL } from "./helpers/mock-api.mjs";
 
 const TOKEN = (u) => new URL(u).pathname.split("/").pop();
 const base = { uid: "u", startsAt: "2026-10-23T12:00:00+03:00", minutes: 30, summary: "Запис до Оксани", description: "Послуги: A, B; C.", location: "Київ, вул. Хрещатик" };
+/** The random test port may contain «380» / «50…»: phone checks look at everything but the page origin. */
+const noOrigin = (v) => v.split(new URL(BASE).origin).join("");
 const now = new Date("2026-10-22T10:00:00Z");
 
 describe("the strict iCalendar reader itself (so a green check means something)", () => {
@@ -20,12 +22,18 @@ describe("the strict iCalendar reader itself (so a green check means something)"
     const p = parseIcs(good);
     assert.equal(p.text.DESCRIPTION, base.description);
     assert.equal(p.text.LOCATION, base.location);
-    assert.equal("URL" in p.VEVENT, false, "buildIcs emits no URL property any more");
+    assert.equal("URL" in p.VEVENT, false, "no URL property without a cancel link");
+  });
+  test("a cancel link adds a URL property and a DESCRIPTION line; the label is pinned to uk.json", () => {
+    const url = "https://beautica.app/c/Ab3dEf7hJk9mNp2Q";
+    const p = parseIcs(buildIcs({ ...base, cancelUrl: url }, now));
+    assert.equal(p.VEVENT.URL, url);
+    assert.equal(p.text.DESCRIPTION, `${base.description}\n${CANCEL_LABEL}: ${url}`);
+    assert.equal(CANCEL_LABEL, uk.book.ics.cancel);
   });
   for (const [why, bad] of [
     ["bare LF", good.replace("SUMMARY", "\nSUMMARY")],
     ["unknown property", good.replace("LOCATION:", "ATTENDEE:")],
-    ["a URL property (the cancel link must never be in the file)", good.replace("END:VEVENT", "URL:https://beautica.app/book/cancel/x\r\nEND:VEVENT")],
     ["unescaped comma", good.replace("LOCATION:Київ\\,", "LOCATION:Київ,")],
     ["over-long line", good.replace("PRODID:", "PRODID:" + "x".repeat(80))],
     ["no trailing CRLF", good.slice(0, -2)],
@@ -85,32 +93,35 @@ describe("calendar link in the browser", () => {
     const { ics, href, filename } = await bookAndDownload("oksana-ab12");
     const u = new URL(href, "https://x.example");
     assert.equal(u.pathname, "/api/ics");
-    assert.deepEqual([...u.searchParams.keys()].sort(), ["d", "e", "l", "s", "t"].filter((k) => u.searchParams.has(k)));
+    assert.deepEqual([...u.searchParams.keys()].sort(), ["c", "d", "e", "l", "s", "t"].filter((k) => u.searchParams.has(k)));
     assert.ok(u.searchParams.has("s") && u.searchParams.has("e") && u.searchParams.has("t"));
-    assert.equal(href.includes(TOKEN(CANCEL_URL)) || /cancel/i.test(href), false, href);
+    assert.equal(u.searchParams.get("c"), TOKEN(CANCEL_URL), "the href carries the token only as c");
+    assert.equal(/cancel|https?:/i.test(href), false, href);
     assert.equal(filename, "beautica-booking.ics");
     const p = parseIcs(ics);
     assert.match(p.text.SUMMARY, /^Запис до /);
   });
 
-  test("the file has NO cancel link, no URL property, no guest name or phone", async () => {
+  test("the file has the cancel link (URL + DESCRIPTION line, own origin), no guest name or phone", async () => {
     const { ics } = await bookAndDownload("oksana-ab12");
     const p = parseIcs(ics);
-    assert.equal("URL" in p.VEVENT, false);
-    assert.equal(/Скасувати|book\/cancel|123e4567|Календар|\+?380|50\d{7}/.test(ics.replace(/\r\n /g, "")), false, ics);
+    const flat = ics.replace(/\r\n /g, "");
+    assert.equal(p.VEVENT.URL, `${new URL(BASE).origin}/book/cancel/${TOKEN(CANCEL_URL)}`);
+    assert.ok(p.text.DESCRIPTION.endsWith(`${CANCEL_LABEL}: ${p.VEVENT.URL}`), p.text.DESCRIPTION);
+    assert.equal(/Календар|\+?380|50\d{7}/.test(noOrigin(flat)), false, flat);
   });
 
   test("a foreign cancel host from the API never reaches the file or the link", async () => {
     const { ics, href } = await bookAndDownload("foreigncancel-4242");
-    assert.equal(/evil-backend|8443|utm|frag|aaaaaaaa-bbbb/.test(ics.replace(/\r\n /g, "") + href), false);
+    assert.equal(/evil-backend|8443|utm|frag/.test(ics.replace(/\r\n /g, "") + href), false);
   });
 
-  test("the bearer cancel token appears in no analytics event, storage, cookie, history state, URL or request; the done screen shows no cancel text", async () => {
+  test("the bearer cancel token appears in no analytics event, storage, cookie, history state or backend call, in no request but the calendar link (/api/ics?c=); the done screen shows no cancel text", async () => {
     const { before: b, after: a, sent, text, href } = await bookAndDownload("oksana-ab12");
     const token = TOKEN(CANCEL_URL);
     for (const [when, snap] of [["before", b], ["after", a]]) assert.equal(snap.includes(token), false, `${when}: ${snap}`);
-    assert.deepEqual(sent.filter((r) => [r.url, r.post, r.headers].some((v) => decodeURIComponent(v).includes(token))), [], "no request carries the token");
-    assert.equal(text.includes(token) || href.includes(token), false);
+    assert.deepEqual(sent.filter((r) => !new URL(r.url).pathname.startsWith("/api/ics") && [r.url, r.post, r.headers].some((v) => decodeURIComponent(v).includes(token))), [], "no request but the calendar file carries the token");
+    assert.equal(text.includes(token), false);
     assert.equal((await mockLog((e) => JSON.stringify(e).includes(token))).length, 0, "the mock backend never sees it again");
   });
 });
@@ -191,7 +202,7 @@ describe("calendar chooser: Google / Apple .ics (works in in-app webviews)", () 
       assert.deepEqual([...o].sort(), ["apple", "google"], n);
     }
   });
-  test("done screen: two links (Google new tab, Apple .ics), both noopener noreferrer, >= 48 px, no cancel link / phone / name", async () => {
+  test("done screen: two links (Google new tab, Apple .ics), both noopener noreferrer, >= 48 px, cancel token only in c (Apple) / the details line (Google), no phone / name", async () => {
     const env = await bookPage(browser, "oksana-ab12", { width: 360 });
     try {
       await driveTo(env.page, "confirm", { contact: { name: "Календар" } });
@@ -204,7 +215,7 @@ describe("calendar chooser: Google / Apple .ics (works in in-app webviews)", () 
       if (process.env.CAL_SHOT) await env.page.locator("#done-card").screenshot({ path: process.env.CAL_SHOT });
       for (const r of rows) {
         assert.ok(r.r.width > 0 && r.r.height >= 47.99, `${r.k} box ${r.r.height}`);
-        assert.equal(/cancel|\+?380|50\d{7}/.test(decodeURIComponent(r.href)), false, r.href);
+        assert.equal(/\+?380|50\d{7}/.test(noOrigin(decodeURIComponent(r.href))), false, r.href);
         assert.equal(r.rel, "noopener noreferrer");
         if (r.k === "google") assert.equal(r.target, "_blank");
       }
@@ -221,7 +232,7 @@ describe("calendar chooser: Google / Apple .ics (works in in-app webviews)", () 
     linux: ["Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36", ["google", "apple"]],
   };
   for (const [name, [userAgent, order]] of Object.entries(UA_PLATFORM))
-    test(`done screen on ${name}: buttons render ${order.join(" then ")} (left to right), Google href ${name === "android" ? "is an intent://" : "is https"}, no cancel token or phone in either href`, async () => {
+    test(`done screen on ${name}: buttons render ${order.join(" then ")} (left to right), Google href ${name === "android" ? "is an intent://" : "is https"}, no phone in either href`, async () => {
       const env = await bookPage(browser, "oksana-ab12", { width: 393, userAgent });
       try {
         await driveTo(env.page, "confirm", { contact: { name: "Порядок" } });
@@ -232,7 +243,56 @@ describe("calendar chooser: Google / Apple .ics (works in in-app webviews)", () 
         const google = btns.find((b) => b.k === "google").href;
         assert.equal(google.startsWith(name === "android" ? "intent://calendar.google.com/calendar/render?" : "https://calendar.google.com/calendar/render?"), true, google);
         if (name === "android") assert.match(google, /;package=com\.google\.android\.calendar;S\.browser_fallback_url=https%3A%2F%2Fcalendar\.google\.com%2F[^;]+;end$/);
-        for (const b of btns) assert.equal(/cancel|123e4567|\+?380|50\d{7}/i.test(decodeURIComponent(b.href)), false, b.href);
+        for (const b of btns) assert.equal(/\+?380|50\d{7}/.test(noOrigin(decodeURIComponent(b.href))), false, b.href);
+      } finally {
+        await env.context.close();
+      }
+    });
+});
+
+describe("calendarLinks: cancel link and iOS in-app Apple href (phase 030)", () => {
+  const ev = { startsAt: "2026-11-08T12:00:00Z", minutes: 60, title: "Запис", description: "Послуги: A.", location: "", cancel: { url: "https://beautica.app/c/Ab3dEf7hJk9mNp2Q", label: CANCEL_LABEL } };
+  const IG = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 Instagram 330.0.0.1";
+  test("Apple link carries only the token as c; Google details end with the cancel line, even when the services text is cut", () => {
+    const l = calendarLinks({ ...ev, description: "Д".repeat(900) });
+    assert.equal(new URL(l.apple, "https://x.example").searchParams.get("c"), "Ab3dEf7hJk9mNp2Q");
+    const d = new URL(l.google).searchParams.get("details");
+    assert.ok(d.length <= 500 && d.endsWith(`${CANCEL_LABEL}: https://beautica.app/c/Ab3dEf7hJk9mNp2Q`), d);
+  });
+  test("no cancel, a foreign URL or a bad path -> no c and no line", () => {
+    for (const cancel of [undefined, { url: "https://evil.example/c/Ab3dEf7hJk9mNp2Q/x", label: "L" }, { url: "https://beautica.app/other", label: "L" }]) {
+      const l = calendarLinks({ ...ev, cancel });
+      assert.equal(l.apple.includes("c="), false);
+      assert.equal(new URL(l.google).searchParams.get("details"), "Послуги: A.");
+    }
+  });
+  test("x-safari-https only for iOS Instagram / Facebook; every other UA keeps the relative link", () => {
+    const o = "https://beautica.app";
+    assert.equal(calendarLinks(ev, IG, o).apple.startsWith("x-safari-https://beautica.app/api/ics?"), true);
+    assert.equal(appleHref("/api/ics?a=1", o, IG.replace("Instagram", "FBAN/FBIOS")), "x-safari-https://beautica.app/api/ics?a=1");
+    for (const ua of ["Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) Version/17.5 Mobile/15E148 Safari/604.1", "Mozilla/5.0 (Linux; Android 14) Instagram 330.0.0.1", ""])
+      assert.equal(calendarLinks(ev, ua, o).apple.startsWith("/api/ics?"), true, ua);
+  });
+});
+
+const UA_SAFARI_IOS = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1";
+describe("iOS Instagram in-app browser (phase 030)", () => {
+  const IG = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 Instagram 330.0.0.1";
+  for (const [name, userAgent, iab] of [["Instagram iOS", IG, true], ["Safari iOS", UA_SAFARI_IOS, false]])
+    test(`${name}: Apple button ${iab ? "is an x-safari-https link without target, hint shown" : "stays relative, no hint"}`, async () => {
+      const env = await bookPage(browser, "oksana-ab12", { width: 393, userAgent });
+      try {
+        await driveTo(env.page, "confirm", { contact: { name: "Інстаграм" } });
+        await env.page.click("#cta-confirm");
+        await env.page.waitForSelector("#done-card", { state: "visible" });
+        const a = env.page.locator("[data-screen=done] .calbtn[data-cal=apple]");
+        const href = await a.getAttribute("href");
+        assert.equal(href.startsWith(iab ? "x-safari-http" : "/api/ics?"), true, href);
+        assert.equal(await a.getAttribute("target"), null);
+        const hint = env.page.getByText(uk.book.done.calendarIabHint);
+        assert.equal(await hint.count(), iab ? 1 : 0);
+        if (iab) assert.equal(await hint.isVisible(), true);
+        assert.equal(await env.page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
       } finally {
         await env.context.close();
       }

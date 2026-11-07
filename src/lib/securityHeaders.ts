@@ -82,13 +82,18 @@ export const SECURITY_HEADERS: Record<string, string> = {
 // `path` (the request pathname) matters for token prefixes: ANY answer under /book/cancel/, /c/, /invite/, /bookings/, /l/, /r/ (a 404 for a
 // malformed variant such as /book/cancel/{token}/extra included) is treated as a token response: TOKEN_CSP (no analytics origins),
 // Referrer-Policy no-referrer, no-store, noindex. The URL may hold a token, so nothing on that page may report or leak it.
+// /api/ics carries the cancel token in its query (?c=): same Referrer-Policy no-referrer rule; its other headers are the route's own.
+export const REFERRER_NONE_PATH = /^\/api\/ics$/;
 export const TOKEN_PATH = /^\/(?:book\/cancel|c|invite|bookings|l|r)\//;
 
 export function withSecurityHeaders(res: Response, path?: string): Response {
   const token = path !== undefined && TOKEN_PATH.test(path);
+  const noReferrer = token || (path !== undefined && REFERRER_NONE_PATH.test(path));
   const defaults: Record<string, string> = token
     ? { ...SECURITY_HEADERS, "Content-Security-Policy": TOKEN_CSP, "Referrer-Policy": "no-referrer", "Cache-Control": "no-store", "X-Robots-Tag": "noindex, nofollow" }
-    : SECURITY_HEADERS;
+    : noReferrer
+      ? { ...SECURITY_HEADERS, "Referrer-Policy": "no-referrer" }
+      : SECURITY_HEADERS;
   const apply = (r: Response) => {
     for (const [k, v] of Object.entries(defaults)) if (!r.headers.has(k)) r.headers.set(k, v);
     if (token) {

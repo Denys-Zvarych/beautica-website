@@ -3,7 +3,8 @@
 import { test, describe, before, after } from "node:test";
 import assert from "node:assert/strict";
 import { launch, visibleBox } from "./helpers/browser.mjs";
-import { BASE, MOCK_API, uk } from "./helpers/env.mjs";
+import { BASE, MOCK_API, TOKEN, uk } from "./helpers/env.mjs";
+import { parseIcs } from "./helpers/ics-parse.mjs";
 import { bookPage, mockLog, callsTo, driveTo, fillContact, pickableDay, shot, toggleConsent, SVC_ID } from "./helpers/book.mjs";
 import { PRIVACY_POLICY_VERSION } from "../src/config/legal.mjs";
 import { UMAMI_SCRIPT_SRC, UMAMI_HOST_URL, CF_BEACON_SRC } from "../src/config/analytics.mjs";
@@ -149,7 +150,7 @@ describe("happy path: one service", () => {
     }
   });
 
-  test("phase 025: the calendar file (GET /api/ics from the done link) has the booking's time and place and NO cancel link, phone or guest name", async () => {
+  test("phase 025: the calendar file (GET /api/ics from the done link) has the booking's time and place and the cancel link (URL + DESCRIPTION line, own origin) but NO phone or guest name", async () => {
     await withPage("oksana-ab12", {}, async ({ page }) => {
       await driveTo(page, "confirm", { contact: { name: "Календар" } });
       await page.click("#cta-confirm");
@@ -158,12 +159,17 @@ describe("happy path: one service", () => {
       const res = await page.request.get(new URL(href, page.url()).href);
       assert.equal(res.status(), 200);
       assert.match(res.headers()["content-type"], /^text\/calendar/);
-      const ics = (await res.text()).replace(/\r\n /g, "");
+      const raw = await res.text();
+      const ics = raw.replace(/\r\n /g, "");
       assert.match(ics, /^BEGIN:VCALENDAR\r\n/);
       assert.match(ics, /SUMMARY:Запис до Оксана Коваленко/);
       assert.match(ics, /DTSTART:\d{8}T\d{6}Z\r\n/);
       assert.match(ics, /LOCATION:Київ/);
-      assert.equal(/Календар|Скасувати|book\/cancel|123e4567|URL:|\+380/.test(ics.replace("BEGIN:VCALENDAR", "")), false, ics);
+      const cancelUrl = `${new URL(BASE).origin}/book/cancel/${TOKEN}`;
+      const p = parseIcs(raw);
+      assert.equal(p.VEVENT.URL, cancelUrl);
+      assert.ok(p.text.DESCRIPTION.endsWith(`${uk.book.ics.cancel}: ${cancelUrl}`), p.text.DESCRIPTION);
+      assert.equal(/Календар|\+380/.test(ics.split(new URL(BASE).origin).join("")), false, ics);
     });
   });
 

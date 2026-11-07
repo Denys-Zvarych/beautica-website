@@ -1,6 +1,8 @@
-// «Додати в календар»: the three ways to put a booking in a calendar. Pure, no DOM. Content = time, master, services, place only (never a cancel link, phone or name).
+// «Додати в календар»: the three ways to put a booking in a calendar. Pure, no DOM. Content = time, master, services, place and the cancel link (the guest already gets it by SMS), never a phone or name.
 // Google is a top-level navigation (target=_blank) to Google Calendar's own "new event" page: it works in every in-app webview (Telegram, Instagram,
 // Facebook) and on Android, where a downloaded .ics has no handler. The .ics link (/api/ics, served inline) is for iPhone / iPad / macOS.
+import { cancelPath, cancelToken } from "./api.ts";
+
 export interface CalendarEvent {
   /** UTC ISO instant. */
   startsAt: string;
@@ -8,6 +10,8 @@ export interface CalendarEvent {
   title: string;
   description: string;
   location: string;
+  /** Absolute cancel URL on the page's own origin + the line label; absent or not a valid cancel path = no link anywhere. */
+  cancel?: { url: string; label: string };
 }
 
 export type CalendarKind = "google" | "apple";
@@ -25,19 +29,29 @@ export const googleHref = (https: string, ua: string): string => {
   return `intent://${u.host}${u.pathname}${u.search}#Intent;scheme=https;package=com.google.android.calendar;S.browser_fallback_url=${encodeURIComponent(https)};end`;
 };
 
-export function calendarLinks(ev: CalendarEvent, ua = ""): Record<CalendarKind, string> {
+/** iOS Instagram / Facebook in-app browsers (own WKWebView) never hand a text/calendar response to the system «Add event» sheet: `x-safari-https://` (iOS 17+) opens Safari,
+ *  which does. Everything else keeps the plain relative link. */
+export const isIosInApp = (ua: string): boolean => /(iPhone|iPad|iPod)/.test(ua) && /(Instagram|FBAN|FBAV)/.test(ua);
+export const appleHref = (path: string, origin: string, ua: string): string => (isIosInApp(ua) && /^https?:\/\//.test(origin) ? `x-safari-${origin}${path}` : path);
+
+export function calendarLinks(ev: CalendarEvent, ua = "", origin = ""): Record<CalendarKind, string> {
   const start = new Date(ev.startsAt);
   const end = new Date(start.getTime() + ev.minutes * 60000);
   const title = cap(ev.title, 120);
-  const details = cap(ev.description, 500);
+  const path = ev.cancel ? cancelPath(ev.cancel.url) : null;
+  const token = cancelToken(path);
+  // The cancel line is never the part that is cut: the services text gives way first.
+  const line = token && ev.cancel ? `${ev.cancel.label}: ${ev.cancel.url}` : "";
+  const details = line ? `${cap(ev.description, Math.max(0, 500 - line.length - 1))}\n${line}` : cap(ev.description, 500);
   const where = cap(ev.location, 200);
-  const ics = new URLSearchParams({ s: utc(start), e: utc(end), t: title, d: details });
+  const ics = new URLSearchParams({ s: utc(start), e: utc(end), t: title, d: cap(ev.description, 500) }); // the .ics endpoint adds the cancel line itself
   if (where) ics.set("l", where);
+  if (token) ics.set("c", token);
   const g = new URLSearchParams({ action: "TEMPLATE", text: title, ctz: "Europe/Kyiv", dates: `${utc(start).replace(/[-:]/g, "")}/${utc(end).replace(/[-:]/g, "")}`, details });
   if (where) g.set("location", where);
   return {
     google: googleHref(`https://calendar.google.com/calendar/render?${g}`, ua),
-    apple: `/api/ics?${ics}`,
+    apple: appleHref(`/api/ics?${ics}`, origin, ua),
   };
 }
 

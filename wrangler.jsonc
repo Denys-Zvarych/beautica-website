@@ -5,8 +5,10 @@
   "compatibility_flags": ["nodejs_compat"],
   "workers_dev": true,
   "preview_urls": true,
-  // Workers Logs (dashboard > Workers & Pages > beautica-site > Observability): lets us read the delete-request send errors.
-  "observability": { "enabled": true },
+  // Workers Logs (dashboard > Workers & Pages > beautica-site > Observability) keep our own console logs (the delete-request send errors).
+  // invocation_logs is OFF: they record the full request URL, and the URLs of /c/*, /book/cancel/*, /r/* and /api/ics?c= carry bearer tokens
+  // (OWASP: no tokens in logs).
+  "observability": { "enabled": true, "logs": { "invocation_logs": false } },
   "main": "@astrojs/cloudflare/entrypoints/server",
   "assets": {
     "binding": "ASSETS",

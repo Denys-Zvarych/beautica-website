@@ -17,7 +17,7 @@ import { clearMarker, createLedger, mayExist, saveMarker } from "./uncertain";
 import type { SalonInfo } from "../../lib/booking/types";
 import { el, lrow } from "./recap-row";
 import { brandMarks } from "../../lib/icons/brandMarks";
-import { calendarLinks, calendarOrder } from "./calendar-links";
+import { calendarLinks, calendarOrder, isIosInApp } from "./calendar-links";
 import "../../styles/book-flow.css"; // step styles ship with the island: the profile pages do not carry them
 
 type Step = "profile" | "services" | "masters" | "date" | "time" | "contact" | "otp" | "confirm" | "done";
@@ -817,8 +817,9 @@ export async function initBooking(root: HTMLElement): Promise<{ open(): void }> 
 
   // ------------------------------------------------------------------ done
   /** The «Додати в календар» chooser: Google opens its "new event" page (any browser, incl. in-app webviews such as Telegram), the Apple link (GET /api/ics, served `inline`)
-   *  is for iPhone / macOS. Order by device, both always reachable. Content: time, master, services and place only: no cancel link, phone or name (the cancel link arrives by SMS). */
-  function calendarButton(b: { startsAt: string; minutes: number; master: string; services: string }): HTMLElement {
+   *  is for iPhone / macOS (inside the iOS Instagram / Facebook browser it is an x-safari-https:// link plus a hint). Order by device, both always reachable.
+   *  Content: time, master, services, place and the cancel link (the guest already gets it by SMS; it goes to the calendar app only), never a phone or name. */
+  function calendarButton(b: { startsAt: string; minutes: number; master: string; services: string; cancelPath?: string | null }): HTMLElement {
     const wrap = el("div", "calwrap");
     wrap.append(el("p", "t-label", S.calendar));
     const links = calendarLinks({
@@ -827,18 +828,21 @@ export async function initBooking(root: HTMLElement): Promise<{ open(): void }> 
       title: fmt(S.icsSummary, { master: b.master }),
       description: fmt(S.icsDescription, { services: b.services }),
       location: [salonName, city, address].filter(Boolean).join(", "),
-    }, navigator.userAgent);
+      ...(b.cancelPath ? { cancel: { url: `${location.origin}${b.cancelPath}`, label: S.icsCancel } } : {}),
+    }, navigator.userAgent, location.origin);
+    const iab = isIosInApp(navigator.userAgent);
     const labels = { google: S.calendarGoogle, apple: S.calendarApple } as const;
     for (const kind of calendarOrder(navigator.userAgent)) {
       const btn = el("a", "calbtn");
       btn.href = links[kind];
       btn.dataset.cal = kind;
       btn.rel = "noopener noreferrer";
-      if (kind !== "apple") btn.target = "_blank";
+      if (kind !== "apple") btn.target = "_blank"; // Apple: top-level navigation (also the x-safari-https:// case)
       btn.innerHTML = `<svg class="mi" viewBox="0 0 24 24" aria-hidden="true" focusable="false">${brandMarks[kind === "google" ? "google-calendar" : "apple-calendar"]}</svg><span class="t-strong115"></span>`;
       $("span", btn).textContent = labels[kind];
       wrap.append(btn);
     }
+    if (iab) wrap.append(el("p", "t-body centered", S.calendarIabHint));
     return wrap;
   }
   function renderDone(b: { startsAt: string; durationMinutes: number; cancelUrl: string | null; telegram: TelegramAvailability | null }): void {
@@ -846,7 +850,7 @@ export async function initBooking(root: HTMLElement): Promise<{ open(): void }> 
     recap(card);
     const minutes = totals().minutes || b.durationMinutes;
     const cPath = cancelPath(b.cancelUrl);
-    card.append(el("div", "rule"), calendarButton({ startsAt: b.startsAt, minutes, master: masterName, services: chosen().map((s) => s.name).join(", ") }));
+    card.append(el("div", "rule"), calendarButton({ startsAt: b.startsAt, minutes, master: masterName, services: chosen().map((s) => s.name).join(", "), cancelPath: cPath }));
     mountReminders({ root: document.getElementById("done-reminders"), api, token: cancelToken(cPath), telegram: b.telegram, navigate: (u) => location.assign(u), track });
   }
 

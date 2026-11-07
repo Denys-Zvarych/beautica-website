@@ -111,4 +111,11 @@ export function cancelToken(path: string | null): string | null {
   return path && (CANCEL_SHORT.test(path) || CANCEL_LEGACY.test(path)) ? path.slice(path.lastIndexOf("/") + 1) : null;
 }
 
+/** The reverse of `cancelToken`: a bare token (`/api/ics?c=`) back to its cancel path, only for the two accepted shapes; anything else is `null`. */
+export function cancelPathFromToken(token: string | null): string | null {
+  if (!token) return null;
+  for (const path of [`/c/${token}`, `/book/cancel/${token}`]) if (CANCEL_SHORT.test(path) || CANCEL_LEGACY.test(path)) return path;
+  return null;
+}
+
 export * from "./telegram-api.ts";

@@ -1,7 +1,9 @@
 // GET /api/ics?s=<start UTC>&e=<end UTC>&t=<summary>&l=<location>&d=<description>: the «Додати в календар» file (phase 025).
 // iOS Safari shows «Add event» only for a text/calendar file from a real https URL, so the browser navigates here; served `inline` (iOS 13+ sends attachments to Downloads).
-// The query carries only what the guest already sees (time, master, services, place), never a cancel link, phone or name. Nothing is stored or logged.
+// The query carries what the guest already sees (time, master, services, place) plus `c` = the cancel TOKEN only (never a URL: the link is built here from this
+// request's own origin, so a crafted link cannot put a foreign URL into a calendar file). Never a phone or name. Nothing is stored; our code logs nothing; Cloudflare invocation logs (they hold the URL) are off in wrangler.jsonc.
 import type { APIRoute } from "astro";
+import { cancelPathFromToken } from "../../scripts/booking/api.ts";
 import { buildIcs } from "../../scripts/booking/ics.ts";
 
 export const prerender = false;
@@ -56,7 +58,10 @@ export const GET: APIRoute = ({ url, request }) => {
   const location = text(q.get("l"), MAX.l, false);
   const description = text(q.get("d"), MAX.d, false);
   if (summary === null || location === null || description === null) return bad();
-  const body = buildIcs({ uid: crypto.randomUUID(), startsAt: start.toISOString(), minutes, summary, description, location });
+  const c = q.get("c");
+  const cancelPath = c === null ? null : cancelPathFromToken(c);
+  if (c !== null && cancelPath === null) return bad();
+  const body = buildIcs({ uid: crypto.randomUUID(), startsAt: start.toISOString(), minutes, summary, description, location, ...(cancelPath ? { cancelUrl: `${url.origin}${cancelPath}` } : {}) });
   return new Response(body, {
     status: 200,
     headers: { ...headers, "Content-Type": "text/calendar; charset=utf-8", "Content-Disposition": 'inline; filename="beautica-booking.ics"' },
