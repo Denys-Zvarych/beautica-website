@@ -16,7 +16,7 @@ export async function resolve(spec, ctx, next) {
 const { onRequest } = await import("../src/middleware.ts");
 
 test("an unexpected error answers 500 and logs the name only: no message, no stack, no token", async () => {
-  const secret = "Ab3dEf7hJk9mNp2Q";
+  const secret = "TESTTOKEN0000000";
   const err = new TypeError(`boom for https://beautica.app/c/${secret}`);
   const logged = [];
   const orig = console.error;

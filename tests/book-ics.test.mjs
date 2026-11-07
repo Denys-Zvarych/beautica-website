@@ -107,7 +107,7 @@ describe("calendar link in the browser", () => {
     const p = parseIcs(ics);
     const flat = ics.replace(/\r\n /g, "");
     assert.equal(p.VEVENT.URL, `${new URL(BASE).origin}/book/cancel/${TOKEN(CANCEL_URL)}`);
-    assert.ok(p.text.DESCRIPTION.endsWith(`Скасувати запис: ${p.VEVENT.URL}`), p.text.DESCRIPTION);
+    assert.ok(p.text.DESCRIPTION.endsWith(`${CANCEL_LABEL}: ${p.VEVENT.URL}`), p.text.DESCRIPTION);
     assert.equal(/Календар|\+?380|50\d{7}/.test(noOrigin(flat)), false, flat);
   });
 
@@ -251,13 +251,13 @@ describe("calendar chooser: Google / Apple .ics (works in in-app webviews)", () 
 });
 
 describe("calendarLinks: cancel link and iOS in-app Apple href (phase 030)", () => {
-  const ev = { startsAt: "2026-11-08T12:00:00Z", minutes: 60, title: "Запис", description: "Послуги: A.", location: "", cancel: { url: "https://beautica.app/c/Ab3dEf7hJk9mNp2Q", label: "Скасувати запис" } };
+  const ev = { startsAt: "2026-11-08T12:00:00Z", minutes: 60, title: "Запис", description: "Послуги: A.", location: "", cancel: { url: "https://beautica.app/c/Ab3dEf7hJk9mNp2Q", label: CANCEL_LABEL } };
   const IG = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 Instagram 330.0.0.1";
   test("Apple link carries only the token as c; Google details end with the cancel line, even when the services text is cut", () => {
     const l = calendarLinks({ ...ev, description: "Д".repeat(900) });
     assert.equal(new URL(l.apple, "https://x.example").searchParams.get("c"), "Ab3dEf7hJk9mNp2Q");
     const d = new URL(l.google).searchParams.get("details");
-    assert.ok(d.length <= 500 && d.endsWith("Скасувати запис: https://beautica.app/c/Ab3dEf7hJk9mNp2Q"), d);
+    assert.ok(d.length <= 500 && d.endsWith(`${CANCEL_LABEL}: https://beautica.app/c/Ab3dEf7hJk9mNp2Q`), d);
   });
   test("no cancel, a foreign URL or a bad path -> no c and no line", () => {
     for (const cancel of [undefined, { url: "https://evil.example/c/Ab3dEf7hJk9mNp2Q/x", label: "L" }, { url: "https://beautica.app/other", label: "L" }]) {

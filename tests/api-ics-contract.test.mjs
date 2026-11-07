@@ -3,7 +3,7 @@
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync, existsSync } from "node:fs";
-import { BASE, WRANGLER_LOG, requireBase } from "./helpers/env.mjs";
+import { BASE, WRANGLER_LOG, requireBase, uk } from "./helpers/env.mjs";
 import { parseIcs } from "./helpers/ics-parse.mjs";
 
 requireBase();
@@ -38,7 +38,7 @@ describe("GET /api/ics: success", () => {
       assert.equal(res.status, 200);
       const p = parseIcs(await res.text());
       assert.equal(p.VEVENT.URL, `${BASE}${path}`);
-      assert.ok(p.text.DESCRIPTION.endsWith(`Скасувати запис: ${BASE}${path}`), p.text.DESCRIPTION);
+      assert.ok(p.text.DESCRIPTION.endsWith(`${uk.book.ics.cancel}: ${BASE}${path}`), p.text.DESCRIPTION);
     }
   });
   test("c is a token only: URLs, paths, wrong lengths, empty -> 400", async () => {
