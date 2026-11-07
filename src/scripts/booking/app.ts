@@ -4,7 +4,7 @@
 import { formatDuration, formatPriceFrom, pluralServices } from "../../lib/booking/format";
 import { formatPhoneGrouped, nationalDigits } from "../../lib/phone";
 import { WINDOW_DAYS, addDays, dayLong, dayShort, daysBetween, inWindow, kyivDay, kyivTime, kyivToday, maxMonthOffset, monthLabel, monthView, partOfDay, weekdayMon0, weekdayShort, type Part } from "./calendar";
-import { currentEnv, detectOtpSmsFormat, isInAppBrowser } from "./otp-format";
+import { currentEnv, detectOtpSmsFormat } from "./otp-format";
 import { cancelPath, cancelToken, createBooking, getAvailability, getBookableDays, sendOtp, verifyOtp, type Fail, type Result, type Slot, type TelegramAvailability } from "./api";
 import { mountTurnstile, type Widget } from "./turnstile";
 import { closeRounded, errorOutline, eventAvailable, expandMoreRounded, schedule } from "../../lib/icons/materialPaths";
@@ -666,24 +666,6 @@ export async function initBooking(root: HTMLElement): Promise<{ open(): void }> 
     }
   }
   window.addEventListener("pagehide", stopWebOtp);
-  // In-app browsers: one dismissible line under the input (remembered for the tab). Storage may throw: then it simply shows again.
-  const HINT_KEY = "beautica.otpHintClosed";
-  const hintClosed = (): boolean => {
-    try {
-      return sessionStorage.getItem(HINT_KEY) === "1";
-    } catch {
-      return false;
-    }
-  };
-  if (isInAppBrowser(currentEnv()) && !hintClosed()) $("#otp-hint").hidden = false;
-  $("#otp-hint-x").addEventListener("click", () => {
-    $("#otp-hint").hidden = true;
-    try {
-      sessionStorage.setItem(HINT_KEY, "1");
-    } catch {
-      /* storage blocked: the hint shows again next time */
-    }
-  });
   $("#cta-otp").addEventListener("click", () => void submitOtp());
   async function submitOtp(): Promise<void> {
     if (st.busy || code().length !== 6) return;
@@ -817,11 +799,12 @@ export async function initBooking(root: HTMLElement): Promise<{ open(): void }> 
 
   // ------------------------------------------------------------------ done
   /** The «Додати в календар» chooser: Google opens its "new event" page (any browser, incl. in-app webviews such as Telegram), the Apple link (GET /api/ics, served `inline`)
-   *  is for iPhone / macOS (inside the iOS Instagram / Facebook browser it is an x-safari-https:// link plus a hint). Order by device, both always reachable.
+   *  is for iPhone / macOS (inside the iOS Instagram / Facebook browser it is an x-safari-https link plus the calendar hint line, `calendarIabHint`). Order by device, both always reachable.
    *  Content: time, master, services, place and the cancel link (the guest already gets it by SMS; it goes to the calendar app only), never a phone or name. */
   function calendarButton(b: { startsAt: string; minutes: number; master: string; services: string; cancelPath?: string | null }): HTMLElement {
     const wrap = el("div", "calwrap");
     wrap.append(el("p", "t-label", S.calendar));
+    const env = currentEnv();
     const links = calendarLinks({
       startsAt: b.startsAt,
       minutes: b.minutes,
@@ -829,10 +812,10 @@ export async function initBooking(root: HTMLElement): Promise<{ open(): void }> 
       description: fmt(S.icsDescription, { services: b.services }),
       location: [salonName, city, address].filter(Boolean).join(", "),
       ...(b.cancelPath ? { cancel: { url: `${location.origin}${b.cancelPath}`, label: S.icsCancel } } : {}),
-    }, navigator.userAgent, location.origin);
-    const iab = isIosInApp(navigator.userAgent);
+    }, env, location.origin);
+    const iab = isIosInApp(env);
     const labels = { google: S.calendarGoogle, apple: S.calendarApple } as const;
-    for (const kind of calendarOrder(navigator.userAgent)) {
+    for (const kind of calendarOrder(env.ua)) {
       const btn = el("a", "calbtn");
       btn.href = links[kind];
       btn.dataset.cal = kind;

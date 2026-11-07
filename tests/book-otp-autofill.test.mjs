@@ -178,46 +178,12 @@ describe("auto-submit", () => {
   });
 });
 
-describe("in-app hint", () => {
-  const visible = (page) => page.locator("#otp-hint").isVisible();
-  test("shown in an in-app browser (iOS and Android), hidden in Safari and Chrome", async () => {
-    for (const [ua, phone, want] of [[UA.instagramIos, "500000621", true], [UA.instagramAndroid, "500000622", true], [UA.safariIos, "500000623", false], [UA.chromeAndroid, "500000624", false]]) {
-      const env = await toOtp(phone, { userAgent: ua });
-      try {
-        assert.equal(await visible(env.page), want, ua);
-        assert.equal(await env.page.locator("#otp-hint").getAttribute("aria-live"), null);
-      } finally {
-        await env.context.close();
-      }
-    }
-  });
-  test("close hides it, is a >= 48 px target and is remembered after a reload in the same tab", async () => {
-    const env = await toOtp("500000625", { userAgent: UA.instagramIos });
+describe("no in-app hint", () => {
+  test("the removed in-app browser hint is not rendered for an iOS Instagram UA", async () => {
+    const env = await toOtp("500000621", { userAgent: UA.instagramIos });
     try {
-      const box = await env.page.locator("#otp-hint-x").boundingBox();
-      assert.ok(box.width >= 48 && box.height >= 48, JSON.stringify(box));
-      assert.ok(box.width > 0 && (await visible(env.page)), "the hint and its icon have a box");
-      assert.ok(await env.page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), "no horizontal scroll at 360 with the hint");
-      assert.ok((await env.page.locator("#otp-hint-x svg").boundingBox()).width > 0, "the close icon renders");
-      assert.equal(await env.page.locator("#otp-hint-x").getAttribute("aria-label"), "Закрити підказку");
-      await env.page.click("#otp-hint-x");
-      assert.equal(await visible(env.page), false);
-      await env.page.reload({ waitUntil: "load" });
-      await driveTo(env.page, "contact", { contact: { name: "Автофіл", phone: "500000625" } });
-      await env.page.click("#cta-contact");
-      await env.page.waitForSelector("#otp", { state: "visible" });
-      assert.equal(await visible(env.page), false);
-    } finally {
-      await env.context.close();
-    }
-  });
-  test("sessionStorage throwing: the page still works and the hint shows", async () => {
-    const throwing = `Object.defineProperty(window, "sessionStorage", { configurable: true, get() { throw new DOMException("denied", "SecurityError"); } });`;
-    const env = await toOtp("500000626", { userAgent: UA.instagramIos, init: throwing });
-    try {
-      assert.equal(await visible(env.page), true);
-      await env.page.click("#otp-hint-x");
-      assert.equal(await visible(env.page), false);
+      assert.equal(await env.page.locator("#otp-hint").count(), 0);
+      assert.equal(await env.page.locator("#otp-hint-x").count(), 0);
     } finally {
       await env.context.close();
     }
@@ -250,4 +216,21 @@ describe("code input stays visible to autofill", () => {
       await env.context.close();
     }
   });
+});
+
+describe("OTP screen layout at wider viewports", () => {
+  for (const [width, phone] of [[768, "500000641"], [1280, "500000642"]])
+    test(`${width}px: the code input and the cells sit inside the viewport and the page does not scroll sideways`, async () => {
+      const env = await toOtp(phone, { width });
+      try {
+        const r = await env.page.evaluate(() => {
+          const b = document.querySelector("#otp-input").getBoundingClientRect();
+          return { over: document.documentElement.scrollWidth - innerWidth, left: b.left, right: b.right, w: b.width, vw: innerWidth };
+        });
+        assert.ok(r.over <= 0, `scrollWidth exceeds the viewport by ${r.over}px at ${width}px`);
+        assert.ok(r.w > 0 && r.left >= 0 && r.right <= r.vw, JSON.stringify(r));
+      } finally {
+        await env.context.close();
+      }
+    });
 });

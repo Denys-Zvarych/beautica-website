@@ -104,6 +104,34 @@ describe("the in-app hint and x-safari link are for iOS Instagram / Facebook onl
     }
     assert.equal(isIosInApp(UA.iosSafari) || isIosInApp(UA.iosTelegram), false);
   });
+  const env = (ua, hasTelegramProxy = false, maxTouchPoints = 5) => ({ ua, maxTouchPoints, hasTelegramProxy });
+  const href = (e) => calendarLinks({ startsAt: "2026-12-01T10:00:00Z", minutes: 60, title: "t", description: "d", location: "" }, e, ORIGIN).apple;
+  test("iPhone Safari UA + TelegramWebviewProxy -> x-safari; iPhone WhatsApp -> x-safari; iPadOS Macintosh+touch Telegram -> x-safari", () => {
+    assert.ok(href(env(UA.iosSafari, true)).startsWith(`x-safari-${ORIGIN}/api/ics?`));
+    assert.ok(href(env(UA.iosTelegram, true)).startsWith(`x-safari-${ORIGIN}/api/ics?`));
+    assert.ok(href(env(UA.iosSafari.replace("Safari/604.1", "WhatsApp/2.24"))).startsWith("x-safari-"));
+    assert.ok(href(env("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148", true)).startsWith("x-safari-"));
+  });
+  test("Android Telegram (proxy) and iOS Safari without proxy stay plain; desktop Mac without touch too", () => {
+    assert.ok(href(env("Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 Chrome/126.0.0.0 Mobile Safari/537.36", true)).startsWith("/api/ics?"));
+    assert.ok(href(env(UA.iosSafari)).startsWith("/api/ics?"));
+    assert.ok(href(env("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) Version/17.5 Safari/605.1.15", false, 0)).startsWith("/api/ics?"));
+  });
+  test("browser: iPhone Safari UA + window.TelegramWebviewProxy -> x-safari Apple link and the hint line", async () => {
+    const e = await bookPage(browser, "oksana-ab12", { width: 393, userAgent: UA.iosSafari });
+    try {
+      await e.context.addInitScript(() => { window.TelegramWebviewProxy = { postEvent() {} }; });
+      await e.page.reload();
+      await driveTo(e.page, "confirm", { contact: { name: "Звичайний" } });
+      await e.page.click("#cta-confirm");
+      await e.page.waitForSelector("#done-card", { state: "visible" });
+      const apple = (await buttons(e.page.locator("#done-card"))).find((r) => r.k === "apple");
+      assert.ok(apple.href.startsWith(`x-safari-${ORIGIN}/api/ics?`), apple.href);
+      assert.equal(await e.page.getByText(uk.book.done.calendarIabHint).count(), 1);
+    } finally {
+      await e.context.close();
+    }
+  });
   for (const name of ["iosSafari", "androidInstagram", "iosTelegram"])
     test(`${name}: Apple href is the plain relative /api/ics link, no target, and no hint line`, async () => {
       const env = await bookPage(browser, "oksana-ab12", { width: 393, userAgent: UA[name] });
@@ -115,6 +143,44 @@ describe("the in-app hint and x-safari link are for iOS Instagram / Facebook onl
         assert.ok(apple.href.startsWith("/api/ics?"), apple.href);
         assert.equal(apple.target, null);
         assert.equal(await env.page.getByText(uk.book.done.calendarIabHint).count(), 0);
+      } finally {
+        await env.context.close();
+      }
+    });
+});
+
+describe("master done screen at wider viewports", () => {
+  for (const width of [768, 1280])
+    test(`${width}px: the calendar buttons are visible and the page does not scroll sideways`, async () => {
+      const env = await bookPage(browser, "oksana-ab12", { width, userAgent: UA.iosSafari });
+      try {
+        await driveTo(env.page, "confirm", { contact: { name: "Широкий" } });
+        await env.page.click("#cta-confirm");
+        await env.page.waitForSelector("#done-card", { state: "visible" });
+        const rows = await env.page.locator("#done-card .calbtn").evaluateAll((as) => as.map((a) => { const b = a.getBoundingClientRect(); return { w: b.width, h: b.height, right: b.right }; }));
+        assert.equal(rows.length, 2);
+        for (const r of rows) assert.ok(r.w > 0 && r.h > 0 && r.right <= width, JSON.stringify(r));
+        const over = await env.page.evaluate(() => document.documentElement.scrollWidth - innerWidth);
+        assert.ok(over <= 0, `scrollWidth exceeds the viewport by ${over}px at ${width}px`);
+      } finally {
+        await env.context.close();
+      }
+    });
+});
+
+describe("salon done screen at wider viewports", () => {
+  for (const width of [768, 1280])
+    test(`${width}px: both calendar buttons per card are visible and the page does not scroll sideways`, async () => {
+      const env = await salonPage(browser, `wiz-ics-wide-${width}`, { width }); // own slug per width: the mock keeps a booked (master, time) per slug
+      try {
+        await toConfirm(env.page, "501110031");
+        await env.page.click("#cta-confirm");
+        await env.page.waitForSelector("#done-list [data-done]", { state: "visible" });
+        const rows = await env.page.locator("#done-list .calbtn").evaluateAll((as) => as.map((a) => { const b = a.getBoundingClientRect(); return { w: b.width, h: b.height, right: b.right }; }));
+        assert.equal(rows.length, 4);
+        for (const r of rows) assert.ok(r.w > 0 && r.h > 0 && r.right <= width, JSON.stringify(r));
+        const over = await env.page.evaluate(() => document.documentElement.scrollWidth - innerWidth);
+        assert.ok(over <= 0, `scrollWidth exceeds the viewport by ${over}px at ${width}px`);
       } finally {
         await env.context.close();
       }
