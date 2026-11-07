@@ -799,7 +799,7 @@ export async function initBooking(root: HTMLElement): Promise<{ open(): void }> 
 
   // ------------------------------------------------------------------ done
   /** The «Додати в календар» chooser: Google opens its "new event" page (any browser, incl. in-app webviews such as Telegram), the Apple link (GET /api/ics, served `inline`)
-   *  is for iPhone / macOS (inside the iOS Instagram / Facebook browser it is an x-safari-https:// link plus a hint). Order by device, both always reachable.
+   *  is for iPhone / macOS (inside the iOS Instagram / Facebook browser it is an x-safari-https link plus the calendar hint line, `calendarIabHint`). Order by device, both always reachable.
    *  Content: time, master, services, place and the cancel link (the guest already gets it by SMS; it goes to the calendar app only), never a phone or name. */
   function calendarButton(b: { startsAt: string; minutes: number; master: string; services: string; cancelPath?: string | null }): HTMLElement {
     const wrap = el("div", "calwrap");

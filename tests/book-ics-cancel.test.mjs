@@ -148,3 +148,41 @@ describe("the in-app hint and x-safari link are for iOS Instagram / Facebook onl
       }
     });
 });
+
+describe("master done screen at wider viewports", () => {
+  for (const width of [768, 1280])
+    test(`${width}px: the calendar buttons are visible and the page does not scroll sideways`, async () => {
+      const env = await bookPage(browser, "oksana-ab12", { width, userAgent: UA.iosSafari });
+      try {
+        await driveTo(env.page, "confirm", { contact: { name: "Широкий" } });
+        await env.page.click("#cta-confirm");
+        await env.page.waitForSelector("#done-card", { state: "visible" });
+        const rows = await env.page.locator("#done-card .calbtn").evaluateAll((as) => as.map((a) => { const b = a.getBoundingClientRect(); return { w: b.width, h: b.height, right: b.right }; }));
+        assert.equal(rows.length, 2);
+        for (const r of rows) assert.ok(r.w > 0 && r.h > 0 && r.right <= width, JSON.stringify(r));
+        const over = await env.page.evaluate(() => document.documentElement.scrollWidth - innerWidth);
+        assert.ok(over <= 0, `scrollWidth exceeds the viewport by ${over}px at ${width}px`);
+      } finally {
+        await env.context.close();
+      }
+    });
+});
+
+describe("salon done screen at wider viewports", () => {
+  for (const width of [768, 1280])
+    test(`${width}px: both calendar buttons per card are visible and the page does not scroll sideways`, async () => {
+      const env = await salonPage(browser, `wiz-ics-wide-${width}`, { width }); // own slug per width: the mock keeps a booked (master, time) per slug
+      try {
+        await toConfirm(env.page, "501110031");
+        await env.page.click("#cta-confirm");
+        await env.page.waitForSelector("#done-list [data-done]", { state: "visible" });
+        const rows = await env.page.locator("#done-list .calbtn").evaluateAll((as) => as.map((a) => { const b = a.getBoundingClientRect(); return { w: b.width, h: b.height, right: b.right }; }));
+        assert.equal(rows.length, 4);
+        for (const r of rows) assert.ok(r.w > 0 && r.h > 0 && r.right <= width, JSON.stringify(r));
+        const over = await env.page.evaluate(() => document.documentElement.scrollWidth - innerWidth);
+        assert.ok(over <= 0, `scrollWidth exceeds the viewport by ${over}px at ${width}px`);
+      } finally {
+        await env.context.close();
+      }
+    });
+});

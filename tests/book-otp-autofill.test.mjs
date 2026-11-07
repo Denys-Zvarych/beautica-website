@@ -217,3 +217,20 @@ describe("code input stays visible to autofill", () => {
     }
   });
 });
+
+describe("OTP screen layout at wider viewports", () => {
+  for (const [width, phone] of [[768, "500000641"], [1280, "500000642"]])
+    test(`${width}px: the code input and the cells sit inside the viewport and the page does not scroll sideways`, async () => {
+      const env = await toOtp(phone, { width });
+      try {
+        const r = await env.page.evaluate(() => {
+          const b = document.querySelector("#otp-input").getBoundingClientRect();
+          return { over: document.documentElement.scrollWidth - innerWidth, left: b.left, right: b.right, w: b.width, vw: innerWidth };
+        });
+        assert.ok(r.over <= 0, `scrollWidth exceeds the viewport by ${r.over}px at ${width}px`);
+        assert.ok(r.w > 0 && r.left >= 0 && r.right <= r.vw, JSON.stringify(r));
+      } finally {
+        await env.context.close();
+      }
+    });
+});
