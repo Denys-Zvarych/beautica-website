@@ -811,3 +811,36 @@
   margin-top: calc(var(--vt-space-xs) / 2);
   font-size: var(--vt-fs-body);
 }
+/* In-app browser hint under the code input (phase 029): muted text + a 48 px close target. */
+.otp-hint {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--vt-space-xs);
+  margin-top: var(--vt-space-md);
+}
+.otp-hint[hidden] {
+  display: none;
+}
+.otp-hint p {
+  margin: 0;
+  text-align: center;
+}
+.otp-hint-x {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: var(--vt-touch-min);
+  height: var(--vt-touch-min);
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--vt-color-text-secondary);
+  cursor: pointer;
+  --icon-size: var(--vt-app-icon-15);
+  --icon-gap: 0;
+}
+.otp-hint-x:focus-visible {
+  outline: medium solid var(--vt-color-accent-deep);
+  outline-offset: calc(var(--vt-app-line-2) * -1);
+}

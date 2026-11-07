@@ -4,6 +4,7 @@
 import { formatDuration, formatPriceFrom, pluralServices } from "../../lib/booking/format";
 import { formatPhoneGrouped, nationalDigits } from "../../lib/phone";
 import { WINDOW_DAYS, addDays, dayLong, dayShort, daysBetween, inWindow, kyivDay, kyivTime, kyivToday, maxMonthOffset, monthLabel, monthView, partOfDay, weekdayMon0, weekdayShort, type Part } from "./calendar";
+import { currentEnv, detectOtpSmsFormat, isInAppBrowser } from "./otp-format";
 import { cancelPath, cancelToken, createBooking, getAvailability, getBookableDays, sendOtp, verifyOtp, type Fail, type Result, type Slot, type TelegramAvailability } from "./api";
 import { mountTurnstile, type Widget } from "./turnstile";
 import { closeRounded, errorOutline, eventAvailable, expandMoreRounded, schedule } from "../../lib/icons/materialPaths";
@@ -538,7 +539,7 @@ export async function initBooking(root: HTMLElement): Promise<{ open(): void }> 
       view("#turn-err", true);
       return;
     }
-    const r = await sendOtp(api, phoneE164, policy, tk.token);
+    const r = await sendOtp(api, phoneE164, policy, tk.token, detectOtpSmsFormat(currentEnv()));
     widget?.reset();
     busy(btn, false);
     if (!r.ok) {
@@ -579,9 +580,11 @@ export async function initBooking(root: HTMLElement): Promise<{ open(): void }> 
   function syncOtpButton(): void {
     $<HTMLButtonElement>("#cta-otp").disabled = code().length !== 6;
   }
+  let otpPrev = ""; // the value the cells last mirrored: tells "autofill delivered a code" from "the guest typed a digit"
   /** Writes a (sanitised, <= 6 digits) code into the input and repaints the cells. */
   function setOtp(v: string): void {
     const d = v.replace(/\D/g, "").slice(0, 6);
+    otpPrev = d;
     if (otpInput.value !== d) otpInput.value = d;
     const active = Math.min(d.length, 5);
     otpCells.forEach((c, k) => {
@@ -595,17 +598,25 @@ export async function initBooking(root: HTMLElement): Promise<{ open(): void }> 
     $("#otp-wrong").hidden = true;
     syncOtpButton();
   };
-  otpInput.addEventListener("input", () => {
-    setOtp(otpInput.value);
+  /** Sanitise -> mirror cells -> submit when autofill / paste delivered a whole code in one go (typing the last digit by hand does not). */
+  function syncOtp(v: string = otpInput.value): void {
+    const before = otpPrev;
+    setOtp(v);
     otpEdited();
-  });
+    const now = code();
+    if (st.step !== "otp" || now.length !== 6 || now === before) return;
+    if (before.length < 6 ? now.length - before.length > 1 : true) void submitOtp(); // submitOtp is single-flight (st.busy) and aborts WebOTP
+  }
+  otpInput.addEventListener("input", () => syncOtp());
+  // WKWebView sets `value` without an input event: catch it when the field or the page regains / loses attention.
+  for (const ev of ["change", "focus", "blur"]) otpInput.addEventListener(ev, () => syncOtp());
+  document.addEventListener("visibilitychange", () => document.visibilityState === "visible" && st.step === "otp" && syncOtp());
   otpInput.addEventListener("paste", (e) => {
     // maxlength would cut "123 456" to "123 45" before sanitising: take the digits ourselves.
     const d = (e.clipboardData?.getData("text") ?? "").replace(/\D/g, "");
     if (!d) return;
     e.preventDefault();
-    setOtp(d);
-    otpEdited();
+    syncOtp(d);
   });
   setOtp("");
   function startCooldown(): void {
@@ -654,6 +665,25 @@ export async function initBooking(root: HTMLElement): Promise<{ open(): void }> 
       /* unsupported / blocked: manual entry stays */
     }
   }
+  window.addEventListener("pagehide", stopWebOtp);
+  // In-app browsers: one dismissible line under the input (remembered for the tab). Storage may throw: then it simply shows again.
+  const HINT_KEY = "beautica.otpHintClosed";
+  const hintClosed = (): boolean => {
+    try {
+      return sessionStorage.getItem(HINT_KEY) === "1";
+    } catch {
+      return false;
+    }
+  };
+  if (isInAppBrowser(currentEnv()) && !hintClosed()) $("#otp-hint").hidden = false;
+  $("#otp-hint-x").addEventListener("click", () => {
+    $("#otp-hint").hidden = true;
+    try {
+      sessionStorage.setItem(HINT_KEY, "1");
+    } catch {
+      /* storage blocked: the hint shows again next time */
+    }
+  });
   $("#cta-otp").addEventListener("click", () => void submitOtp());
   async function submitOtp(): Promise<void> {
     if (st.busy || code().length !== 6) return;

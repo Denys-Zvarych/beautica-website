@@ -249,10 +249,14 @@ const strip = info ? { name: info.masterName, subtitle: info.professionalTitle, 
       <div class="g-xl"></div>
       <div class="otp" id="otp">
         {[1, 2, 3, 4, 5, 6].map(() => <span class="otp-cell" aria-hidden="true"></span>)}
-        <input class="otp-input" id="otp-input" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="6" autocomplete="one-time-code" autocapitalize="off" autocorrect="off" spellcheck="false" aria-label={t("book.otp.group")} />
+        <input class="otp-input" id="otp-input" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="6" name="otp" enterkeyhint="done" autocomplete="one-time-code" autocapitalize="off" autocorrect="off" spellcheck="false" aria-label={t("book.otp.group")} />
       </div>
       <div class="g-xl"></div>
       <p class="t-body centered" id="otp-resend">{t("book.otp.noCode")} <span class="t-link wait" id="otp-wait"></span><button type="button" class="link-btn t-link link-hit" id="otp-resend-btn" hidden>{t("book.otp.resend")}</button></p>
+      <div class="otp-hint" id="otp-hint" hidden>
+        <p class="t-body">{t("book.otp.inAppHint")}</p>
+        <button type="button" class="otp-hint-x" id="otp-hint-x" aria-label={t("book.otp.inAppHintClose")}><Icon name="close-rounded" /></button>
+      </div>
       <div class="g-md"></div>
       <div class="banner" role="alert" id="otp-wrong" hidden><Icon name="error-outline" /><span class="t-fb">{t("book.otp.wrong")}</span></div>
       <div class="banner" role="alert" id="otp-limit" hidden><Icon name="error-outline" /><span class="t-fb">{t("book.otp.limit")}</span></div>

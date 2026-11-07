@@ -69,7 +69,6 @@ describe("happy path: one service", () => {
       assert.match(await text(page.locator("#otp-resend")), /Надіслати знову \(\d+ с\)/, "resend cooldown is running");
       assert.equal(await page.locator("#cta-otp").isDisabled(), true);
       await page.locator("#otp input").fill("123456");
-      await page.click("#cta-otp");
       await page.waitForSelector("#confirm-card", { state: "visible" });
       assert.equal(await page.locator("#c-name, #c-phone").count(), 0, "no client (name / phone) row on the confirm step any more");
       const recap = await text(page.locator("#confirm-card"));
@@ -84,7 +83,7 @@ describe("happy path: one service", () => {
 
       const log = await mockLog((e) => e.body?.name === name || e.path.includes("oksana-ab12/availability") || (e.path.includes("/otp/") && e.body?.phone === "+380671290015"));
       const send = callsTo(log, "POST", "/otp/send").at(-1);
-      assert.deepEqual(send.body, { phone: "+380671290015", privacyAccepted: true, privacyPolicyVersion: PRIVACY_POLICY_VERSION, turnstileToken: "TOKEN-1" });
+      assert.deepEqual(send.body, { phone: "+380671290015", privacyAccepted: true, privacyPolicyVersion: PRIVACY_POLICY_VERSION, turnstileToken: "TOKEN-1", smsFormat: "DOMAIN_BOUND" });
       assert.deepEqual(callsTo(log, "POST", "/otp/verify").at(-1).body, { phone: "+380671290015", code: "123456" });
       // Shared mock log (other files run against the same API): match this test's own availability call by its exact path.
       const availPath = `/api/v1/book/oksana-ab12/availability?date=${day}&serviceId=${SVC_ID.gel}`;
@@ -343,7 +342,6 @@ describe("multi-service visit", () => {
       await page.click("#cta-contact");
       await page.waitForSelector("#otp", { state: "visible" });
       await page.locator("#otp input").fill("654321");
-      await page.click("#cta-otp");
       await page.waitForSelector("#confirm-card", { state: "visible" });
       assert.ok((await text(page.locator("#confirm-card"))).includes("4 год"));
       await page.click("#cta-confirm");
@@ -585,15 +583,13 @@ describe("SMS code step", () => {
       await driveTo(page, "contact", { contact: { name: "Невірний", phone: "500000020" } });
       await page.click("#cta-contact");
       await page.waitForSelector("#otp", { state: "visible" });
-      await page.locator("#otp input").fill("000000");
-      await page.click("#cta-otp");
+      await page.locator("#otp input").fill("000000"); // a whole code in one go submits by itself (phase 029)
       await page.waitForSelector("#otp-wrong", { state: "visible" });
       assert.ok((await text(page.locator("#otp-wrong"))).includes("Невірний або прострочений код. Перевірте цифри або запросіть новий код."));
       assert.equal(await page.locator("#otp.invalid").count(), 1);
       assert.equal(await visibleScreen(page), "otp");
       await page.locator("#otp input").fill("000007");
       assert.equal(await page.locator("#otp-wrong").isVisible(), false, "typing clears the error");
-      await page.click("#cta-otp");
       await page.waitForSelector("#confirm-card", { state: "visible" });
     });
   });
@@ -608,11 +604,14 @@ describe("SMS code step", () => {
       assert.equal(await page.getAttribute("#otp input", "autocomplete"), "one-time-code");
       assert.equal(await page.getAttribute("#otp input", "inputmode"), "numeric");
       assert.equal(await page.getAttribute("#otp input", "maxlength"), "6");
+      // A whole code in one event submits by itself (phase 029): the backend refuses it here, so the step stays and the rest can be checked.
+      await page.context().route(`${MOCK_API}/api/v1/book/otp/verify`, (r) => r.fulfill({ status: 401, headers: { "access-control-allow-origin": "*", "content-type": "application/json" }, body: "{}" }));
       await page.locator("#otp input").evaluate((el) => {
         el.value = "246810";
         el.dispatchEvent(new Event("input", { bubbles: true }));
       });
       assert.deepEqual(await page.locator("#otp .otp-cell").evaluateAll((els) => els.map((e) => e.textContent)), [..."246810"]);
+      await page.waitForSelector("#otp-wrong", { state: "visible" });
       assert.equal(await page.locator("#cta-otp").isEnabled(), true);
       // A pasted «123 456» (iOS would cut it to 6 chars before sanitising) is reduced to digits by the paste handler.
       await page.locator("#otp input").evaluate((el) => {
@@ -677,7 +676,6 @@ describe("SMS code step", () => {
       await page.waitForSelector("#otp", { state: "visible" });
       await context.route(`${MOCK_API}/api/v1/book/otp/verify`, (r) => r.fulfill({ status: 429, headers: { "access-control-allow-origin": "*" }, body: "" }));
       await page.locator("#otp input").fill("123456");
-      await page.click("#cta-otp");
       await page.waitForSelector("#otp-limit", { state: "visible" });
     });
   });

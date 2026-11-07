@@ -85,7 +85,6 @@ describe("axe: master and salon pages, every tab", () => {
       await page.waitForSelector("#otp", { state: "visible" });
       await sweep(page, "code");
       await page.locator("#otp input").fill("123456");
-      await page.click("#cta-otp");
       await page.waitForSelector("#confirm-card", { state: "visible" });
       await page.fill("#comment", "Коментар");
       await sweep(page, "confirm");

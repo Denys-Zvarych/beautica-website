@@ -66,7 +66,6 @@ export async function verifyOtp(page, phone) {
   await page.click("#cta-contact");
   await page.waitForSelector("#otp", { state: "visible" });
   await page.locator("#otp input").fill("123456");
-  await page.click("#cta-otp");
   await page.waitForSelector("#salon-cards", { state: "visible" });
 }
 /** Gel (M1 only) + brows with M2 picked: two masters, one appointment each. Stops on the confirm step. */

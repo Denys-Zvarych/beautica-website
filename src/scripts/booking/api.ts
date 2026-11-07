@@ -58,8 +58,8 @@ export function getBookableDays(api: string, slug: string, from: string, to: str
   );
 }
 
-export function sendOtp(api: string, phone: string, policyVersion: string, turnstileToken: string | null): Promise<Result<true>> {
-  return call(`${api}/api/v1/book/otp/send`, post({ phone, privacyAccepted: true, privacyPolicyVersion: policyVersion, ...(turnstileToken ? { turnstileToken } : {}) }), () => true);
+export function sendOtp(api: string, phone: string, policyVersion: string, turnstileToken: string | null, smsFormat?: OtpSmsFormat): Promise<Result<true>> {
+  return call(`${api}/api/v1/book/otp/send`, post({ phone, privacyAccepted: true, privacyPolicyVersion: policyVersion, ...(turnstileToken ? { turnstileToken } : {}), ...(smsFormat ? { smsFormat } : {}) }), () => true);
 }
 
 export function verifyOtp(api: string, phone: string, code: string): Promise<Result<string>> {
