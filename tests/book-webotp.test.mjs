@@ -74,13 +74,34 @@ describe("WebOTP", () => {
   });
 
   test("going back aborts the request; a late code is ignored", async () => {
-    const env = await toOtp("pending", "500000033");
+    const env = await toOtp("pending", "500001033");
     try {
       await env.page.waitForFunction(() => window.__otp.calls.length === 1);
       await env.page.click("[data-screen=otp] [data-back]");
       await env.page.waitForSelector("[data-screen=contact]:not([hidden])");
       assert.equal(await env.page.evaluate(() => window.__otp.calls[0].aborted), true);
-      assert.equal((await verifies("+380500000033")).length, 0);
+      assert.equal((await verifies("+380500001033")).length, 0);
+    } finally {
+      await env.context.close();
+    }
+  });
+
+  test("after Back a late code and the sync events (blur / focus / change / visibilitychange) never submit", async () => {
+    const env = await toOtp("pending", "500001042");
+    try {
+      await env.page.waitForFunction(() => window.__otp.calls.length === 1);
+      await env.page.click("[data-screen=otp] [data-back]");
+      await env.page.waitForSelector("[data-screen=contact]:not([hidden])");
+      await env.page.evaluate(() => {
+        window.__otp.release("123456"); // late WebOTP delivery (the request is aborted: a no-op)
+        const el = document.querySelector("#otp-input");
+        el.value = "123456"; // WKWebView-style silent value write on the hidden OTP field
+        for (const ev of ["change", "focus", "blur"]) el.dispatchEvent(new Event(ev));
+        document.dispatchEvent(new Event("visibilitychange"));
+      });
+      await env.page.waitForTimeout(400);
+      assert.equal((await verifies("+380500001042")).length, 0, "leaving the OTP step never submits");
+      assert.equal(await env.page.locator("#confirm-card").isVisible(), false);
     } finally {
       await env.context.close();
     }
