@@ -4,7 +4,7 @@
 import { formatDuration, formatPriceFrom, pluralServices } from "../../lib/booking/format";
 import { formatPhoneGrouped, nationalDigits } from "../../lib/phone";
 import { WINDOW_DAYS, addDays, dayLong, dayShort, daysBetween, inWindow, kyivDay, kyivTime, kyivToday, maxMonthOffset, monthLabel, monthView, partOfDay, weekdayMon0, weekdayShort, type Part } from "./calendar";
-import { currentEnv, detectOtpSmsFormat, isInAppBrowser } from "./otp-format";
+import { currentEnv, detectOtpSmsFormat } from "./otp-format";
 import { cancelPath, cancelToken, createBooking, getAvailability, getBookableDays, sendOtp, verifyOtp, type Fail, type Result, type Slot, type TelegramAvailability } from "./api";
 import { mountTurnstile, type Widget } from "./turnstile";
 import { closeRounded, errorOutline, eventAvailable, expandMoreRounded, schedule } from "../../lib/icons/materialPaths";
@@ -666,24 +666,6 @@ export async function initBooking(root: HTMLElement): Promise<{ open(): void }> 
     }
   }
   window.addEventListener("pagehide", stopWebOtp);
-  // In-app browsers: one dismissible line under the input (remembered for the tab). Storage may throw: then it simply shows again.
-  const HINT_KEY = "beautica.otpHintClosed";
-  const hintClosed = (): boolean => {
-    try {
-      return sessionStorage.getItem(HINT_KEY) === "1";
-    } catch {
-      return false;
-    }
-  };
-  if (isInAppBrowser(currentEnv()) && !hintClosed()) $("#otp-hint").hidden = false;
-  $("#otp-hint-x").addEventListener("click", () => {
-    $("#otp-hint").hidden = true;
-    try {
-      sessionStorage.setItem(HINT_KEY, "1");
-    } catch {
-      /* storage blocked: the hint shows again next time */
-    }
-  });
   $("#cta-otp").addEventListener("click", () => void submitOtp());
   async function submitOtp(): Promise<void> {
     if (st.busy || code().length !== 6) return;
