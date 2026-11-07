@@ -2,6 +2,7 @@
 // Google is a top-level navigation (target=_blank) to Google Calendar's own "new event" page: it works in every in-app webview (Telegram, Instagram,
 // Facebook) and on Android, where a downloaded .ics has no handler. The .ics link (/api/ics, served inline) is for iPhone / iPad / macOS.
 import { cancelPath, cancelToken } from "./api.ts";
+import { isIosInAppBrowser, type OtpEnv } from "./otp-format.ts";
 
 export interface CalendarEvent {
   /** UTC ISO instant. */
@@ -29,12 +30,17 @@ export const googleHref = (https: string, ua: string): string => {
   return `intent://${u.host}${u.pathname}${u.search}#Intent;scheme=https;package=com.google.android.calendar;S.browser_fallback_url=${encodeURIComponent(https)};end`;
 };
 
-/** iOS Instagram / Facebook in-app browsers (own WKWebView) never hand a text/calendar response to the system «Add event» sheet: `x-safari-https://` (iOS 17+) opens Safari,
- *  which does. Everything else keeps the plain relative link. */
-export const isIosInApp = (ua: string): boolean => /(iPhone|iPad|iPod)/.test(ua) && /(Instagram|FBAN|FBAV)/.test(ua);
-export const appleHref = (path: string, origin: string, ua: string): string => (isIosInApp(ua) && /^https?:\/\//.test(origin) ? `x-safari-${origin}${path}` : path);
+/** A bare UA string (no touch / Telegram-proxy info) or the full detection env shared with the OTP code (src/scripts/booking/otp-format.ts). */
+export type CalEnv = OtpEnv | string;
+const toEnv = (e: CalEnv): OtpEnv => (typeof e === "string" ? { ua: e, maxTouchPoints: 0, hasTelegramProxy: false } : e);
 
-export function calendarLinks(ev: CalendarEvent, ua = "", origin = ""): Record<CalendarKind, string> {
+/** iOS in-app browsers (Instagram, Facebook, Telegram, WhatsApp, ...) run their own WKWebView that never hands a text/calendar response to the system «Add event» sheet:
+ *  `x-safari-https://` (iOS 17+) opens Safari, which does. Everything else keeps the plain relative link. Detection lives in otp-format.ts only. */
+export const isIosInApp = (e: CalEnv): boolean => isIosInAppBrowser(toEnv(e));
+export const appleHref = (path: string, origin: string, e: CalEnv): string => (isIosInApp(e) && /^https?:\/\//.test(origin) ? `x-safari-${origin}${path}` : path);
+
+export function calendarLinks(ev: CalendarEvent, env: CalEnv = "", origin = ""): Record<CalendarKind, string> {
+  const e = toEnv(env);
   const start = new Date(ev.startsAt);
   const end = new Date(start.getTime() + ev.minutes * 60000);
   const title = cap(ev.title, 120);
@@ -50,8 +56,8 @@ export function calendarLinks(ev: CalendarEvent, ua = "", origin = ""): Record<C
   const g = new URLSearchParams({ action: "TEMPLATE", text: title, ctz: "Europe/Kyiv", dates: `${utc(start).replace(/[-:]/g, "")}/${utc(end).replace(/[-:]/g, "")}`, details });
   if (where) g.set("location", where);
   return {
-    google: googleHref(`https://calendar.google.com/calendar/render?${g}`, ua),
-    apple: appleHref(`/api/ics?${ics}`, origin, ua),
+    google: googleHref(`https://calendar.google.com/calendar/render?${g}`, e.ua),
+    apple: appleHref(`/api/ics?${ics}`, origin, e),
   };
 }
 

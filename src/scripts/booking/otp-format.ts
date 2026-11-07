@@ -17,6 +17,9 @@ export function isInAppBrowser(e: OtpEnv): boolean {
   return IN_APP.test(e.ua) || e.hasTelegramProxy;
 }
 
+/** iOS (incl. iPadOS as Macintosh+touch) inside any known in-app browser: it cannot hand text/calendar to the system «Add event» sheet. */
+export const isIosInAppBrowser = (e: OtpEnv): boolean => isIOS(e) && isInAppBrowser(e);
+
 /** PLAIN iff iOS and not confirmed Safari; DOMAIN_BOUND otherwise (all Android, desktop, empty UA). When unsure on iOS: PLAIN. */
 export function detectOtpSmsFormat(e: OtpEnv): OtpSmsFormat {
   if (!isIOS(e)) return "DOMAIN_BOUND";

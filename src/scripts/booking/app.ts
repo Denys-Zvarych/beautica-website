@@ -804,6 +804,7 @@ export async function initBooking(root: HTMLElement): Promise<{ open(): void }> 
   function calendarButton(b: { startsAt: string; minutes: number; master: string; services: string; cancelPath?: string | null }): HTMLElement {
     const wrap = el("div", "calwrap");
     wrap.append(el("p", "t-label", S.calendar));
+    const env = currentEnv();
     const links = calendarLinks({
       startsAt: b.startsAt,
       minutes: b.minutes,
@@ -811,10 +812,10 @@ export async function initBooking(root: HTMLElement): Promise<{ open(): void }> 
       description: fmt(S.icsDescription, { services: b.services }),
       location: [salonName, city, address].filter(Boolean).join(", "),
       ...(b.cancelPath ? { cancel: { url: `${location.origin}${b.cancelPath}`, label: S.icsCancel } } : {}),
-    }, navigator.userAgent, location.origin);
-    const iab = isIosInApp(navigator.userAgent);
+    }, env, location.origin);
+    const iab = isIosInApp(env);
     const labels = { google: S.calendarGoogle, apple: S.calendarApple } as const;
-    for (const kind of calendarOrder(navigator.userAgent)) {
+    for (const kind of calendarOrder(env.ua)) {
       const btn = el("a", "calbtn");
       btn.href = links[kind];
       btn.dataset.cal = kind;
