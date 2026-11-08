@@ -825,7 +825,7 @@ export async function initBooking(root: HTMLElement): Promise<{ open(): void }> 
       $("span", btn).textContent = labels[kind];
       wrap.append(btn);
     }
-    if (iab) wrap.append(el("p", "t-body centered", S.calendarIabHint));
+    if (iab) wrap.append(el("p", "t-body11 centered", S.calendarIabHint));
     return wrap;
   }
   function renderDone(b: { startsAt: string; durationMinutes: number; cancelUrl: string | null; telegram: TelegramAvailability | null }): void {

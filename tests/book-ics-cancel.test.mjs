@@ -128,6 +128,26 @@ describe("the in-app hint and x-safari link are for iOS Instagram / Facebook onl
       const apple = (await buttons(e.page.locator("#done-card"))).find((r) => r.k === "apple");
       assert.ok(apple.href.startsWith(`x-safari-${ORIGIN}/api/ics?`), apple.href);
       assert.equal(await e.page.getByText(uk.book.done.calendarIabHint).count(), 1);
+      const hintPx = await e.page.getByText(uk.book.done.calendarIabHint).evaluate((n) => parseFloat(getComputedStyle(n).fontSize));
+      assert.equal(hintPx, 11, "the in-app hint uses the 11px caption style (t-body11), smaller than 12px body text");
+    } finally {
+      await e.context.close();
+    }
+  });
+  test("browser: 360px in-app done screen (hint shown) does not scroll sideways and the hint stays inside the viewport", async () => {
+    const e = await bookPage(browser, "oksana-ab12", { width: 360, userAgent: UA.iosSafari });
+    try {
+      await e.context.addInitScript(() => { window.TelegramWebviewProxy = { postEvent() {} }; });
+      await e.page.reload();
+      await driveTo(e.page, "confirm", { contact: { name: "Вузький" } });
+      await e.page.click("#cta-confirm");
+      await e.page.waitForSelector("#done-card", { state: "visible" });
+      const hint = e.page.getByText(uk.book.done.calendarIabHint);
+      assert.equal(await hint.count(), 1);
+      const box = await hint.evaluate((n) => { const b = n.getBoundingClientRect(); return { w: b.width, right: b.right }; });
+      assert.ok(box.w > 0 && box.right <= 360, JSON.stringify(box));
+      const over = await e.page.evaluate(() => document.documentElement.scrollWidth - innerWidth);
+      assert.ok(over <= 0, `scrollWidth exceeds the viewport by ${over}px at 360px`);
     } finally {
       await e.context.close();
     }
