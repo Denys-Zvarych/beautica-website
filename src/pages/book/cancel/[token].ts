@@ -22,7 +22,9 @@ export const GET: APIRoute = async ({ request, params }) => {
   }
   const cfg = bookingConfig();
   const assets = (env as unknown as { ASSETS: { fetch(r: Request): Promise<Response> } }).ASSETS;
-  const shell = await assets.fetch(new Request(new URL("/l/cancel", request.url)));
+  // Phase 032: ?n=1 (the booking's own address after it was made) gets the variant with the calendar block; every other visit the plain page (no calendar code at all).
+  const confirmed = new URL(request.url).searchParams.get("n") === "1";
+  const shell = await assets.fetch(new Request(new URL(confirmed ? "/l/cancel-confirmed" : "/l/cancel", request.url)));
   if (!shell.ok) return shell;
   const html = (await shell.text()).replace(/(id="cancel-root"[^>]*?\sdata-api=")[^"]*(")/, `$1${cfg.apiOrigin}$2`);
   const headers = new Headers(shell.headers);

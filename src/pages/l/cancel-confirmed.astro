@@ -1,0 +1,8 @@
+---
+// Phase 032: the cancel page for /c/{token}?n=1 (the address of a booking that was just made): the same page plus the calendar block (reserved in the HTML,
+// filled by CancelCalendar's own entry). Served by the Worker (src/pages/book/cancel/[token].ts) only when the query is exactly n=1. Token route like l/cancel: noindex, no analytics.
+import CancelPage from "../../components/book/CancelPage.astro";
+import CancelCalendar from "../../components/book/CancelCalendar.astro";
+---
+
+<CancelPage confirmed><CancelCalendar /></CancelPage>

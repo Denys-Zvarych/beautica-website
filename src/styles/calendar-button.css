@@ -1,0 +1,91 @@
+/* «Додати в календар» chooser (booking done card, salon done card, /c/{token}?n=1). Moved verbatim from book-flow.css (phase 032); imported by scripts/booking/app.ts and (inline, for the reserved height) pages/l/cancel.astro. */
+.calwrap {
+  display: grid;
+  grid-template-columns: 1fr 1fr; /* both choices ALWAYS on one row, equal width */
+  gap: var(--vt-space-sm);
+}
+.calwrap .t-label {
+  grid-column: 1 / -1;
+  margin: 0;
+  text-align: center;
+}
+.calbtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--vt-space-xs);
+  min-height: var(--vt-size-cta);
+  min-width: 0;
+  padding: var(--vt-space-xs); /* «Google Календар» is one line from 360 px; on 320 px it wraps inside the pill (see the label) */
+  cursor: pointer;
+  text-decoration: none;
+  border-radius: var(--vt-radius-button);
+  background: var(--vt-color-base);
+  border: var(--vt-app-hair) solid color-mix(in srgb, var(--vt-color-accent) 35%, transparent);
+  position: relative;
+  isolation: isolate;
+  transition: transform var(--vt-dur-fast) var(--vt-ease);
+  color: var(--vt-color-accent-deep);
+  --icon-size: var(--vt-app-icon-22);
+  --icon-gap: 0;
+}
+.calwrap .calbtn:only-of-type {
+  grid-column: 1 / -1; /* Google alone (Instagram / Facebook on iOS): full row */
+}
+.calbtn .t-strong115 {
+  font-size: var(--vt-fs-label); /* small enough that «Google Календар» is one line at 360 px */
+  min-width: 0;
+  text-align: start;
+  line-height: 1.2;
+  /* one line from 360 px (checked on /book and /c/{token}?n=1); at 320 px the label wraps to 2 lines INSIDE the pill, never overflows. Both grid cells stretch to the same row height. */
+  overflow-wrap: anywhere;
+}
+/* borderedButton shadow lives on a layer so the lift can leave it in place (same technique as CtaButton). */
+.calbtn::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  box-shadow: 0 0 var(--vt-space-sm) color-mix(in srgb, var(--vt-color-shadow-dark-button) 45%, transparent);
+  transition: transform var(--vt-dur-fast) var(--vt-ease);
+}
+/* Lift: same as CtaButton (rises, shadow stays); keyboard focus gets the same lift (the global focus ring stays). */
+.calbtn:focus-visible {
+  transform: translateY(calc(var(--vt-lift) * -1));
+}
+.calbtn:focus-visible::before {
+  transform: translateY(var(--vt-lift));
+}
+@media (hover: hover) {
+  .calbtn:hover {
+    transform: translateY(calc(var(--vt-lift) * -1));
+  }
+  .calbtn:hover::before {
+    transform: translateY(var(--vt-lift));
+  }
+}
+.calbtn:active {
+  transform: scale(0.97);
+}
+/* Self-contained for the cancel page, which does not load book.css: icon box, label font and the hint row (phase 032). */
+.calbtn .mi {
+  display: inline-block;
+  flex: none;
+  width: var(--icon-size);
+  height: var(--icon-size);
+  fill: currentColor;
+}
+.calbtn .t-strong115 {
+  font-family: var(--vt-font-body);
+  font-weight: var(--vt-fw-body-strong);
+  color: var(--vt-color-text);
+}
+.calwrap .calhint {
+  grid-column: 1 / -1;
+  margin: 0;
+  text-align: center;
+}
+.calwrap .calhint[hidden] {
+  display: none;
+}

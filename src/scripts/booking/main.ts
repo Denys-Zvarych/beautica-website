@@ -4,8 +4,10 @@ import { track } from "../track";
 import { hydrateIcons } from "./icons";
 import { initChannel } from "./channel";
 import { showMarkerNotice } from "./uncertain";
+import { guardUrlSwitch } from "./booking-url";
 
 initChannel();
+guardUrlSwitch(); // phase 032: keeps the analytics beacon from seeing the done screen's token URL
 
 if (document.readyState === "complete") hydrateIcons();
 else window.addEventListener("load", () => setTimeout(() => hydrateIcons(), 0), { once: true });

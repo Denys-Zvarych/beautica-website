@@ -179,10 +179,11 @@ describe("done screen, Telegram contract", () => {
       let evil = 0;
       await env.page.context().route("https://evil.example/**", (r) => (evil++, r.abort()));
       await toDone(env);
+      const doneUrl = env.page.url(); // phase 032: the done step already switched the address to the cancel URL
       await pickTelegram(env.page);
       await env.page.getByText("Не вдалося підключити Telegram. Нагадування надходитимуть SMS.").waitFor({ state: "visible" });
       assert.equal(evil, 0);
-      assert.ok(env.page.url().includes("/book/tgdone-3131"), env.page.url());
+      assert.equal(env.page.url(), doneUrl, "the Telegram tap must not navigate anywhere");
       assert.equal(await env.page.locator('#done-reminders input[value=sms]').isChecked(), true);
     } finally {
       await env.context.close();
@@ -193,9 +194,10 @@ describe("done screen, Telegram contract", () => {
     try {
       await tgRoutes(env.page, { "link-token": () => [429, { success: false }] });
       await toDone(env);
+      const doneUrl = env.page.url(); // phase 032: the done step already switched the address to the cancel URL
       await pickTelegram(env.page);
       await env.page.getByText("Забагато спроб, спробуйте за кілька хвилин").waitFor({ state: "visible" });
-      assert.ok(env.page.url().includes("/book/tgdone-3131"));
+      assert.equal(env.page.url(), doneUrl, "the Telegram tap must not navigate anywhere");
     } finally {
       await env.context.close();
     }

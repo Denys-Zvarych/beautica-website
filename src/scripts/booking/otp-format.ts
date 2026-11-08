@@ -8,6 +8,8 @@ export interface OtpEnv {
 }
 
 const IN_APP = /Instagram|FBAN|FBAV|FB_IAB|FBIOS|FBSS|Messenger|musical_ly|BytedanceWebview|TikTok|Trill|Line\/|Snapchat|Viber|WhatsApp|GSA\/|Telegram/;
+/** Meta's own in-app browsers (Instagram, Facebook, Messenger): their WKWebView drops the `x-safari-` scheme. Only a narrowing signal on top of isIosInAppBrowser, never alone. */
+const META_APP = /Instagram|FBAN|FBAV|FB_IAB|FBIOS|FBSS/;
 const OTHER_IOS_BROWSER = /CriOS|FxiOS|EdgiOS|OPiOS|YaBrowser|DuckDuckGo/;
 
 const isIOS = (e: OtpEnv): boolean => /iPhone|iPad|iPod/.test(e.ua) || (e.ua.includes("Macintosh") && e.maxTouchPoints > 1);
@@ -19,6 +21,9 @@ export function isInAppBrowser(e: OtpEnv): boolean {
 
 /** iOS (incl. iPadOS as Macintosh+touch) inside any known in-app browser: it cannot hand text/calendar to the system «Add event» sheet. */
 export const isIosInAppBrowser = (e: OtpEnv): boolean => isIOS(e) && isInAppBrowser(e);
+
+/** iOS in-app browser AND a Meta UA token (phase 032): the Apple calendar hand-off cannot work there, the guest is told to open the page in the external browser. */
+export const isIosMetaInAppBrowser = (e: OtpEnv): boolean => isIosInAppBrowser(e) && META_APP.test(e.ua);
 
 /** PLAIN iff iOS and not confirmed Safari; DOMAIN_BOUND otherwise (all Android, desktop, empty UA). When unsure on iOS: PLAIN. */
 export function detectOtpSmsFormat(e: OtpEnv): OtpSmsFormat {

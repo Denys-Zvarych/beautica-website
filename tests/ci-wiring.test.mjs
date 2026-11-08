@@ -4,6 +4,7 @@ import { test, describe } from "node:test";
 import assert from "node:assert/strict";
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
+import { gzipSync } from "node:zlib";
 import { ROOT } from "./helpers/env.mjs";
 
 const read = (rel) => readFileSync(join(ROOT, rel), "utf8");
@@ -156,5 +157,43 @@ describe("phase 030: no bearer token in Cloudflare logs", () => {
     const cfg = JSON.parse(read("wrangler.jsonc").replace(/^\s*\/\/.*$/gm, ""));
     assert.equal(cfg.observability.enabled, true);
     assert.strictEqual(cfg.observability.logs?.invocation_logs, false);
+  });
+});
+
+describe("phase 032: the Lighthouse script budget of every built page is checked against the built output", () => {
+  // The lhci static server gzips; a request costs ~400 B of headers on top (measured: /l/cancel-confirmed 8140 B gz + 8 requests = 11593 B transferred).
+  // The estimate is gz + 400 B/request, never above the real transfer, so a page over its cap here is over it in lhci too.
+  const dist = join(ROOT, "dist/client");
+  const scriptsOf = (rel) => {
+    const seen = new Set();
+    const walk = (p) => {
+      if (seen.has(p)) return;
+      seen.add(p);
+      for (const m of readFileSync(join(dist, p), "utf8").matchAll(/(?:from|import)\s*["'](\.\/[^"']+\.js)["']/g)) walk(`/_astro/${m[1].slice(2)}`);
+    };
+    for (const m of readFileSync(join(dist, rel), "utf8").matchAll(/<script[^>]*\ssrc="(\/[^"]+\.js)"/g)) walk(m[1]);
+    return [...seen];
+  };
+  const cap = (url) => {
+    const caps = lhci.ci.assert.assertMatrix.filter((a) => new RegExp(a.matchingUrlPattern).test(url)).map((a) => a.assertions["resource-summary:script:size"][1].maxNumericValue);
+    return caps.length ? Math.min(...caps) : undefined;
+  };
+  for (const url of lhci.ci.collect.url) {
+    const rel = new URL(url).pathname;
+    test(`${rel}: estimated script transfer fits its lighthouserc cap`, () => {
+      assert.ok(existsSync(join(dist, rel)), `${rel} is not built: run npm run build first`);
+      const files = scriptsOf(rel);
+      const est = files.reduce((n, f) => n + gzipSync(readFileSync(join(dist, f))).length + 400, 0);
+      const c = cap(url);
+      assert.ok(c !== undefined, `${rel} has no script:size cap`);
+      assert.ok(est <= c, `${rel}: ${files.length} scripts, ~${est} B transferred > cap ${c} B (give the page its own assert entry with a measured _comment)`);
+    });
+  }
+  test("/l/cancel-confirmed has its own assert entry (calendar block on top of the cancel page), not the shared 5120 block", () => {
+    const own = lhci.ci.assert.assertMatrix.filter((a) => new RegExp(a.matchingUrlPattern).test("http://localhost/l/cancel-confirmed.html"));
+    assert.equal(own.length, 1);
+    assert.match(own[0].matchingUrlPattern, /cancel-confirmed/);
+    assert.ok(own[0].assertions["resource-summary:script:size"][1].maxNumericValue > 5120);
+    assert.match(own[0]._comment, /gz/);
   });
 });
