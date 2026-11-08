@@ -1,1 +1,13 @@
-[]
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.beautica.app",
+      "sha256_cert_fingerprints": [
+        "EC:4E:53:47:89:90:97:76:D6:D6:E6:66:89:EA:DE:AE:2F:4B:EF:31:E7:BB:5F:11:95:13:95:D5:79:01:39:96",
+        "84:C0:34:50:19:5C:16:DC:DC:C5:76:C1:94:D0:21:5F:DD:88:A5:AB:91:29:69:5A:EE:23:25:6F:95:2B:21:89"
+      ]
+    }
+  }
+]

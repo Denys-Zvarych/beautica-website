@@ -24,6 +24,28 @@ if (!existsSync("dist/server/wrangler.json")) {
   process.exit(2);
 }
 
+// Stale-dist guard: a dist/ older than public/, src/, astro.config.* or wrangler.jsonc would test outdated files. Dot-dirs inside public/
+// (public/.well-known) count; only node_modules is skipped.
+if (process.env.RUN_TESTS_ALLOW_STALE !== "1") {
+  let newest = { mtimeMs: 0, path: "" };
+  const walk = (p) => {
+    let st;
+    try {
+      st = statSync(p);
+    } catch {
+      return;
+    }
+    if (st.isDirectory()) {
+      for (const name of readdirSync(p)) if (name !== "node_modules") walk(join(p, name));
+    } else if (st.mtimeMs > newest.mtimeMs) newest = { mtimeMs: st.mtimeMs, path: p };
+  };
+  for (const p of ["public", "src", "wrangler.jsonc", ...readdirSync(".").filter((f) => f.startsWith("astro.config."))]) walk(p);
+  if (newest.mtimeMs > statSync("dist/server/wrangler.json").mtimeMs) {
+    console.error(`run-tests: dist/ is older than ${newest.path} — run \`npm run build\` first (set RUN_TESTS_ALLOW_STALE=1 to skip)`);
+    process.exit(2);
+  }
+}
+
 const freePort = () =>
   new Promise((resolve, reject) => {
     const s = createServer();
