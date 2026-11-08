@@ -134,6 +134,24 @@ describe("the in-app hint and x-safari link are for iOS Instagram / Facebook onl
       await e.context.close();
     }
   });
+  test("browser: 360px in-app done screen (hint shown) does not scroll sideways and the hint stays inside the viewport", async () => {
+    const e = await bookPage(browser, "oksana-ab12", { width: 360, userAgent: UA.iosSafari });
+    try {
+      await e.context.addInitScript(() => { window.TelegramWebviewProxy = { postEvent() {} }; });
+      await e.page.reload();
+      await driveTo(e.page, "confirm", { contact: { name: "Вузький" } });
+      await e.page.click("#cta-confirm");
+      await e.page.waitForSelector("#done-card", { state: "visible" });
+      const hint = e.page.getByText(uk.book.done.calendarIabHint);
+      assert.equal(await hint.count(), 1);
+      const box = await hint.evaluate((n) => { const b = n.getBoundingClientRect(); return { w: b.width, right: b.right }; });
+      assert.ok(box.w > 0 && box.right <= 360, JSON.stringify(box));
+      const over = await e.page.evaluate(() => document.documentElement.scrollWidth - innerWidth);
+      assert.ok(over <= 0, `scrollWidth exceeds the viewport by ${over}px at 360px`);
+    } finally {
+      await e.context.close();
+    }
+  });
   for (const name of ["iosSafari", "androidInstagram", "iosTelegram"])
     test(`${name}: Apple href is the plain relative /api/ics link, no target, and no hint line`, async () => {
       const env = await bookPage(browser, "oksana-ab12", { width: 393, userAgent: UA[name] });
