@@ -128,6 +128,8 @@ describe("the in-app hint and x-safari link are for iOS Instagram / Facebook onl
       const apple = (await buttons(e.page.locator("#done-card"))).find((r) => r.k === "apple");
       assert.ok(apple.href.startsWith(`x-safari-${ORIGIN}/api/ics?`), apple.href);
       assert.equal(await e.page.getByText(uk.book.done.calendarIabHint).count(), 1);
+      const hintPx = await e.page.getByText(uk.book.done.calendarIabHint).evaluate((n) => parseFloat(getComputedStyle(n).fontSize));
+      assert.equal(hintPx, 11, "the in-app hint uses the 11px caption style (t-body11), smaller than 12px body text");
     } finally {
       await e.context.close();
     }
