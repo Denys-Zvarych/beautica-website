@@ -216,7 +216,7 @@ const strip = info ? { name: info.masterName, subtitle: info.professionalTitle, 
         </div>
         <div class="field" id="f-phone">
           <label class="flabel t-label" for="phone">{t("book.contact.phone")}</label>
-          <div class="box"><Icon name="phone" /><input id="phone" name="phone" type="tel" autocomplete="tel" inputmode="numeric" maxlength="17" placeholder={t("book.contact.phonePh")} aria-describedby="e-phone" /></div>
+          <div class="box"><Icon name="phone" /><input id="phone" name="phone" type="tel" autocomplete="tel" inputmode="numeric" placeholder={t("book.contact.phonePh")} aria-describedby="e-phone" /></div>
         </div>
         <label class="chk-row" id="f-consent">
           <input type="checkbox" id="consent" aria-describedby="e-consent" />
@@ -230,6 +230,7 @@ const strip = info ? { name: info.masterName, subtitle: info.professionalTitle, 
         <div class="banner" role="alert" id="cb-sms" hidden><Icon name="error-outline" /><span class="t-fb">{t("book.otp.sms")} <a href={`mailto:${t("site.supportEmail")}`} class="t-link">{t("site.supportEmail")}</a></span></div>
         <div class="banner" role="alert" id="cb-error" hidden><Icon name="error-outline" /><span class="t-fb">{t("book.otp.error")}</span></div>
         <div class="g-md"></div>
+        <input class="sr-only" id="otp-proxy" type="text" inputmode="numeric" tabindex="-1" aria-hidden="true" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" />
         <div class="block-cta"><CtaButton type="submit" id="cta-contact" icon="arrow-forward" spinner>{t("book.contact.cta")}</CtaButton></div>
       </form>
     </div>

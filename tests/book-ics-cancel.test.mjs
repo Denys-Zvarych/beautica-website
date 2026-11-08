@@ -95,6 +95,22 @@ describe("the cancel line survives the 500-character Google details cap", () => 
     });
 });
 
+describe("phase 031: every iOS in-app browser gets the x-safari href (and the scripted click in app.ts); Safari / Android do not", () => {
+  const PROD_IG = "Mozilla/5.0 (iPhone; CPU iPhone OS 27_2 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/24B119 Instagram 454.1.0.41.71 (iPhone15,4; iOS 27_2; en_GB; en-GB; scale=3.00; 1179x2556; IABMV/1; 1106185088) Safari/604.1";
+  test("isIosInApp: prod Instagram UA, FBAN, FBAV, Telegram proxy -> true; plain Safari, Android Instagram -> false", () => {
+    assert.equal(isIosInApp(PROD_IG), true);
+    assert.equal(isIosInApp(UA.iosInstagram), true);
+    assert.equal(isIosInApp(UA.iosSafari.replace("Safari/604.1", "FBAN/FBIOS")), true);
+    assert.equal(isIosInApp(UA.iosSafari.replace("Safari/604.1", "FBAV/450")), true);
+    assert.equal(isIosInApp({ ua: UA.iosSafari, maxTouchPoints: 5, hasTelegramProxy: true }), true);
+    assert.equal(isIosInApp(UA.iosSafari), false);
+    assert.equal(isIosInApp(UA.androidInstagram), false);
+  });
+  test("the prod Instagram UA still gets the x-safari href", () => {
+    assert.ok(calendarLinks({ startsAt: "2026-11-10T09:00:00Z", minutes: 60, title: "t", description: "d", location: "" }, PROD_IG, ORIGIN).apple.startsWith(`x-safari-${ORIGIN}/api/ics?`));
+  });
+});
+
 describe("the in-app hint and x-safari link are for iOS Instagram / Facebook only", () => {
   test("isIosInApp: iPhone / iPad with Instagram, FBAN, FBAV -> true; Android with the same markers or plain iOS -> false", () => {
     for (const m of ["Instagram 330.0", "FBAN/FBIOS", "FBAV/450", "FBAN/MessengerForiOS"]) {
