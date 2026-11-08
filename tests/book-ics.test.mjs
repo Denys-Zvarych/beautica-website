@@ -86,7 +86,7 @@ async function bookAndDownload(slug) {
     await env.context.close();
   }
 }
-const snapshot = (page) => page.evaluate(() => JSON.stringify({ l: { ...localStorage }, s: { ...sessionStorage }, c: document.cookie, h: history.state, u: location.href, n: window.name, e: window.__events, ref: document.referrer }));
+const snapshot = (page) => page.evaluate(() => JSON.stringify({ l: { ...localStorage }, s: { ...sessionStorage }, c: document.cookie, h: history.state, u: location.search, p: location.pathname.replace(/^\/(c|book\/cancel)\/.*/, "$1/<token>"), n: window.name, e: window.__events, ref: document.referrer }));
 
 describe("calendar link in the browser", () => {
   test("«Додати в календар» is a plain link to /api/ics (no JS handler needed, no token in the href) and downloads beautica-booking.ics", async () => {
@@ -116,7 +116,7 @@ describe("calendar link in the browser", () => {
     assert.equal(/evil-backend|8443|utm|frag/.test(ics.replace(/\r\n /g, "") + href), false);
   });
 
-  test("the bearer cancel token appears in no analytics event, storage, cookie, history state or backend call, in no request but the calendar link (/api/ics?c=); the done screen shows no cancel text", async () => {
+  test("the bearer cancel token appears in no analytics event, storage, cookie, history state or backend call (the address bar holds it by design, phase 032), in no request but the calendar link (/api/ics?c=); the done screen shows no cancel text", async () => {
     const { before: b, after: a, sent, text, href } = await bookAndDownload("oksana-ab12");
     const token = TOKEN(CANCEL_URL);
     for (const [when, snap] of [["before", b], ["after", a]]) assert.equal(snap.includes(token), false, `${when}: ${snap}`);
@@ -279,19 +279,26 @@ const UA_SAFARI_IOS = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) Ap
 describe("iOS Instagram in-app browser (phase 030)", () => {
   const IG = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 Instagram 330.0.0.1";
   for (const [name, userAgent, iab] of [["Instagram iOS", IG, true], ["Safari iOS", UA_SAFARI_IOS, false]])
-    test(`${name}: Apple button ${iab ? "is an x-safari-https link without target, hint shown" : "stays relative, no hint"}`, async () => {
+    test(`${name}: Apple button ${iab ? "is left out, static Safari line shown" : "stays relative, no hint"}`, async () => {
       const env = await bookPage(browser, "oksana-ab12", { width: 393, userAgent });
       try {
         await driveTo(env.page, "confirm", { contact: { name: "Інстаграм" } });
         await env.page.click("#cta-confirm");
         await env.page.waitForSelector("#done-card", { state: "visible" });
         const a = env.page.locator("[data-screen=done] .calbtn[data-cal=apple]");
-        const href = await a.getAttribute("href");
-        assert.equal(href.startsWith(iab ? "x-safari-http" : "/api/ics?"), true, href);
-        assert.equal(await a.getAttribute("target"), null);
-        const hint = env.page.getByText(uk.book.done.calendarIabHint);
+        // Phase 032 (owner decision 2026-11-08): Instagram / Facebook get no Apple button (their WKWebView blocks x-safari-https) but Google and one static line.
+        assert.equal(await env.page.getByText(uk.book.done.calendarIabHint).count(), 0);
+        const hint = env.page.locator("[data-cal-hint=meta]");
         assert.equal(await hint.count(), iab ? 1 : 0);
-        if (iab) assert.equal(await hint.isVisible(), true);
+        if (iab) {
+          assert.equal(await a.count(), 0);
+          assert.equal(await env.page.locator("[data-screen=done] .calbtn[data-cal=google]").count(), 1);
+          assert.equal(await hint.isVisible(), true);
+        } else {
+          const href = await a.getAttribute("href");
+          assert.equal(href.startsWith("/api/ics?"), true, href);
+          assert.equal(await a.getAttribute("target"), null);
+        }
         assert.equal(await env.page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
       } finally {
         await env.context.close();

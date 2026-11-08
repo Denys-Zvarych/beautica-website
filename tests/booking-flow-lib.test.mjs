@@ -159,6 +159,11 @@ describe("phone mask", () => {
     assert.equal(formatPhoneGrouped("50"), "+380 50");
     assert.equal(formatPhoneGrouped(""), "");
     assert.equal(nationalDigits("+380 (50) 123-45-67"), "501234567");
+    // Phase 031: iOS autofill / paste forms (the input has no maxlength, so the whole string reaches the handler) all give the full +380XXXXXXXXX.
+    for (const raw of ["+38 (050) 123-45-67", "+38(050)1234567", "+380 50 123 45 67", "38 050 123 45 67", "380501234567", "0501234567", "050 123 45 67", "+38 0501234567"]) {
+      assert.equal(`+380${nationalDigits(raw)}`, "+380501234567", raw);
+      assert.equal(formatPhoneGrouped(raw), "+380 50 123 45 67", raw);
+    }
   });
 });
 

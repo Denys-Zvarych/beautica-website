@@ -16,8 +16,8 @@ import type { Core, RecapView, SalonFlow, Svc } from "./salon";
 import { clearMarker, createLedger, mayExist, saveMarker } from "./uncertain";
 import type { SalonInfo } from "../../lib/booking/types";
 import { el, lrow } from "./recap-row";
-import { brandMarks } from "../../lib/icons/brandMarks";
-import { calendarLinks, calendarOrder, isIosInApp } from "./calendar-links";
+import { showBookingUrl } from "./booking-url";
+import "../../styles/calendar-button.css"; // the «Додати в календар» chooser (phase 032: moved out of book-flow.css)
 import "../../styles/book-flow.css"; // step styles ship with the island: the profile pages do not carry them
 
 type Step = "profile" | "services" | "masters" | "date" | "time" | "contact" | "otp" | "confirm" | "done";
@@ -167,7 +167,7 @@ export async function initBooking(root: HTMLElement): Promise<{ open(): void }> 
       $("#otp").classList.remove("invalid");
       paintCooldown();
       syncOtpButton();
-      otpInput.focus();
+      otpInput.focus({ preventScroll: true });
     }
     if (step === "confirm") renderConfirm();
   }
@@ -451,6 +451,7 @@ export async function initBooking(root: HTMLElement): Promise<{ open(): void }> 
     if (clean !== comment.value) comment.value = clean;
   });
   let prevDigits = "";
+  // No maxlength on #phone: iOS fills "+38 (050) 123-45-67" (19 chars) and a maxlength would cut it before this handler runs. nationalDigits drops +380 / 380 / 0 and keeps 9 digits.
   phone.addEventListener("input", (e) => {
     const deleting = (e as InputEvent).inputType?.startsWith("delete") ?? false;
     let digits = nationalDigits(phone.value);
@@ -522,10 +523,14 @@ export async function initBooking(root: HTMLElement): Promise<{ open(): void }> 
     else btn.removeAttribute("aria-busy");
   }
 
+  // iOS opens the keyboard only for focus() inside the tap: focus a hidden numeric proxy synchronously, then hand focus to #otp-input once its screen is shown.
+  const otpProxy = document.querySelector<HTMLInputElement>("#otp-proxy");
+  const dropKeyboard = (): void => { if (otpProxy && document.activeElement === otpProxy) otpProxy.blur(); };
   async function requestCode(from: "contact" | "otp"): Promise<void> {
     if (st.busy) return;
     const btn = $<HTMLButtonElement>(from === "contact" ? "#cta-contact" : "#otp-resend-btn");
     if (from === "contact" && !validateContact()) return;
+    if (from === "contact") otpProxy?.focus({ preventScroll: true });
     stopWebOtp();
     view("#turn-err", false);
     hideBanners();
@@ -534,6 +539,7 @@ export async function initBooking(root: HTMLElement): Promise<{ open(): void }> 
     const tk = await turnstileToken();
     if (!tk.ok) {
       busy(btn, false);
+      dropKeyboard();
       $("#turn-err .t-fb").textContent = S.turnstileErr;
       if (from === "otp") go("contact", false);
       view("#turn-err", true);
@@ -543,6 +549,7 @@ export async function initBooking(root: HTMLElement): Promise<{ open(): void }> 
     widget?.reset();
     busy(btn, false);
     if (!r.ok) {
+      dropKeyboard();
       track("booking_error", { code: r.fail === "rate-limited" ? 429 : r.fail === "unavailable" ? 503 : "other" });
       if (from === "otp") {
         failBanner("otp", r.fail);
@@ -560,7 +567,9 @@ export async function initBooking(root: HTMLElement): Promise<{ open(): void }> 
     st.phone = phoneE164;
     track("otp_requested");
     startCooldown();
-    if (from === "contact") go("otp");
+    if (from === "contact") {
+      go("otp"); // onEnter("otp") moves focus from the proxy to #otp-input (iOS keeps the keyboard when focus moves input to input)
+    }
     startWebOtp();
   }
   $("#contact-form").addEventListener("submit", (e) => {
@@ -737,6 +746,7 @@ export async function initBooking(root: HTMLElement): Promise<{ open(): void }> 
     view("#submit-error", false);
     busy(btn, true);
     const slot = unsure.get("")?.slot ?? st.slot; // after a request of unknown outcome only the SAME slot is ever sent again
+    void calendarReady();
     const r = await createBooking(api, slug, st.guestToken, { serviceIds: chosen().map((s) => s.id), startsAt: slot.startsAt, name: cleanName(name.value), surname: cleanName(surname.value), policyVersion: policy, clientComment: cleanComment(comment!.value) });
     busy(btn, false);
     invalidateAvailability();
@@ -745,9 +755,11 @@ export async function initBooking(root: HTMLElement): Promise<{ open(): void }> 
     clearMarker("master", slug);
     st.done = true;
     st.guestToken = null;
+    await calendarReady();
     track("booking_confirmed", { services_count: totals().n });
     renderDone(r.data);
     history.replaceState({ bk: "done" }, "", location.href);
+    showBookingUrl(cancelPath(r.data.cancelUrl)); // phase 032: the done screen has its own URL (external-browser hand-off)
     show("done");
   });
   /** «вівторок, 27 жовтня, 10:30»: the time in the «Можливо, ви вже записані на …» notice. */
@@ -798,36 +810,18 @@ export async function initBooking(root: HTMLElement): Promise<{ open(): void }> 
   }
 
   // ------------------------------------------------------------------ done
-  /** The «Додати в календар» chooser: Google opens its "new event" page (any browser, incl. in-app webviews such as Telegram), the Apple link (GET /api/ics, served `inline`)
-   *  is for iPhone / macOS (inside the iOS Instagram / Facebook browser it is an x-safari-https link plus the calendar hint line, `calendarIabHint`). Order by device, both always reachable.
-   *  Content: time, master, services, place and the cancel link (the guest already gets it by SMS; it goes to the calendar app only), never a phone or name. */
-  function calendarButton(b: { startsAt: string; minutes: number; master: string; services: string; cancelPath?: string | null }): HTMLElement {
-    const wrap = el("div", "calwrap");
-    wrap.append(el("p", "t-label", S.calendar));
-    const env = currentEnv();
-    const links = calendarLinks({
-      startsAt: b.startsAt,
-      minutes: b.minutes,
-      title: fmt(S.icsSummary, { master: b.master }),
-      description: fmt(S.icsDescription, { services: b.services }),
-      location: [salonName, city, address].filter(Boolean).join(", "),
-      ...(b.cancelPath ? { cancel: { url: `${location.origin}${b.cancelPath}`, label: S.icsCancel } } : {}),
-    }, env, location.origin);
-    const iab = isIosInApp(env);
-    const labels = { google: S.calendarGoogle, apple: S.calendarApple } as const;
-    for (const kind of calendarOrder(env.ua)) {
-      const btn = el("a", "calbtn");
-      btn.href = links[kind];
-      btn.dataset.cal = kind;
-      btn.rel = "noopener noreferrer";
-      if (kind !== "apple") btn.target = "_blank"; // Apple: top-level navigation (also the x-safari-https:// case)
-      btn.innerHTML = `<svg class="mi" viewBox="0 0 24 24" aria-hidden="true" focusable="false">${brandMarks[kind === "google" ? "google-calendar" : "apple-calendar"]}</svg><span class="t-strong115"></span>`;
-      $("span", btn).textContent = labels[kind];
-      wrap.append(btn);
-    }
-    if (iab) wrap.append(el("p", "t-body11 centered", S.calendarIabHint));
-    return wrap;
-  }
+  /** The «Додати в календар» chooser (shared module `calendar-button.ts`; Meta in-app hint, x-safari hand-off and the strings live there). Lazy: the done screen is the only
+   *  place that needs it, so the module is fetched while the booking request is in flight (`calendarReady`, awaited before the done card is built) and stays out of the static closure. */
+  let calMod: typeof import("./calendar-button") | null = null;
+  let calP: Promise<unknown> | null = null;
+  const calendarReady = (): Promise<unknown> => (calP ??= import("./calendar-button").then((m) => (calMod = m)).catch(() => undefined));
+  const calendarButton = (b: { startsAt: string; minutes: number; master: string; services: string; cancelPath?: string | null }): HTMLElement =>
+    calMod
+      ? calMod.buildCalendarButton(
+          { calendar: S.calendar!, calendarGoogle: S.calendarGoogle!, calendarApple: S.calendarApple!, calendarIabHint: S.calendarIabHint!, calendarMetaHint: S.calendarMetaHint!, icsSummary: S.icsSummary!, icsDescription: S.icsDescription!, icsCancel: S.icsCancel! },
+          { ...b, location: [salonName, city, address].filter(Boolean).join(", ") },
+        )
+      : el("div"); // the module failed to load (offline): the done card shows without the chooser
   function renderDone(b: { startsAt: string; durationMinutes: number; cancelUrl: string | null; telegram: TelegramAvailability | null }): void {
     const card = $("#done-card");
     recap(card);
@@ -839,7 +833,7 @@ export async function initBooking(root: HTMLElement): Promise<{ open(): void }> 
 
   if (salonMode) {
     const core: Core = {
-      root, S, api, slug, policy, services, st, $, $$, el, icon, fmt, busy, lrow, recap, calendarButton, sessionExpired,
+      root, S, api, slug, policy, services, st, $, $$, el, icon, fmt, busy, lrow, recap, calendarButton, calendarReady, sessionExpired,
       go: (step, push) => go(step as Step, push),
       show: (step) => show(step as Step),
       conflict: () => {

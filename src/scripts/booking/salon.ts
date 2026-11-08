@@ -11,6 +11,7 @@ import { done as doneIcon, errorOutline, person } from "../../lib/icons/material
 import { cancelPath, cancelToken, createBooking, type BookingCreated, type Fail, type Slot, type TelegramAvailability } from "./api";
 import { clearMarker, createLedger, mayExist, readMarker, saveMarker } from "./uncertain";
 import { track } from "../track";
+import { showBookingUrl } from "./booking-url";
 import { firstWithToken, mountReminders } from "./reminder-channel";
 
 export interface Svc {
@@ -55,6 +56,8 @@ export interface Core {
   busy: (btn: HTMLButtonElement, on: boolean) => void;
   lrow: (label: string, value: string, detail?: string) => string;
   recap: (into: HTMLElement, view: RecapView) => void;
+  /** Resolves once the lazy calendar chooser module is loaded (never rejects); `calendarButton` is synchronous after it. */
+  calendarReady: () => Promise<unknown>;
   calendarButton: (b: { startsAt: string; minutes: number; master: string; services: string; cancelPath?: string | null }) => HTMLElement;
   /** The guest token was refused (401): back to the code step with the session banner. */
   sessionExpired: () => void;
@@ -423,6 +426,7 @@ export function createSalon(core: Core, info: SalonInfo) {
     $("#submit-error").hidden = true;
     core.busy(btn, true);
     $("#cta-confirm .lbl").textContent = S.sending ?? "";
+    void core.calendarReady();
     let stopped = false;
     for (const g of plan) {
       if (results.get(g.masterId)?.ok) continue;
@@ -481,8 +485,12 @@ export function createSalon(core: Core, info: SalonInfo) {
     if (stopped) return;
     st.done = true;
     st.guestToken = null;
+    await core.calendarReady();
     renderDone();
     history.replaceState({ bk: "done" }, "", location.href);
+    // Phase 032: one booking = one cancel page = the done screen's own URL. Several masters have several pages, so the address stays.
+    const only = plan.length === 1 ? results.get(plan[0]!.masterId) : undefined;
+    if (only?.ok) showBookingUrl(cancelPath(only.data.cancelUrl));
     core.show("done");
   }
 
