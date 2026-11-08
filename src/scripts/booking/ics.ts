@@ -1,3 +1,4 @@
+// Content = time, master, services, place and the cancel link (the guest already gets it by SMS), never a phone or a name. Nothing is stored; our code logs nothing; Cloudflare invocation logs (they hold the URL) are off in wrangler.jsonc.
 // .ics (RFC 5545) builder for "add to calendar". Used by the on-demand route src/pages/api/ics.ts (phase 025); the page only links to it.
 const esc = (s: string) =>
   s
@@ -24,6 +25,9 @@ const fold = (line: string) => {
   return out;
 };
 
+/** Label of the cancel line in DESCRIPTION; pinned equal to uk.json `book.ics.cancel` (tests/book-ics.test.mjs). */
+export const CANCEL_LABEL = "Скасувати запис";
+
 export interface IcsEvent {
   uid: string;
   startsAt: string;
@@ -31,6 +35,8 @@ export interface IcsEvent {
   summary: string;
   description: string;
   location: string;
+  /** Absolute cancel URL built by the endpoint from its own origin and a validated token (never from a request value). */
+  cancelUrl?: string;
 }
 
 export function buildIcs(e: IcsEvent, now: Date = new Date()): string {
@@ -48,7 +54,8 @@ export function buildIcs(e: IcsEvent, now: Date = new Date()): string {
     `DTSTART:${stamp(start)}`,
     `DTEND:${stamp(end)}`,
     `SUMMARY:${esc(e.summary)}`,
-    `DESCRIPTION:${esc(e.description)}`,
+    `DESCRIPTION:${esc(e.cancelUrl ? `${e.description}\n${CANCEL_LABEL}: ${e.cancelUrl}` : e.description)}`,
+    ...(e.cancelUrl ? [`URL:${e.cancelUrl}`] : []),
     ...(e.location ? [`LOCATION:${esc(e.location)}`] : []),
     // A reminder one hour before (shown by the calendar app itself).
     "BEGIN:VALARM",

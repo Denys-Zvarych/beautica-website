@@ -37,7 +37,7 @@ const js = {
   salonLabel: t("book.confirm.salon"), cityLabel: t("book.confirm.city"), totalLabel: t("book.confirm.total"),
   invalid: t("book.confirm.invalid"), blockedMaster: t("book.confirm.blockedMaster"), blockedSalon: t("book.confirm.blockedSalon"), limit: t("book.confirm.limit"), unavailable: t("book.confirm.unavailable", { email: "{email}" }), error: t("book.confirm.error"), supportEmail: t("site.supportEmail"),
   uncertain: t("book.salonFlow.confirm.uncertain", { master: "{master}" }), retry: t("book.salonFlow.confirm.retry"),
-  calendar: t("book.done.calendar"), calendarGoogle: t("book.done.calendarGoogle"), calendarApple: t("book.done.calendarApple"), cap: t("book.salonFlow.services.cap", { count: 10 }), addressLabel: t("book.confirm.address"), whenLabel: t("book.confirm.when"), icsSummary: t("book.ics.summary", { master: "{master}" }), icsDescription: t("book.ics.description", { services: "{services}" }),
+  calendar: t("book.done.calendar"), calendarGoogle: t("book.done.calendarGoogle"), calendarApple: t("book.done.calendarApple"), calendarIabHint: t("book.done.calendarIabHint"), icsCancel: t("book.ics.cancel"), cap: t("book.salonFlow.services.cap", { count: 10 }), addressLabel: t("book.confirm.address"), whenLabel: t("book.confirm.when"), icsSummary: t("book.ics.summary", { master: "{master}" }), icsDescription: t("book.ics.description", { services: "{services}" }),
 };
 const sf = salon
   ? {
@@ -249,7 +249,7 @@ const strip = info ? { name: info.masterName, subtitle: info.professionalTitle, 
       <div class="g-xl"></div>
       <div class="otp" id="otp">
         {[1, 2, 3, 4, 5, 6].map(() => <span class="otp-cell" aria-hidden="true"></span>)}
-        <input class="otp-input" id="otp-input" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="6" autocomplete="one-time-code" autocapitalize="off" autocorrect="off" spellcheck="false" aria-label={t("book.otp.group")} />
+        <input class="otp-input" id="otp-input" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="6" name="otp" enterkeyhint="done" autocomplete="one-time-code" autocapitalize="off" autocorrect="off" spellcheck="false" aria-label={t("book.otp.group")} />
       </div>
       <div class="g-xl"></div>
       <p class="t-body centered" id="otp-resend">{t("book.otp.noCode")} <span class="t-link wait" id="otp-wait"></span><button type="button" class="link-btn t-link link-hit" id="otp-resend-btn" hidden>{t("book.otp.resend")}</button></p>

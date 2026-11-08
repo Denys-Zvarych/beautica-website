@@ -4,6 +4,7 @@
 import { formatDuration, formatPriceFrom, pluralServices } from "../../lib/booking/format";
 import { formatPhoneGrouped, nationalDigits } from "../../lib/phone";
 import { WINDOW_DAYS, addDays, dayLong, dayShort, daysBetween, inWindow, kyivDay, kyivTime, kyivToday, maxMonthOffset, monthLabel, monthView, partOfDay, weekdayMon0, weekdayShort, type Part } from "./calendar";
+import { currentEnv, detectOtpSmsFormat } from "./otp-format";
 import { cancelPath, cancelToken, createBooking, getAvailability, getBookableDays, sendOtp, verifyOtp, type Fail, type Result, type Slot, type TelegramAvailability } from "./api";
 import { mountTurnstile, type Widget } from "./turnstile";
 import { closeRounded, errorOutline, eventAvailable, expandMoreRounded, schedule } from "../../lib/icons/materialPaths";
@@ -16,7 +17,7 @@ import { clearMarker, createLedger, mayExist, saveMarker } from "./uncertain";
 import type { SalonInfo } from "../../lib/booking/types";
 import { el, lrow } from "./recap-row";
 import { brandMarks } from "../../lib/icons/brandMarks";
-import { calendarLinks, calendarOrder } from "./calendar-links";
+import { calendarLinks, calendarOrder, isIosInApp } from "./calendar-links";
 import "../../styles/book-flow.css"; // step styles ship with the island: the profile pages do not carry them
 
 type Step = "profile" | "services" | "masters" | "date" | "time" | "contact" | "otp" | "confirm" | "done";
@@ -538,7 +539,7 @@ export async function initBooking(root: HTMLElement): Promise<{ open(): void }> 
       view("#turn-err", true);
       return;
     }
-    const r = await sendOtp(api, phoneE164, policy, tk.token);
+    const r = await sendOtp(api, phoneE164, policy, tk.token, detectOtpSmsFormat(currentEnv()));
     widget?.reset();
     busy(btn, false);
     if (!r.ok) {
@@ -579,9 +580,11 @@ export async function initBooking(root: HTMLElement): Promise<{ open(): void }> 
   function syncOtpButton(): void {
     $<HTMLButtonElement>("#cta-otp").disabled = code().length !== 6;
   }
+  let otpPrev = ""; // the value the cells last mirrored: tells "autofill delivered a code" from "the guest typed a digit"
   /** Writes a (sanitised, <= 6 digits) code into the input and repaints the cells. */
   function setOtp(v: string): void {
     const d = v.replace(/\D/g, "").slice(0, 6);
+    otpPrev = d;
     if (otpInput.value !== d) otpInput.value = d;
     const active = Math.min(d.length, 5);
     otpCells.forEach((c, k) => {
@@ -595,17 +598,25 @@ export async function initBooking(root: HTMLElement): Promise<{ open(): void }> 
     $("#otp-wrong").hidden = true;
     syncOtpButton();
   };
-  otpInput.addEventListener("input", () => {
-    setOtp(otpInput.value);
+  /** Sanitise -> mirror cells -> submit when autofill / paste delivered a whole code in one go (typing the last digit by hand does not). */
+  function syncOtp(v: string = otpInput.value): void {
+    const before = otpPrev;
+    setOtp(v);
     otpEdited();
-  });
+    const now = code();
+    if (st.step !== "otp" || now.length !== 6 || now === before) return;
+    if (before.length < 6 ? now.length - before.length > 1 : true) void submitOtp(); // submitOtp is single-flight (st.busy) and aborts WebOTP
+  }
+  otpInput.addEventListener("input", () => syncOtp());
+  // WKWebView sets `value` without an input event: catch it when the field or the page regains / loses attention.
+  for (const ev of ["change", "focus", "blur"]) otpInput.addEventListener(ev, () => syncOtp());
+  document.addEventListener("visibilitychange", () => document.visibilityState === "visible" && st.step === "otp" && syncOtp());
   otpInput.addEventListener("paste", (e) => {
     // maxlength would cut "123 456" to "123 45" before sanitising: take the digits ourselves.
     const d = (e.clipboardData?.getData("text") ?? "").replace(/\D/g, "");
     if (!d) return;
     e.preventDefault();
-    setOtp(d);
-    otpEdited();
+    syncOtp(d);
   });
   setOtp("");
   function startCooldown(): void {
@@ -654,6 +665,7 @@ export async function initBooking(root: HTMLElement): Promise<{ open(): void }> 
       /* unsupported / blocked: manual entry stays */
     }
   }
+  window.addEventListener("pagehide", stopWebOtp);
   $("#cta-otp").addEventListener("click", () => void submitOtp());
   async function submitOtp(): Promise<void> {
     if (st.busy || code().length !== 6) return;
@@ -787,28 +799,33 @@ export async function initBooking(root: HTMLElement): Promise<{ open(): void }> 
 
   // ------------------------------------------------------------------ done
   /** The «Додати в календар» chooser: Google opens its "new event" page (any browser, incl. in-app webviews such as Telegram), the Apple link (GET /api/ics, served `inline`)
-   *  is for iPhone / macOS. Order by device, both always reachable. Content: time, master, services and place only: no cancel link, phone or name (the cancel link arrives by SMS). */
-  function calendarButton(b: { startsAt: string; minutes: number; master: string; services: string }): HTMLElement {
+   *  is for iPhone / macOS (inside the iOS Instagram / Facebook browser it is an x-safari-https link plus the calendar hint line, `calendarIabHint`). Order by device, both always reachable.
+   *  Content: time, master, services, place and the cancel link (the guest already gets it by SMS; it goes to the calendar app only), never a phone or name. */
+  function calendarButton(b: { startsAt: string; minutes: number; master: string; services: string; cancelPath?: string | null }): HTMLElement {
     const wrap = el("div", "calwrap");
     wrap.append(el("p", "t-label", S.calendar));
+    const env = currentEnv();
     const links = calendarLinks({
       startsAt: b.startsAt,
       minutes: b.minutes,
       title: fmt(S.icsSummary, { master: b.master }),
       description: fmt(S.icsDescription, { services: b.services }),
       location: [salonName, city, address].filter(Boolean).join(", "),
-    }, navigator.userAgent);
+      ...(b.cancelPath ? { cancel: { url: `${location.origin}${b.cancelPath}`, label: S.icsCancel } } : {}),
+    }, env, location.origin);
+    const iab = isIosInApp(env);
     const labels = { google: S.calendarGoogle, apple: S.calendarApple } as const;
-    for (const kind of calendarOrder(navigator.userAgent)) {
+    for (const kind of calendarOrder(env.ua)) {
       const btn = el("a", "calbtn");
       btn.href = links[kind];
       btn.dataset.cal = kind;
       btn.rel = "noopener noreferrer";
-      if (kind !== "apple") btn.target = "_blank";
+      if (kind !== "apple") btn.target = "_blank"; // Apple: top-level navigation (also the x-safari-https:// case)
       btn.innerHTML = `<svg class="mi" viewBox="0 0 24 24" aria-hidden="true" focusable="false">${brandMarks[kind === "google" ? "google-calendar" : "apple-calendar"]}</svg><span class="t-strong115"></span>`;
       $("span", btn).textContent = labels[kind];
       wrap.append(btn);
     }
+    if (iab) wrap.append(el("p", "t-body11 centered", S.calendarIabHint));
     return wrap;
   }
   function renderDone(b: { startsAt: string; durationMinutes: number; cancelUrl: string | null; telegram: TelegramAvailability | null }): void {
@@ -816,7 +833,7 @@ export async function initBooking(root: HTMLElement): Promise<{ open(): void }> 
     recap(card);
     const minutes = totals().minutes || b.durationMinutes;
     const cPath = cancelPath(b.cancelUrl);
-    card.append(el("div", "rule"), calendarButton({ startsAt: b.startsAt, minutes, master: masterName, services: chosen().map((s) => s.name).join(", ") }));
+    card.append(el("div", "rule"), calendarButton({ startsAt: b.startsAt, minutes, master: masterName, services: chosen().map((s) => s.name).join(", "), cancelPath: cPath }));
     mountReminders({ root: document.getElementById("done-reminders"), api, token: cancelToken(cPath), telegram: b.telegram, navigate: (u) => location.assign(u), track });
   }
 

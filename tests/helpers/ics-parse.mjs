@@ -1,10 +1,10 @@
 // A strict, dependency-free RFC 5545 reader for the .ics the booking flow generates (phase 015 QA).
 // It throws on anything a calendar app could mis-read: bare CR/LF, over-long physical lines, bad folding, unknown property names,
-// unbalanced components, unescaped TEXT specials, duplicate/missing required properties, and, since phase 025, ANY URL property (the file never carries a cancel link).
+// unbalanced components, unescaped TEXT specials, duplicate/missing required properties, and (phase 030) a URL property is allowed: the cancel link.
 const TEXT_PROPS = new Set(["SUMMARY", "DESCRIPTION", "LOCATION"]);
 const ALLOWED = {
   VCALENDAR: new Set(["VERSION", "PRODID", "CALSCALE", "METHOD"]),
-  VEVENT: new Set(["UID", "DTSTAMP", "DTSTART", "DTEND", "SUMMARY", "DESCRIPTION", "LOCATION"]),
+  VEVENT: new Set(["UID", "DTSTAMP", "DTSTART", "DTEND", "SUMMARY", "DESCRIPTION", "LOCATION", "URL"]),
   VALARM: new Set(["ACTION", "TRIGGER", "DESCRIPTION"]),
 };
 const REQUIRED = { VCALENDAR: ["VERSION", "PRODID"], VEVENT: ["UID", "DTSTAMP", "DTSTART", "DTEND", "SUMMARY", "DESCRIPTION"] };

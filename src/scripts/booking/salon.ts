@@ -55,7 +55,7 @@ export interface Core {
   busy: (btn: HTMLButtonElement, on: boolean) => void;
   lrow: (label: string, value: string, detail?: string) => string;
   recap: (into: HTMLElement, view: RecapView) => void;
-  calendarButton: (b: { startsAt: string; minutes: number; master: string; services: string }) => HTMLElement;
+  calendarButton: (b: { startsAt: string; minutes: number; master: string; services: string; cancelPath?: string | null }) => HTMLElement;
   /** The guest token was refused (401): back to the code step with the session banner. */
   sessionExpired: () => void;
   /** Re-open the time step for the current master with the «already taken» notice. */
@@ -505,10 +505,10 @@ export function createSalon(core: Core, info: SalonInfo) {
       a.querySelector("[data-done-title]")!.textContent = fmt(S.doneOne ?? "", { master: g.name });
       const body = a.querySelector<HTMLElement>("[data-done-body]")!;
       core.recap(body, { services: g.services, day, slot, head: false });
-      // The cancel link is a bearer token (it arrives by SMS): it never goes into the calendar file, analytics or logs.
+      // The cancel link is a bearer token (it arrives by SMS): it goes into the calendar event only (phase 030), never analytics or logs.
       const path = cancelPath(r.data.cancelUrl);
       const minutes = g.services.reduce((n, s) => n + s.minutes, 0) || r.data.durationMinutes;
-      body.append(el("div", "rule"), core.calendarButton({ startsAt: r.data.startsAt, minutes, master: g.name, services: g.services.map((s) => s.name).join(", ") }));
+      body.append(el("div", "rule"), core.calendarButton({ startsAt: r.data.startsAt, minutes, master: g.name, services: g.services.map((s) => s.name).join(", "), cancelPath: path }));
       host.append(a);
       offers.push({ token: cancelToken(path), telegram: r.data.telegram });
     }

@@ -115,7 +115,6 @@ describe("sensitive values reach only the endpoints that need them", () => {
   test("the SMS code goes to /otp/verify only", async () => {
     await withSpy("oksana-ab12", async ({ page }, sent) => {
       await driveTo(page, "otp", { contact: { name: "Код", phone: "671230005" }, code: "482915" });
-      await page.click("#cta-otp");
       await page.waitForSelector("#confirm-card", { state: "visible" });
       assert.deepEqual(placesOf(sent, "482915"), ["body POST API/api/v1/book/otp/verify"]);
       assert.equal((await snapshotState(page)).includes("482915"), false);
@@ -146,7 +145,6 @@ describe("analytics funnel: documented events, counts and codes only", () => {
   test("a wrong code emits otp_failed; a taken slot emits booking_error with code 409 (codes, never messages)", async () => {
     await withSpy("conflict-9999", async ({ page }) => {
       await driveTo(page, "otp", { contact: { name: "Помилка", phone: "671230007" }, code: "000000" });
-      await page.click("#cta-otp");
       await page.waitForSelector("#otp-wrong", { state: "visible" });
       assert.ok((await page.evaluate(() => window.__events)).some((x) => x.e === "otp_failed"));
     });

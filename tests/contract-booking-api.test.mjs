@@ -261,6 +261,16 @@ describe("3. every request the site sends is a legal backend request", gate, () 
     assert.equal("turnstileToken" in last().body, false);
     assert.deepEqual(requestProblems(last().body, "PhoneOtpSendRequest"), []);
   });
+  test("POST /otp/send carries smsFormat only when given; the value is PLAIN | DOMAIN_BOUND (and a field the backend has, once backend 440 ships)", async () => {
+    await sendOtp("http://x", "+380501234567", PRIVACY_POLICY_VERSION, "TOKEN-1");
+    assert.equal("smsFormat" in last().body, false, "old callers / unknown format: field omitted");
+    for (const f of ["PLAIN", "DOMAIN_BOUND"]) {
+      await sendOtp("http://x", "+380501234567", PRIVACY_POLICY_VERSION, "TOKEN-1", f);
+      assert.equal(last().body.smsFormat, f);
+      // Backend 440 adds PhoneOtpSendRequest.smsFormat; until it is in the checked-out backend the field is optional and ignored.
+      if (componentsOf("PhoneOtpSendRequest").some((c) => c.name === "smsFormat")) assert.deepEqual(requestProblems(last().body, "PhoneOtpSendRequest"), []);
+    }
+  });
   test("POST /otp/verify matches PhoneOtpVerifyRequest", async () => {
     await verifyOtp("http://x", "+380501234567", "123456");
     assert.deepEqual(requestProblems(last().body, "PhoneOtpVerifyRequest"), []);

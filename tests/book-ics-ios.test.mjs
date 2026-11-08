@@ -85,7 +85,8 @@ describe("OTP step is a single iOS-autofill target", () => {
         el.dispatchEvent(new Event("input", { bubbles: true }));
       });
       assert.deepEqual(await env.page.locator("#otp .otp-cell").evaluateAll((els) => els.map((e) => e.textContent)), [..."482915"]);
-      assert.equal(await env.page.locator("#cta-otp").isEnabled(), true);
+      // The whole code in one event submits by itself (phase 029): the confirm step follows with no tap.
+      await env.page.waitForSelector("#confirm-card", { state: "visible" });
       assert.deepEqual(env.problems, []);
     } finally {
       await env.context.close();

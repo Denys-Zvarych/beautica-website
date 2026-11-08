@@ -58,8 +58,8 @@ export function getBookableDays(api: string, slug: string, from: string, to: str
   );
 }
 
-export function sendOtp(api: string, phone: string, policyVersion: string, turnstileToken: string | null): Promise<Result<true>> {
-  return call(`${api}/api/v1/book/otp/send`, post({ phone, privacyAccepted: true, privacyPolicyVersion: policyVersion, ...(turnstileToken ? { turnstileToken } : {}) }), () => true);
+export function sendOtp(api: string, phone: string, policyVersion: string, turnstileToken: string | null, smsFormat?: OtpSmsFormat): Promise<Result<true>> {
+  return call(`${api}/api/v1/book/otp/send`, post({ phone, privacyAccepted: true, privacyPolicyVersion: policyVersion, ...(turnstileToken ? { turnstileToken } : {}), ...(smsFormat ? { smsFormat } : {}) }), () => true);
 }
 
 export function verifyOtp(api: string, phone: string, code: string): Promise<Result<string>> {
@@ -109,6 +109,13 @@ export function readTelegram(v: unknown): TelegramAvailability | null {
 /** The cancel token = the last segment of an already-validated `/c/{16}` or `/book/cancel/{uuid}` path (`cancelPath`). */
 export function cancelToken(path: string | null): string | null {
   return path && (CANCEL_SHORT.test(path) || CANCEL_LEGACY.test(path)) ? path.slice(path.lastIndexOf("/") + 1) : null;
+}
+
+/** The reverse of `cancelToken`: a bare token (`/api/ics?c=`) back to its cancel path, only for the two accepted shapes; anything else is `null`. */
+export function cancelPathFromToken(token: string | null): string | null {
+  if (!token) return null;
+  for (const path of [`/c/${token}`, `/book/cancel/${token}`]) if (CANCEL_SHORT.test(path) || CANCEL_LEGACY.test(path)) return path;
+  return null;
 }
 
 export * from "./telegram-api.ts";

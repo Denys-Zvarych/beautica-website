@@ -184,7 +184,6 @@ describe("020: BOOKING_UNAVAILABLE", () => {
     try {
       const { page } = env;
       await driveTo(page, "otp", { contact: { phone: "500000409" } });
-      await page.click("#cta-otp");
       await page.locator("#otp-error").waitFor({ state: "visible" });
       assert.doesNotMatch(await text(page.locator("body")), /зараз недоступний/);
       assert.equal(await page.locator("[data-screen=otp]").isVisible(), true, "stays on the code step");

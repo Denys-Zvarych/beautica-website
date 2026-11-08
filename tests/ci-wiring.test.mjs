@@ -150,3 +150,11 @@ describe("the shared mock backend", () => {
     assert.deepEqual(offenders, []);
   });
 });
+
+describe("phase 030: no bearer token in Cloudflare logs", () => {
+  test("wrangler.jsonc keeps Workers Logs on but invocation_logs off (they record the full request URL: /c/<token>, /api/ics?c=)", () => {
+    const cfg = JSON.parse(read("wrangler.jsonc").replace(/^\s*\/\/.*$/gm, ""));
+    assert.equal(cfg.observability.enabled, true);
+    assert.strictEqual(cfg.observability.logs?.invocation_logs, false);
+  });
+});

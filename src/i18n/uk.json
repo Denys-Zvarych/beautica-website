@@ -400,6 +400,7 @@
       "calendar": "Додати в календар",
       "calendarGoogle": "Google Календар",
       "calendarApple": "Календар Apple",
+      "calendarIabHint": "Не відкрилось? Натисніть ⋯ → «Відкрити в браузері»",
       "reminders": {
         "heading": "Куди надсилати нагадування про записи?",
         "sms": "SMS",
@@ -417,7 +418,8 @@
     },
     "ics": {
       "summary": "Запис до {master}",
-      "description": "Запис через Beautica. Послуги: {services}."
+      "description": "Запис через Beautica. Послуги: {services}.",
+      "cancel": "Скасувати запис"
     },
     "reviews": {
       "sortLabel": "Сортування",
