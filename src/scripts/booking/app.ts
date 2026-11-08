@@ -167,7 +167,7 @@ export async function initBooking(root: HTMLElement): Promise<{ open(): void }> 
       $("#otp").classList.remove("invalid");
       paintCooldown();
       syncOtpButton();
-      otpInput.focus();
+      otpInput.focus({ preventScroll: true });
     }
     if (step === "confirm") renderConfirm();
   }
@@ -451,6 +451,7 @@ export async function initBooking(root: HTMLElement): Promise<{ open(): void }> 
     if (clean !== comment.value) comment.value = clean;
   });
   let prevDigits = "";
+  // No maxlength on #phone: iOS fills "+38 (050) 123-45-67" (19 chars) and a maxlength would cut it before this handler runs. nationalDigits drops +380 / 380 / 0 and keeps 9 digits.
   phone.addEventListener("input", (e) => {
     const deleting = (e as InputEvent).inputType?.startsWith("delete") ?? false;
     let digits = nationalDigits(phone.value);
@@ -522,10 +523,14 @@ export async function initBooking(root: HTMLElement): Promise<{ open(): void }> 
     else btn.removeAttribute("aria-busy");
   }
 
+  // iOS opens the keyboard only for focus() inside the tap: focus a hidden numeric proxy synchronously, then hand focus to #otp-input once its screen is shown.
+  const otpProxy = document.querySelector<HTMLInputElement>("#otp-proxy");
+  const dropKeyboard = (): void => { if (otpProxy && document.activeElement === otpProxy) otpProxy.blur(); };
   async function requestCode(from: "contact" | "otp"): Promise<void> {
     if (st.busy) return;
     const btn = $<HTMLButtonElement>(from === "contact" ? "#cta-contact" : "#otp-resend-btn");
     if (from === "contact" && !validateContact()) return;
+    if (from === "contact") otpProxy?.focus({ preventScroll: true });
     stopWebOtp();
     view("#turn-err", false);
     hideBanners();
@@ -534,6 +539,7 @@ export async function initBooking(root: HTMLElement): Promise<{ open(): void }> 
     const tk = await turnstileToken();
     if (!tk.ok) {
       busy(btn, false);
+      dropKeyboard();
       $("#turn-err .t-fb").textContent = S.turnstileErr;
       if (from === "otp") go("contact", false);
       view("#turn-err", true);
@@ -543,6 +549,7 @@ export async function initBooking(root: HTMLElement): Promise<{ open(): void }> 
     widget?.reset();
     busy(btn, false);
     if (!r.ok) {
+      dropKeyboard();
       track("booking_error", { code: r.fail === "rate-limited" ? 429 : r.fail === "unavailable" ? 503 : "other" });
       if (from === "otp") {
         failBanner("otp", r.fail);
@@ -560,7 +567,9 @@ export async function initBooking(root: HTMLElement): Promise<{ open(): void }> 
     st.phone = phoneE164;
     track("otp_requested");
     startCooldown();
-    if (from === "contact") go("otp");
+    if (from === "contact") {
+      go("otp"); // onEnter("otp") moves focus from the proxy to #otp-input (iOS keeps the keyboard when focus moves input to input)
+    }
     startWebOtp();
   }
   $("#contact-form").addEventListener("submit", (e) => {
@@ -823,6 +832,8 @@ export async function initBooking(root: HTMLElement): Promise<{ open(): void }> 
       if (kind !== "apple") btn.target = "_blank"; // Apple: top-level navigation (also the x-safari-https:// case)
       btn.innerHTML = `<svg class="mi" viewBox="0 0 24 24" aria-hidden="true" focusable="false">${brandMarks[kind === "google" ? "google-calendar" : "apple-calendar"]}</svg><span class="t-strong115"></span>`;
       $("span", btn).textContent = labels[kind];
+      // Every iOS in-app browser (Instagram / Facebook drop a tapped x-safari-https <a>): follow it by a same-tab navigation inside the tap gesture. Safari / non-iOS keep the plain anchor.
+      if (kind === "apple" && iab) btn.addEventListener("click", (ev) => { ev.preventDefault(); window.location.href = links.apple; });
       wrap.append(btn);
     }
     if (iab) wrap.append(el("p", "t-body11 centered", S.calendarIabHint));

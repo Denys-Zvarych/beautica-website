@@ -904,6 +904,10 @@ a.tab {
   white-space: nowrap;
   border: 0;
 }
+/* iOS zooms any focused input under 16px; the proxy is focused in the send tap (phase 031). */
+#otp-proxy {
+  font-size: var(--vt-fs-prose);
+}
 
 /* ---------- rating distribution (RatingSummaryCard) ---------- */
 .rsum .divider {

@@ -161,7 +161,7 @@ describe("every step renders on phone, tablet and desktop", () => {
           }
           const small = await page.evaluate(() =>
             [...document.querySelectorAll("[data-screen]:not([hidden]) :is(a[href], button, input:not([type=checkbox]), textarea)")]
-              .filter((e) => !e.closest("[hidden]") && getComputedStyle(e).visibility !== "hidden" && !e.matches(".chk-row a")) // the privacy link is a text link inside a sentence (WCAG 2.5.8 inline exception)
+              .filter((e) => !e.closest("[hidden]") && getComputedStyle(e).visibility !== "hidden" && !e.matches(".chk-row a") && !(e.matches('[aria-hidden="true"][tabindex="-1"]') || e.closest('[aria-hidden="true"]:is([tabindex="-1"])'))) // not user-operable (aria-hidden + tabindex=-1, e.g. the #otp-proxy iOS-keyboard input); the privacy link is a text link inside a sentence (WCAG 2.5.8 inline exception)
               .map((e) => ({ t: e.tagName + "." + e.className + "#" + e.id, b: e.getBoundingClientRect() }))
               .filter(({ b }) => b.width > 0 && b.height > 0 && (b.height < 48 || b.width < 48))
               .map(({ t, b }) => `${t} ${Math.round(b.width)}x${Math.round(b.height)}`),
