@@ -1,0 +1,35 @@
+---
+// Phase 032: the calendar entry of the confirmed cancel page (/c/{token}?n=1, l/cancel-confirmed.astro). Rendered ONLY there, so a plain /c/{token} visit never loads it
+// and its main script carries no dynamic import (no Vite preload-helper). The main script sends `cancel:calendar` with the booking's items once the token GET answered.
+---
+
+<script>
+  // "?own": bundled into this entry only (one request more at most, shared with nothing on this page).
+  import { buildVisitCalendar, calendarHint } from "../../scripts/booking/calendar-button.ts?own";
+
+  const root = document.getElementById("cancel-root")!;
+  const host = document.getElementById("c-cal")!;
+  const d = root.dataset;
+  const hide = () => (host.hidden = true);
+  // The placeholder (server HTML) already has the real label and one row of button height. Inside an iOS in-app browser the real block ends with a static hint line: put the same
+  // line into the placeholder now (the check is synchronous, this runs before the confirm state is shown), so the swap changes nothing.
+  const ph = host.querySelector(".calwrap");
+  const hint = d.calIab && d.calMeta ? calendarHint({ calendarIabHint: d.calIab, calendarMetaHint: d.calMeta }) : null;
+  if (ph && hint) ph.append(hint);
+
+  type Detail = { items: { startsAt: string; durationMinutes: number; serviceName: string }[]; master: string; where: string; path: string };
+  document.addEventListener("cancel:calendar", (ev) => {
+    ev.preventDefault(); // taken (see CancelPage: an untaken event hides the reserved block)
+    const { items, master, where, path } = (ev as CustomEvent<Detail>).detail;
+    if (!items.length) return hide();
+    if (!d.calCalendar) {
+      console.warn("calendar block skipped, missing data-cal-calendar");
+      return hide();
+    }
+    const block = buildVisitCalendar(d, items, master, where, path);
+    if (block) {
+      host.replaceChildren(block);
+      host.hidden = false;
+    } else hide();
+  });
+</script>

@@ -119,13 +119,31 @@ describe("Apple calendar button in iOS in-app browsers", () => {
     }
   }
 
-  for (const [name, ua, init] of [["Instagram", UA.instagramIos, ""], ["Facebook", UA.facebookIos, ""], ["Telegram", UA.telegramIos, telegramProxy]])
-  test(`${name} iOS: click is cancelled and the page itself navigates to x-safari-https://…/api/ics?…`, async () => {
-    const { href, nav } = await tapApple(ua, init);
+  test("Telegram iOS: click is cancelled and the page itself navigates to x-safari-https://…/api/ics?…", async () => {
+    const { href, nav } = await tapApple(UA.telegramIos, telegramProxy);
     assert.match(href, /^x-safari-https?:\/\/[^/]+\/api\/ics\?/);
     assert.equal(nav.defaultPrevented, true, "anchor default action is replaced by a scripted navigation");
     assert.deepEqual(nav.urls, [href]);
   });
+
+  // Phase 032: Instagram / Facebook block the x-safari hand-off in their WKWebView, so there is no Apple button there: Google plus the static «open in Safari» line.
+  for (const [name, ua] of [["Instagram", UA.instagramIos], ["Facebook", UA.facebookIos]])
+    test(`${name} iOS: no Apple button, Google button present, static Safari line visible`, async () => {
+      const env = await bookPage(browser, "oksana-ab12", { width: 393, userAgent: ua, hasTouch: true });
+      try {
+        await driveTo(env.page, "confirm", { contact: { name: "Календар", phone: "500000731" } });
+        await env.page.click("#cta-confirm");
+        await env.page.waitForSelector("#done-card", { state: "visible" });
+        assert.equal(await env.page.locator('#done-card [data-cal="apple"]').count(), 0, "no Apple button");
+        assert.equal(await env.page.getByRole("link", { name: uk.book.done.calendarApple }).count(), 0);
+        assert.equal(await env.page.locator('#done-card [data-cal="google"]').isVisible(), true, "Google button present");
+        const hint = env.page.locator("[data-cal-hint=meta]");
+        assert.equal(await hint.isVisible(), true, "static hint visible");
+        assert.equal((await hint.innerText()).trim(), uk.book.done.calendarMetaHint);
+      } finally {
+        await env.context.close();
+      }
+    });
 
   test("plain iOS Safari: x-safari is not used, click not intercepted", async () => {
     const { href, nav } = await tapApple(UA.telegramIos);

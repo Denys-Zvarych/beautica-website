@@ -12,7 +12,8 @@
         "http://localhost/l/invite.html",
         "http://localhost/l/booking.html",
         "http://localhost/l/review.html",
-        "http://localhost/l/cancel.html"
+        "http://localhost/l/cancel.html",
+        "http://localhost/l/cancel-confirmed.html"
       ],
       "numberOfRuns": 3,
       "settings": {
@@ -82,6 +83,23 @@
             "largest-contentful-paint": ["error", { "maxNumericValue": 2000 }],
             "total-blocking-time": ["error", { "maxNumericValue": 50 }],
             "resource-summary:script:size": ["error", { "maxNumericValue": 7168 }],
+            "resource-summary:font:count": ["error", { "maxNumericValue": 4 }],
+            "resource-summary:font:size": ["error", { "maxNumericValue": 112640 }],
+            "resource-summary:total:size": ["error", { "maxNumericValue": 153600 }]
+          }
+        },
+        {
+          "_comment": "l/cancel-confirmed only (phase 032): the cancel page (CancelPage, reminder-channel, http, recap-row, cancel-path, AppLinkPage) plus the calendar entry (CancelCalendar, calendar-links; ~3 KB gz). Measured 2026-11-08 on /l/cancel-confirmed.html: 11593 B transferred by the lhci static server (8 requests, identical in 3 runs); built JS 16384 B raw, 8140 B gz, OVER the README 5 KB gz rule (same reason as l/cancel: it is the full cancel page plus the required calendar block; code already shared, no duplicate to trim). Budget 12288 = 11593 + ~700 B headroom. This byte cap is only a regression tripwire; the next raise needs a gzip measurement in this comment. tests/ci-wiring.test.mjs compares the built script bytes with this cap.",
+          "matchingUrlPattern": "http://[^/]+/l/cancel-confirmed\\.html$",
+          "aggregationMethod": "median",
+          "assertions": {
+            "categories:performance": ["error", { "minScore": 0.95 }],
+            "categories:accessibility": ["error", { "minScore": 1 }],
+            "categories:seo": ["error", { "minScore": 0.66 }],
+            "cumulative-layout-shift": ["error", { "maxNumericValue": 0.005 }],
+            "largest-contentful-paint": ["error", { "maxNumericValue": 2000 }],
+            "total-blocking-time": ["error", { "maxNumericValue": 50 }],
+            "resource-summary:script:size": ["error", { "maxNumericValue": 12288 }],
             "resource-summary:font:count": ["error", { "maxNumericValue": 4 }],
             "resource-summary:font:size": ["error", { "maxNumericValue": 112640 }],
             "resource-summary:total:size": ["error", { "maxNumericValue": 153600 }]

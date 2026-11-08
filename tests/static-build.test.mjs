@@ -27,7 +27,7 @@ const gz = (buf) => gzipSync(buf, { level: 9 }).length;
 const KB = 1024;
 
 test("the build produced the 10 expected pages", () => {
-  assert.deepEqual(htmlFiles.map(name).sort(), ["/404.html", "/delete-account.html", "/index.html", "/l/booking.html", "/l/cancel.html", "/l/invite.html", "/l/review.html", "/privacy.html", "/support.html", "/terms.html"]);
+  assert.deepEqual(htmlFiles.map(name).sort(), ["/404.html", "/delete-account.html", "/index.html", "/l/booking.html", "/l/cancel-confirmed.html", "/l/cancel.html", "/l/invite.html", "/l/review.html", "/privacy.html", "/support.html", "/terms.html"]);
 });
 
 describe("the salon wizard fragment (phase 016)", () => {

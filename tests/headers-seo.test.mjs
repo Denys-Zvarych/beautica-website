@@ -116,6 +116,57 @@ describe("token routes (real e-mail URL -> 200 rewrite -> noindex shell)", () =>
   });
 });
 
+// Phase 032: the booking's own address is /c/{token}?n=1 (or the legacy /book/cancel/{uuid}?n=1). The Worker serves the confirmed shell (calendar block `#c-cal`)
+// ONLY for the exact flag n=1; every other query is the plain cancel page. Both variants are token responses: same hardened headers, no analytics origins.
+describe("phase 032: ?n=1 serves the confirmed cancel shell, anything else the plain one", () => {
+  const PATHS = [`/c/Ab3dEf7hJk9mNp2Q`, `/book/cancel/${TOKEN}`];
+  const apiNorm = (s) => s.replace(MOCK_API || "https://api.beautica.app", "https://api.beautica.app");
+  const hasCalendarBlock = (body) => /id="c-cal"/.test(body);
+  for (const base of PATHS) {
+    describe(base.replace(TOKEN, ":id"), () => {
+      test("?n=1: 200, confirmed shell (calendar block), token headers exactly once, CSP without umami / cloudflareinsights", async () => {
+        const res = await rawRequest(`${base}?n=1`);
+        assert.equal(res.status, 200);
+        assert.equal(hasCalendarBlock(res.body), true, "the confirmed shell carries the calendar block");
+        assert.deepEqual(res.all("referrer-policy"), ["no-referrer"]);
+        assert.deepEqual(res.all("cache-control"), ["no-store"]);
+        assert.deepEqual(res.all("x-robots-tag"), ["noindex, nofollow"]);
+        const csp = res.all("content-security-policy");
+        assert.deepEqual(csp.map(apiNorm), [TOKEN_CSP]);
+        assert.equal(/umami|cloudflareinsights/.test(csp[0]), false, "no analytics origin in a token response");
+        assert.equal(meta(res.body, /<meta name="robots" content="([^"]*)"/), "noindex, nofollow");
+        assert.equal(meta(res.body, /<meta name="referrer" content="([^"]*)"/), "no-referrer");
+        assert.equal(/rel="canonical"/.test(res.body), false);
+      });
+      test("?n=1 differs from the plain shell only by the calendar variant (same runtime data-api origin)", async () => {
+        const [yes, no] = [await rawRequest(`${base}?n=1`), await rawRequest(base)];
+        const api = (b) => b.match(/id="cancel-root"[^>]*?\sdata-api="([^"]*)"/)?.[1];
+        assert.ok(api(yes.body), "data-api is set");
+        assert.equal(api(yes.body), api(no.body));
+        assert.notEqual(yes.body, no.body);
+      });
+      for (const q of ["", "?n=0", "?n=2", "?n=", "?n=true", "?n=11", "?n=garbage", "?N=1", "?x=1", "?m=1&n=", "?n=%00"]) {
+        test(`${q || "(no query)"}: plain cancel shell, no calendar block, same token headers`, async () => {
+          const res = await rawRequest(`${base}${q}`);
+          assert.equal(res.status, 200);
+          assert.equal(hasCalendarBlock(res.body), false, "not the confirmed shell");
+          assert.deepEqual(res.all("referrer-policy"), ["no-referrer"]);
+          assert.deepEqual(res.all("cache-control"), ["no-store"]);
+          assert.deepEqual(res.all("x-robots-tag"), ["noindex, nofollow"]);
+          assert.deepEqual(res.all("content-security-policy").map(apiNorm), [TOKEN_CSP]);
+        });
+      }
+      test("?n=1 with an invalid token is still the 404 (no confirmed shell, token headers)", async () => {
+        const res = await rawRequest(base.replace(/[^/]+$/, "bad!") + "?n=1");
+        assert.equal(res.status, 404);
+        assert.equal(hasCalendarBlock(res.body), false);
+        assert.deepEqual(res.all("cache-control"), ["no-store"]);
+        assert.deepEqual(res.all("referrer-policy"), ["no-referrer"]);
+      });
+    });
+  }
+});
+
 describe("malformed paths under token prefixes (the 404 must not report or leak the token)", () => {
   for (const path of [`/book/cancel/${TOKEN}/extra`, "/book/cancel/abc123/extra", "/invite/abc/def", `/bookings/${TOKEN}/nope`, "/l/nothing", "/c/Ab3dEf7hJk9mNp2Q/extra", "/c/a/b"]) {
     test(`${path}: 404, token CSP without analytics origins, no-referrer, no-store, noindex`, async () => {

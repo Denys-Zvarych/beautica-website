@@ -1,0 +1,383 @@
+---
+// Static shell for the guest cancel link /book/cancel/{token} (200 rewrite in public/_redirects). The token is read from the
+// address bar in the browser and only ever sent to the API; nothing is stored or logged. States are all in the HTML and
+// toggled with `hidden`. The page has ONE h1 (#cancel-title): «Скасування запису» while loading (and without script), then the heading of the
+// state shown (data-h-*); the script moves focus to it. The static «Скасування запису» is otherwise the <title> only.
+interface Props {
+  /** Phase 032: /c/{token}?n=1 (the booking's own address). The Worker serves this variant for that query; the calendar block is reserved in the HTML and filled by the page's own calendar entry. */
+  confirmed?: boolean;
+}
+const { confirmed = false } = Astro.props;
+import AppLinkPage from "../../components/AppLinkPage.astro";
+import CtaButton from "../../components/CtaButton.astro";
+import ReminderChannelChoice from "../../components/book/ReminderChannelChoice.astro";
+import { t } from "../../i18n/t";
+import { API_BASE } from "../../lib/appLinks";
+import ServiceTile from "../../components/book/ServiceTile.astro";
+import "../../styles/recap.css"; // the shared summary row (.kv), same as the booking done card
+import "../../styles/tile.css"; // the booking flow's service tile (.stile / .chk), same source as book.css (phase 026)
+import "../../styles/calendar-button.css"; // phase 032: inline on purpose, the reserved calendar block (placeholder below) needs the real .calwrap grid at first paint (no extra request, no shift)
+---
+
+<AppLinkPage title={t("cancel.metaTitle")} description={t("cancel.metaDescription")} openInApp={false}>
+  {/* Without script the footer must not stay hidden (rule below); a <style> is only valid in <head>, so it goes through Layout's head slot. */}
+  <noscript slot="head"><style is:inline>body .site-footer { visibility: visible !important; }</style></noscript>
+  <h1 id="cancel-title" class="vt-heading" tabindex="-1">{t("cancel.h1")}</h1>
+  <div
+    id="cancel-root"
+    class="states"
+    data-api={API_BASE}
+    data-until={t("cancel.until", { time: "{time}" })}
+    data-l-master={t("cancel.master")}
+    data-l-service={t("cancel.service")}
+    data-l-when={t("cancel.when")}
+    data-l-salon={t("cancel.salon")}
+    data-l-address={t("cancel.address")}
+    data-confirm={t("cancel.confirm")}
+    data-cancelling={t("cancel.cancelling")}
+    data-m-title={t("cancel.multi.title")}
+    data-m-none={t("cancel.multi.confirmNone")}
+    data-m-one={t("cancel.multi.confirmOne", { n: "{n}" })}
+    data-m-few={t("cancel.multi.confirmFew", { n: "{n}" })}
+    data-m-many={t("cancel.multi.confirmMany", { n: "{n}" })}
+    data-m-partial={t("cancel.multi.partial", { done: "{done}", total: "{total}" })}
+    data-m-reason-cancelled={t("cancel.multi.reasonCancelled")}
+    data-m-reason-completed={t("cancel.multi.reasonCompleted")}
+    data-m-reason-late={t("cancel.multi.reasonLate")}
+    data-h-new={t("cancel.newTitle")}
+    data-cal-calendar={t("book.done.calendar")}
+    data-cal-google={t("book.done.calendarGoogle")}
+    data-cal-apple={t("book.done.calendarApple")}
+    data-cal-iab={t("book.done.calendarIabHint")}
+    data-cal-meta={t("book.done.calendarMetaHint")}
+    data-cal-summary={t("book.ics.summary", { master: "{master}" })}
+    data-cal-description={t("book.ics.description", { services: "{services}" })}
+    data-cal-cancel={t("book.ics.cancel")}
+    data-h-confirm={t("cancel.confirmTitle")}
+    data-h-cancelled={t("cancel.doneTitle")}
+    data-h-closed={t("cancel.closedTitle")}
+    data-h-notfound={t("cancel.notfoundTitle")}
+    data-h-error={t("cancel.errorTitle")}
+    data-ro-title-cancelled={t("cancel.doneTitle")}
+    data-ro-title-completed={t("cancel.ro.completedTitle")}
+    data-ro-title-notcompleted={t("cancel.ro.notCompletedTitle")}
+    data-ro-title-other={t("cancel.ro.otherTitle")}
+    data-ro-text-cancelled={t("cancel.ro.cancelledText")}
+    data-ro-text-completed={t("cancel.ro.completedText")}
+    data-ro-text-notcompleted={t("cancel.ro.notCompletedText")}
+  >
+    <div class="state" id="st-loading" role="status">
+      <p class="vt-prose">{t("cancel.loading")}</p>
+      <noscript><p class="vt-prose">{t("cancel.noscript")}</p></noscript>
+    </div>
+
+    <div class="state" id="st-confirm" hidden>
+      <div class="facts" id="c-facts"></div>
+      {/* Phase 026: more than one service = tick what to cancel (rows cloned from the template). Nothing is preselected. */}
+      <fieldset class="svcs" id="c-svcs" hidden>
+        <legend class="vt-body">{t("cancel.multi.hint")}</legend>
+        <div class="rows" id="c-rows"></div>
+      </fieldset>
+      {/* Phase 032: only on /c/{token}?n=1 (the booking's own address after it was made): «Додати в календар», built from this same answer. */}
+      {
+        confirmed && (
+          <div class="cal" id="c-cal">
+            <div class="calwrap" data-ph aria-hidden="true">
+              <p class="t-label">{t("book.done.calendar")}</p>
+            </div>
+          </div>
+        )
+      }
+      <p class="vt-body status" id="c-status" role="status" aria-live="polite" tabindex="-1" hidden></p>
+      <p class="vt-body" id="c-until"></p>
+      <CtaButton type="button" id="c-confirm" spinner>{t("cancel.confirm")}</CtaButton>
+      <p class="vt-body">{t("cancel.changedMind")}</p>
+    </div>
+
+    <template id="tpl-row"><ServiceTile checkbox id="" name="…" price="" duration="" time="00:00" /></template>
+
+    <div class="state" id="st-cancelled" hidden>
+      <p class="vt-prose">{t("cancel.doneText")}</p>
+    </div>
+
+    {/* Phase 435: read-only view for a booking that is not CONFIRMED (cancelled / declined / completed / no-show / unknown status). No cancel button. */}
+    <div class="state" id="st-readonly" hidden>
+      <div class="facts" id="r-facts"></div>
+      <p class="vt-prose" id="r-text" hidden></p>
+      <div id="r-rebook" hidden><CtaButton href="/" id="r-rebook-link">{t("cancel.rebook")}</CtaButton></div>
+    </div>
+
+    <div class="state" id="st-closed" hidden>
+      <p class="vt-prose">{t("cancel.closedText")}</p>
+    </div>
+
+    <div class="state" id="st-notfound" hidden>
+      <p class="vt-prose">{t("cancel.notfoundText")}</p>
+    </div>
+
+    <div class="state" id="st-error" hidden>
+      <p class="vt-prose">{t("cancel.errorText")}</p>
+      <CtaButton type="button" id="c-retry">{t("cancel.retry")}</CtaButton>
+    </div>
+  </div>
+  {/* Phase 024: hidden until the status call says the guest can pick / has linked Telegram; hidden again after a cancellation. */}
+  <div class="rc"><ReminderChannelChoice /></div>
+  <slot />
+</AppLinkPage>
+
+<style>
+  .states {
+    display: contents;
+  }
+
+  .state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--vt-space-md);
+    outline: none;
+  }
+  #cancel-title:focus {
+    outline: none;
+  }
+  .state[hidden] {
+    display: none;
+  }
+  /* While the booking loads the footer is invisible (it keeps its place, so nothing is reflowed): the card grows or shrinks to the state that
+     arrives, and a footer that was in view would jump (CLS). Without script the noscript rule below shows it again. */
+  :global(body:has(#st-loading:not([hidden])) .site-footer),
+  :global(body:has(.rc[data-reserve]) .site-footer) {
+    visibility: hidden;
+  }
+  .rc {
+    width: 100%;
+    text-align: start;
+  }
+  /* Set together with the confirm state (the only one that can show the block), before the status answer: the block then arrives inside space that is
+     already there, so nothing below it moves (CLS). Tallest state of the block (the choice with the helper text), in spacing tokens. It is released
+     as soon as the answer is in (block shown, absent or failed); the footer is hidden meanwhile (rule above), so collapsing the gap moves nothing visible. */
+  .rc[data-reserve] {
+    min-height: calc(var(--vt-space-xxl) * 6);
+  }
+  /* Phase 026: the tick list. Rows are the booking flow's .stile tiles (styles/tile.css). */
+  .svcs {
+    width: 100%;
+    min-width: 0;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    text-align: start;
+  }
+  .svcs legend {
+    padding: 0;
+    margin-bottom: var(--vt-space-sm);
+  }
+  .rows {
+    display: flex;
+    flex-direction: column;
+    gap: var(--vt-space-sm);
+  }
+  .cal {
+    width: 100%;
+  }
+  /* Phase 032: on ?n=1 the block is shown from the first render with the real label and one empty row of the buttons' height (the grid gap is the real one),
+     so the buttons arrive inside space that is already there and the cancel button below never moves (CLS). */
+  .cal :global(.calwrap[data-ph])::after {
+    content: "";
+    grid-column: 1 / -1;
+    min-height: var(--vt-size-cta);
+  }
+  .cal[hidden] {
+    display: none;
+  }
+  .status {
+    width: 100%;
+    text-align: start;
+    outline: none;
+  }
+  /* A disabled confirm because nothing is ticked is not «in progress» (the CtaButton default cursor). */
+  :global(#c-confirm:disabled:not([aria-busy])) {
+    cursor: not-allowed;
+  }
+  /* Rows are the shared .kv summary row (styles/recap.css), built by the script. */
+  .facts {
+    width: 100%;
+    text-align: start;
+  }
+</style>
+
+<script>
+  import { tokenFromPath, fetchInfo, cancelBooking, formatWhen, formatTime, readonlyKindOf, safeRebookPath, factText, addressWithNote, itemsOf, isMulti, stateForInfo, cancelledCount, itemReason, countLabel, type CancelState, type CancelInfo } from "../../lib/guestCancel";
+  // "?own": bundled into this entry only (formatDuration, ~100 B) instead of loading the shared format chunk (1.3 KB) as one more request.
+  import { formatDuration } from "../../lib/booking/format.ts?own";
+  // The "?own" query makes Vite treat the file as a module of this entry only: it is bundled INTO this script (no separate shared chunk = no extra request on this token page); the source is still the one recap-row.ts.
+  import { kvRow } from "../../scripts/booking/recap-row.ts?own";
+  import { telegramStatus } from "../../scripts/booking/telegram-api";
+  import { availabilityFromStatus, mountReminders } from "../../scripts/booking/reminder-channel";
+
+  const root = document.getElementById("cancel-root")!;
+  const api = root.dataset.api!;
+  const token = tokenFromPath(location.pathname);
+  const $ = (id: string) => document.getElementById(id)!;
+  const confirmBtn = $("c-confirm") as HTMLButtonElement;
+  const label = confirmBtn.querySelector<HTMLElement>(".lbl")!;
+  const show = (s: "loading" | CancelState, heading?: string) => {
+    for (const el of root.querySelectorAll<HTMLElement>(".state")) el.hidden = el.id !== `st-${s}`;
+    const title = $("cancel-title");
+    if (s !== "loading") {
+      title.textContent = heading ?? root.dataset[`h${s[0]!.toUpperCase()}${s.slice(1)}`] ?? title.textContent;
+      title.focus();
+    }
+  };
+  const reminders = document.getElementById("done-reminders") as HTMLElement | null;
+  const rc = reminders!.parentElement!;
+  let remindersAsked = false;
+  // Phase 024: asked once, and only for a booking that landed in the confirm state (no 404 noise for unknown / used / closed tokens). A failed or
+  // absent answer = no block; the reserved space stays so the page does not move.
+  async function offerReminders(t: string): Promise<void> {
+    if (remindersAsked) return;
+    remindersAsked = true;
+    try {
+      const r = await telegramStatus(api, t);
+      const telegram = r.ok ? availabilityFromStatus(r.data) : null;
+      if (telegram && $("st-confirm").hidden === false) mountReminders({ root: reminders, api, token: t, telegram, navigate: (u) => location.assign(u), track: () => {} });
+    } finally {
+      rc.removeAttribute("data-reserve");
+    }
+  }
+
+  // The summary is the booking done page's own row (label and value on one row): salon / address only with a value; text only (textContent).
+  // `service`: the single view's service name; with several services the tick list shows them (read-only view: the names, one row).
+  function renderFacts(prefix: "c" | "r", info: CancelInfo, service: string | null = info.serviceName) {
+    const rows: [string, string | null][] = [
+      ["master", info.masterName],
+      ["service", service],
+      ["when", formatWhen(info.startsAt)],
+      ["salon", factText(info.salonName)],
+      ["address", addressWithNote(info.address, info.locationNote)],
+    ];
+    $(`${prefix}-facts`).replaceChildren(
+      ...rows.flatMap(([key, value]) => {
+        if (!value) return [];
+        const row = kvRow(root.dataset[`l${key[0]!.toUpperCase()}${key.slice(1)}`] ?? "", value);
+        row.dataset.fact = key;
+        return [row];
+      }),
+    );
+  }
+
+  // Phase 026. One service = today's single button (nothing to choose, so no tick row and no extra step). Several = tick list, nothing preselected,
+  // the button counts the ticked services. The ticked ids are the checkbox values; they are sent in the POST body only.
+  const svcs = $("c-svcs");
+  const rows = $("c-rows");
+  const status = $("c-status");
+  const tpl = $("tpl-row") as HTMLTemplateElement;
+  let multi = false;
+  const ticked = () => [...rows.querySelectorAll<HTMLInputElement>("input:checked")].map((i) => i.value);
+  function updateCta() {
+    if (!multi) {
+      confirmBtn.disabled = false;
+      label.textContent = root.dataset.confirm ?? "";
+      return;
+    }
+    const n = ticked().length;
+    confirmBtn.disabled = n === 0;
+    label.textContent = n ? countLabel(n, [root.dataset.mOne ?? "", root.dataset.mFew ?? "", root.dataset.mMany ?? ""]) : (root.dataset.mNone ?? "");
+  }
+  function renderRows(info: CancelInfo) {
+    rows.replaceChildren(
+      ...itemsOf(info).map((it) => {
+        const row = (tpl.content.cloneNode(true) as DocumentFragment).firstElementChild as HTMLElement;
+        const input = row.querySelector("input")!;
+        input.value = it.bookingId;
+        row.querySelector(".name")!.textContent = it.serviceName;
+        row.querySelector(".deep")!.textContent = formatTime(it.startsAt);
+        row.querySelector(".dur")!.append(formatDuration(it.durationMinutes));
+        const why = itemReason(it);
+        if (why) {
+          input.disabled = true;
+          row.classList.add("off");
+          const note = row.querySelector<HTMLElement>(".why")!;
+          note.textContent = root.dataset[`mReason${why[0]!.toUpperCase()}${why.slice(1)}`] ?? "";
+          note.hidden = false;
+        }
+        return row;
+      }),
+    );
+  }
+  // Phase 032: /c/{token}?n=1 is served as the `confirmed` variant of this page (see l/cancel-confirmed.astro): its own calendar entry listens for this event and builds
+  // the buttons from the same answer (no second call). This script has no dynamic import, so a plain /c/{token} visit loads nothing of the calendar.
+  const confirmedView = new URLSearchParams(location.search).get("n") === "1";
+  function renderCalendar(info: CancelInfo) {
+    const host = document.getElementById("c-cal");
+    if (!confirmedView || !token || !host) return;
+    const items = itemsOf(info).filter((i) => i.status === "CONFIRMED");
+    // Cancelable: the calendar entry calls preventDefault() when it takes the event. Nobody did (its script failed to load) = drop the reserved block, never an empty gap.
+    const taken = !document.dispatchEvent(
+      new CustomEvent("cancel:calendar", { cancelable: true, detail: { items, master: info.masterName, where: [factText(info.salonName), factText(info.address)].filter(Boolean).join(", "), path: location.pathname } }),
+    );
+    if (!taken) host.hidden = true;
+  }
+  function renderConfirm(info: CancelInfo) {
+    multi = isMulti(info);
+    renderCalendar(info);
+    svcs.hidden = !multi;
+    renderFacts("c", info, multi ? null : info.serviceName);
+    if (multi) renderRows(info);
+    else rows.replaceChildren();
+    $("c-until").textContent = (root.dataset.until ?? "").replace("{time}", formatWhen(info.windowClosesAt));
+    updateCta();
+  }
+  rows.addEventListener("change", updateCta);
+
+  async function load() {
+    if (!token) return show("notfound");
+    show("loading");
+    status.hidden = true;
+    const { state, info } = await fetchInfo(api, token);
+    if (info && state === "confirm") renderConfirm(info);
+    if (info && state === "readonly") {
+      const kind = readonlyKindOf(info).toLowerCase();
+      const names = itemsOf(info).map((i) => i.serviceName);
+      renderFacts("r", info, names.length > 1 ? names.join(", ") : info.serviceName);
+      const text = $("r-text");
+      text.textContent = root.dataset[`roText${kind[0]!.toUpperCase()}${kind.slice(1)}`] ?? "";
+      text.hidden = !text.textContent;
+      const rebook = safeRebookPath(info.rebookPath);
+      if (rebook) $("r-rebook-link").setAttribute("href", rebook);
+      $("r-rebook").hidden = !rebook;
+      show(state, root.dataset[`roTitle${kind[0]!.toUpperCase()}${kind.slice(1)}`]);
+      return;
+    }
+    if (state === "confirm" && !remindersAsked) rc.setAttribute("data-reserve", "");
+    show(state, state === "confirm" ? (confirmedView ? root.dataset.hNew : multi ? root.dataset.mTitle : undefined) : undefined);
+    if (state === "confirm") void offerReminders(token);
+  }
+
+  confirmBtn.addEventListener("click", async () => {
+    if (!token || confirmBtn.disabled) return;
+    const ids = multi ? ticked() : undefined;
+    confirmBtn.disabled = true;
+    confirmBtn.setAttribute("aria-busy", "true");
+    label.textContent = root.dataset.cancelling ?? "";
+    const r = await cancelBooking(api, token, ids);
+    confirmBtn.removeAttribute("aria-busy");
+    // Some services are still cancellable: stay on the list, re-rendered from the answer, and say how many are cancelled so far.
+    if (r.info && r.state === "cancelled" && stateForInfo(r.info) === "confirm") {
+      const { done, total } = cancelledCount(itemsOf(r.info));
+      renderConfirm(r.info);
+      status.textContent = (root.dataset.mPartial ?? "").replace("{done}", String(done)).replace("{total}", String(total));
+      status.hidden = false;
+      status.focus();
+      return;
+    }
+    updateCta();
+    show(r.state);
+    if (r.state === "cancelled" && reminders) {
+      reminders.hidden = true;
+      rc.removeAttribute("data-reserve");
+    }
+  });
+  $("c-retry").addEventListener("click", load);
+  load();
+</script>

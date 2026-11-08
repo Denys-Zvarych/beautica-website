@@ -1,8 +1,8 @@
 // «Додати в календар»: the three ways to put a booking in a calendar. Pure, no DOM. Content = time, master, services, place and the cancel link (the guest already gets it by SMS), never a phone or name.
 // Google is a top-level navigation (target=_blank) to Google Calendar's own "new event" page: it works in every in-app webview (Telegram, Instagram,
 // Facebook) and on Android, where a downloaded .ics has no handler. The .ics link (/api/ics, served inline) is for iPhone / iPad / macOS.
-import { cancelPath, cancelToken } from "./api.ts";
-import { isIosInAppBrowser, type OtpEnv } from "./otp-format.ts";
+import { cancelPath, cancelToken } from "./cancel-path.ts";
+import { isIosInAppBrowser, isIosMetaInAppBrowser, type OtpEnv } from "./otp-format.ts";
 
 export interface CalendarEvent {
   /** UTC ISO instant. */
@@ -37,6 +37,8 @@ const toEnv = (e: CalEnv): OtpEnv => (typeof e === "string" ? { ua: e, maxTouchP
 /** iOS in-app browsers (Instagram, Facebook, Telegram, WhatsApp, ...) run their own WKWebView that never hands a text/calendar response to the system «Add event» sheet:
  *  `x-safari-https://` (iOS 17+) opens Safari, which does. Everything else keeps the plain relative link. Detection lives in otp-format.ts only. */
 export const isIosInApp = (e: CalEnv): boolean => isIosInAppBrowser(toEnv(e));
+/** Instagram / Facebook on iOS: x-safari-https is blocked, so the Apple button needs the «open in the external browser» hint (phase 032). */
+export const isIosMetaInApp = (e: CalEnv): boolean => isIosMetaInAppBrowser(toEnv(e));
 export const appleHref = (path: string, origin: string, e: CalEnv): string => (isIosInApp(e) && /^https?:\/\//.test(origin) ? `x-safari-${origin}${path}` : path);
 
 export function calendarLinks(ev: CalendarEvent, env: CalEnv = "", origin = ""): Record<CalendarKind, string> {

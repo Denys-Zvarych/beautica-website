@@ -94,7 +94,7 @@ jobs:
       - name: Responsive check (all pages)
         env:
           CHROMIUM_PATH: /usr/bin/google-chrome
-        run: node scripts/check-responsive.mjs --routes /,/404,/privacy,/terms,/support,/delete-account,/l/invite,/l/booking,/l/review,/l/cancel
+        run: node scripts/check-responsive.mjs --routes /,/404,/privacy,/terms,/support,/delete-account,/l/invite,/l/booking,/l/review,/l/cancel,/l/cancel-confirmed
 
       # Build-output checks that need no server: CSP-safe markup, size budgets, _headers == securityHeaders.ts, rewrites.
       - name: Static build checks (CSP-safe markup, budgets, header parity)
