@@ -47,7 +47,15 @@ const rules: [RegExp[], string][] = [
   [[/масаж/], "body_massage"],
 ];
 
-const KNOWN_KEYS = new Set(Object.values(exact));
+export const FALLBACK_KEY ="cosmetology";
+
+/** Keys resolvable from a category key (the `exact` map values). */
+export const KNOWN_KEYS: ReadonlySet<string> = new Set(Object.values(exact));
+
+/** Every icon key this module can emit: `exact` + `rules` + the fallback. Tests import it. */
+export const CATEGORY_ICON_TARGETS: readonly string[] = Object.freeze([
+  ...new Set([...Object.values(exact), ...rules.map(([, key]) => key), FALLBACK_KEY]),
+]);
 
 /** Prefer the category key (the app's slug stage), then the display name. */
 export function categoryIconFor(name: string, key?: string | null): string {
@@ -59,5 +67,5 @@ export function categoryIconUrl(name: string): string {
   const lower = name.trim().toLowerCase();
   if (Object.hasOwn(exact, lower)) return `/icons/category_${exact[lower]}.svg`;
   const hit = rules.find(([res]) => res.every((re) => re.test(lower)));
-  return `/icons/category_${hit ? hit[1] : "cosmetology"}.svg`;
+  return `/icons/category_${hit ? hit[1] : FALLBACK_KEY}.svg`;
 }
