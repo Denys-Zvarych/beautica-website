@@ -2,13 +2,14 @@
 // Node strips the TypeScript types itself; these modules import nothing from the Astro/Workers runtime.
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import { readFileSync, readdirSync, existsSync } from "node:fs";
 import { ROOT } from "./helpers/env.mjs";
 import { isValidSlug } from "../src/lib/booking/slug.ts";
 import { parseMasterInfo, parseSalonInfo, parseReviewsPage, safeImageUrl, imageOrigin } from "../src/lib/booking/types.ts";
 import { groupByCategory, parseSort, streetLine, formatPriceFrom, formatDuration, pluralServices, pluralReviews, formatRating, fitTitle, fitDescription, relativeUk } from "../src/lib/booking/format.ts";
 import { upstreamTtl } from "../src/lib/booking/cache.ts";
-import { categoryIconUrl } from "../src/lib/categoryIcon.ts";
+import { categoryIconUrl, categoryIconFor } from "../src/lib/categoryIcon.ts";
 import { PRIVACY_POLICY_VERSION } from "../src/config/legal.mjs";
 import { SVC } from "./helpers/mock-api.mjs";
 
@@ -127,6 +128,52 @@ describe("category icons (port of the app's keyword stage)", () => {
     assert.equal(categoryIconUrl("Ламінування вій"), "/icons/category_lash_lamination.svg");
     assert.equal(categoryIconUrl("Брови"), "/icons/category_brows.svg");
     assert.equal(categoryIconUrl("Стрижка"), "/icons/category_hairdressing.svg");
+  });
+});
+
+describe("body massage category icon (phase 035)", () => {
+  const MASSAGE = "/icons/category_body_massage.svg";
+  const FALLBACK = "/icons/category_cosmetology.svg";
+  test("exact platform name resolves to the massage icon", () => assert.equal(categoryIconUrl("Масаж і догляд за тілом"), MASSAGE));
+  test("exact name is trimmed and case-insensitive", () => assert.equal(categoryIconUrl("  МАСАЖ І ДОГЛЯД ЗА ТІЛОМ "), MASSAGE));
+  test("the BODY_MASSAGE key wins, any name", () => {
+    assert.equal(categoryIconFor("Масаж і догляд за тілом", "BODY_MASSAGE"), MASSAGE);
+    assert.equal(categoryIconFor("Щось інше", "BODY_MASSAGE"), MASSAGE);
+  });
+  test("keyword stage: a name with only «масаж» maps to massage", () => {
+    assert.equal(categoryIconUrl("Класичний масаж"), MASSAGE);
+    assert.equal(categoryIconFor("Антицелюлітний масаж"), MASSAGE);
+  });
+  test("a more specific rule beats the massage keyword", () => {
+    assert.equal(categoryIconUrl("Масаж обличчя косметологія"), "/icons/category_cosmetology.svg");
+    assert.equal(categoryIconUrl("Масаж волосся"), "/icons/category_hairdressing.svg");
+    assert.equal(categoryIconUrl("Масаж і депіляція"), "/icons/category_hair_removal.svg");
+  });
+  test("unknown name and unknown key fall back to cosmetology", () => {
+    assert.equal(categoryIconUrl("Щось невідоме"), FALLBACK);
+    assert.equal(categoryIconFor("Щось невідоме", "NOPE"), FALLBACK);
+    assert.equal(categoryIconFor("Щось невідоме", null), FALLBACK);
+  });
+  test("prototype keys are not categories (own-property lookup)", () => {
+    for (const n of ["constructor", "__proto__", "toString", "hasOwnProperty", "valueOf"]) assert.equal(categoryIconUrl(n), FALLBACK, n);
+    assert.equal(categoryIconFor("constructor", "constructor"), FALLBACK);
+  });
+});
+
+describe("category icon files (21)", () => {
+  const dir = join(ROOT, "public", "icons");
+  const files = readdirSync(dir).filter((f) => /^category_.+\.svg$/.test(f));
+  const src = readFileSync(join(ROOT, "src/lib/categoryIcon.ts"), "utf8");
+  test("public/icons holds exactly 21 category_*.svg", () => assert.equal(files.length, 21, files.join(",")));
+  test("every exact and rule target has a file", () => {
+    const targets = new Set([...src.matchAll(/(?:"[^"]+":\s*|\],\s*)"([a-z_]+)"/g)].map((m) => m[1]));
+    assert.ok(targets.size >= 20, `parsed ${targets.size} targets`);
+    for (const t of targets) assert.ok(files.includes(`category_${t}.svg`), `missing category_${t}.svg`);
+  });
+  test("category_body_massage.svg is byte-identical to the app's", (t) => {
+    const app = join(ROOT, "..", "beautica-mobile", "assets", "icons", "category_body_massage.svg");
+    if (!existsSync(app)) return t.skip("sibling repo ../beautica-mobile absent: byte parity not checked");
+    assert.ok(readFileSync(join(dir, "category_body_massage.svg")).equals(readFileSync(app)));
   });
 });
 
