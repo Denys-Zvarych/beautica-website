@@ -275,13 +275,29 @@ describe("home JSON-LD", () => {
 });
 
 describe("endpoint and well-known", () => {
-  test("/.well-known/assetlinks.json is 200 JSON (an array), directly, cacheable for an hour", async () => {
+  test("/.well-known/assetlinks.json is 200 JSON (an array), directly, cacheable for 5 minutes", async () => {
     const res = await rawRequest("/.well-known/assetlinks.json");
     assert.equal(res.status, 200);
     assert.equal(res.headers.location, undefined);
     assert.match(res.headers["content-type"], /^application\/json/);
-    assert.deepEqual(res.all("cache-control"), ["public, max-age=3600"]);
+    assert.deepEqual(res.all("cache-control"), ["public, max-age=300"]);
     assert.ok(Array.isArray(JSON.parse(res.body)));
+  });
+
+  test("/.well-known/assetlinks.json holds one android_app handle_all_urls statement with both signing fingerprints", async () => {
+    const res = await rawRequest("/.well-known/assetlinks.json");
+    assert.notEqual(res.body.trim(), "");
+    const statements = JSON.parse(res.body);
+    assert.equal(statements.length, 1);
+    const [{ relation, target }] = statements;
+    assert.deepEqual(relation, ["delegate_permission/common.handle_all_urls"]);
+    assert.equal(target.namespace, "android_app");
+    assert.equal(target.package_name, "com.beautica.app");
+    const fingerprints = target.sha256_cert_fingerprints;
+    assert.equal(fingerprints.length, 2);
+    for (const fp of fingerprints) assert.match(fp, /^([0-9A-F]{2}:){31}[0-9A-F]{2}$/);
+    assert.ok(fingerprints.includes("EC:4E:53:47:89:90:97:76:D6:D6:E6:66:89:EA:DE:AE:2F:4B:EF:31:E7:BB:5F:11:95:13:95:D5:79:01:39:96"), "Play App Signing key");
+    assert.ok(fingerprints.includes("84:C0:34:50:19:5C:16:DC:DC:C5:76:C1:94:D0:21:5F:DD:88:A5:AB:91:29:69:5A:EE:23:25:6F:95:2B:21:89"), "upload key");
   });
 
   test("/api/delete-request GET is 405 (never a cached page)", async () => {

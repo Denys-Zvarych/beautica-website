@@ -2,15 +2,18 @@
 // Node strips the TypeScript types itself; these modules import nothing from the Astro/Workers runtime.
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import { readFileSync, readdirSync } from "node:fs";
+import { createHash } from "node:crypto";
 import { ROOT } from "./helpers/env.mjs";
 import { isValidSlug } from "../src/lib/booking/slug.ts";
 import { parseMasterInfo, parseSalonInfo, parseReviewsPage, safeImageUrl, imageOrigin } from "../src/lib/booking/types.ts";
 import { groupByCategory, parseSort, streetLine, formatPriceFrom, formatDuration, pluralServices, pluralReviews, formatRating, fitTitle, fitDescription, relativeUk } from "../src/lib/booking/format.ts";
 import { upstreamTtl } from "../src/lib/booking/cache.ts";
-import { categoryIconUrl } from "../src/lib/categoryIcon.ts";
+import { categoryIconUrl, categoryIconFor, KNOWN_KEYS, CATEGORY_ICON_TARGETS } from "../src/lib/categoryIcon.ts";
 import { PRIVACY_POLICY_VERSION } from "../src/config/legal.mjs";
 import { SVC } from "./helpers/mock-api.mjs";
+import { siblingPath, mobileGate } from "./helpers/backend.mjs";
 
 const nb = " ";
 
@@ -127,6 +130,126 @@ describe("category icons (port of the app's keyword stage)", () => {
     assert.equal(categoryIconUrl("Ламінування вій"), "/icons/category_lash_lamination.svg");
     assert.equal(categoryIconUrl("Брови"), "/icons/category_brows.svg");
     assert.equal(categoryIconUrl("Стрижка"), "/icons/category_hairdressing.svg");
+  });
+});
+
+describe("body massage category icon (phase 035)", () => {
+  const MASSAGE = "/icons/category_body_massage.svg";
+  const FALLBACK = "/icons/category_cosmetology.svg";
+  test("exact platform name resolves to the massage icon", () => assert.equal(categoryIconUrl("Масаж і догляд за тілом"), MASSAGE));
+  test("exact name is trimmed and case-insensitive", () => assert.equal(categoryIconUrl("  МАСАЖ І ДОГЛЯД ЗА ТІЛОМ "), MASSAGE));
+  test("the BODY_MASSAGE key wins, any name", () => {
+    assert.equal(categoryIconFor("Масаж і догляд за тілом", "BODY_MASSAGE"), MASSAGE);
+    assert.equal(categoryIconFor("Щось інше", "BODY_MASSAGE"), MASSAGE);
+  });
+  test("the key is case-insensitive: lowercase body_massage wins, any name", () => {
+    assert.equal(categoryIconFor("Щось інше", "body_massage"), MASSAGE);
+    assert.equal(categoryIconFor("Щось інше", "Body_Massage"), MASSAGE);
+  });
+  test("an unknown key with a massage name maps via the name rule; with a non-massage name, the fallback", () => {
+    assert.equal(categoryIconFor("Масаж і догляд за тілом", "NOPE"), MASSAGE);
+    assert.equal(categoryIconFor("Антицелюлітний масаж", "NOPE"), MASSAGE);
+    assert.equal(categoryIconFor("Класичний масаж", ""), MASSAGE);
+    assert.equal(categoryIconFor("Щось невідоме", "NOPE"), FALLBACK);
+  });
+  test("keyword stage: a name with only «масаж» maps to massage", () => {
+    assert.equal(categoryIconUrl("Класичний масаж"), MASSAGE);
+    assert.equal(categoryIconFor("Антицелюлітний масаж"), MASSAGE);
+  });
+  test("a more specific rule beats the massage keyword", () => {
+    assert.equal(categoryIconUrl("Масаж обличчя косметологія"), "/icons/category_cosmetology.svg");
+    assert.equal(categoryIconUrl("Масаж волосся"), "/icons/category_hairdressing.svg");
+    assert.equal(categoryIconUrl("Масаж і депіляція"), "/icons/category_hair_removal.svg");
+  });
+  test("unknown name and unknown key fall back to cosmetology", () => {
+    assert.equal(categoryIconUrl("Щось невідоме"), FALLBACK);
+    assert.equal(categoryIconFor("Щось невідоме", "NOPE"), FALLBACK);
+    assert.equal(categoryIconFor("Щось невідоме", null), FALLBACK);
+  });
+  test("prototype keys are not categories (own-property lookup)", () => {
+    for (const n of ["constructor", "__proto__", "toString", "hasOwnProperty", "valueOf"]) assert.equal(categoryIconUrl(n), FALLBACK, n);
+    assert.equal(categoryIconFor("constructor", "constructor"), FALLBACK);
+  });
+});
+
+describe("category icon files", () => {
+  const FALLBACK = categoryIconUrl("Щось невідоме");
+  const dir = join(ROOT, "public", "icons");
+  const files = readdirSync(dir).filter((f) => /^category_.+\.svg$/.test(f)).sort();
+  const targets = CATEGORY_ICON_TARGETS.map((t) => `category_${t}.svg`).sort();
+  /** sha256 of public/icons/category_body_massage.svg = the app's assets/icons/category_body_massage.svg. Change it only together with the app's file. */
+  const MASSAGE_SHA256 = "7a222e0baa1c38d7d0833a5ed9ab50a932d501caf4c6665885ebcb498c371b18";
+  const sha = (buf) => createHash("sha256").update(buf).digest("hex");
+
+  test("category_*.svg file names equal the icon keys categoryIcon.ts can emit (no orphan, no missing file)", () => {
+    assert.deepEqual(files, targets);
+  });
+  test("every key the category-key stage knows is an emittable icon, and the fallback glyph is one of them", () => {
+    for (const k of KNOWN_KEYS) assert.ok(CATEGORY_ICON_TARGETS.includes(k), k);
+    assert.ok(CATEGORY_ICON_TARGETS.includes(FALLBACK.match(/category_(.+)\.svg/)[1]));
+  });
+  test("the claims ledger count («N category icons») equals the number of icon keys", () => {
+    const row = readFileSync(join(ROOT, "docs", "claims.md"), "utf8").split("\n").find((l) => /^\| \d+ category icons/.test(l));
+    assert.ok(row, "claims row «N category icons» is gone");
+    assert.equal(Number(/^\| (\d+) /.exec(row)[1]), CATEGORY_ICON_TARGETS.length);
+  });
+  test("category_body_massage.svg is pinned to the app's bytes (sha256; always runs, also without the sibling repo)", () => {
+    assert.equal(sha(readFileSync(join(dir, "category_body_massage.svg"))), MASSAGE_SHA256);
+  });
+  test("category_body_massage.svg is byte-identical to the sibling app's file (extra check, runs when ../beautica-mobile is present)", (t) => {
+    const app = siblingPath("../beautica-mobile/assets/icons/category_body_massage.svg");
+    if (!mobileGate(app)) return t.skip("sibling repo absent: the sha256 pin above is the guard");
+    assert.equal(sha(readFileSync(app)), sha(readFileSync(join(dir, "category_body_massage.svg"))));
+    assert.equal(sha(readFileSync(app)), MASSAGE_SHA256, "the app's file changed: update MASSAGE_SHA256 together with public/icons");
+  });
+  test("the app's category_icons.dart still maps «масаж» to the body massage icon (the line the claims row points at)", (t) => {
+    const row = readFileSync(join(ROOT, "docs", "claims.md"), "utf8").split("\n").find((l) => l.includes("category_icons.dart:"));
+    assert.ok(row, "claims row for category_icons.dart is gone");
+    const [, rel, line] = /`(\.\.\/beautica-mobile\/[^:`]+):(\d+)`/.exec(row);
+    const file = siblingPath(rel);
+    if (!mobileGate(file)) return t.skip("sibling repo absent");
+    const lines = readFileSync(file, "utf8").split("\n");
+    const at = lines.slice(Number(line) - 1, Number(line) + 1).join(" ");
+    assert.ok(at.includes("'масаж'") && at.includes("categoryBodyMassage"), `claims row line ${line} no longer holds the massage rule: ${at}`);
+  });
+
+  describe("every category icon is a safe, well-formed SVG", () => {
+    /** Strict-enough well-formedness: one <svg> root, balanced tags, quoted attributes, no stray < or &. */
+    function wellFormed(xml) {
+      const body = xml.replace(/^\s*<\?xml[^>]*\?>/, "").replace(/<!--[\s\S]*?-->/g, "").trim();
+      const stack = [];
+      let pos = 0, roots = 0;
+      for (const m of body.matchAll(/<(\/?)([A-Za-z][\w:.-]*)((?:\s+[\w:.-]+\s*=\s*(?:"[^"<]*"|'[^'<]*'))*)\s*(\/?)>/g)) {
+        if (/[<&](?!(?:amp|lt|gt|quot|apos|#\d+|#x[\da-f]+);)/i.test(body.slice(pos, m.index).replace(/&(?:amp|lt|gt|quot|apos|#\d+|#x[\da-f]+);/gi, ""))) return "stray < or & in text";
+        pos = m.index + m[0].length;
+        if (m[1]) { if (stack.pop() !== m[2]) return `unbalanced </${m[2]}>`; }
+        else { if (!stack.length) roots++; if (!m[4]) stack.push(m[2]); }
+      }
+      if (body.slice(pos).trim()) return "trailing content";
+      if (/<(?!\/?[A-Za-z])/.test(body)) return "malformed tag";
+      if (stack.length) return `unclosed <${stack.at(-1)}>`;
+      return roots === 1 && /^<svg[\s>]/.test(body) ? null : "exactly one <svg> root expected";
+    }
+    for (const f of files) {
+      test(f, () => {
+        const buf = readFileSync(join(dir, f));
+        const xml = buf.toString("utf8");
+        assert.equal(wellFormed(xml), null, "well-formed XML");
+        assert.match(xml, /<svg\b[^>]*\sviewBox="[^"]+"/, "has a viewBox");
+        assert.match(xml, /<svg\b[^>]*\sxmlns="http:\/\/www\.w3\.org\/2000\/svg"/);
+        assert.doesNotMatch(xml, /<\s*(script|foreignObject|iframe|object|embed|style)\b/i, "no script / foreignObject / active content");
+        assert.doesNotMatch(xml, /\son[a-z]+\s*=/i, "no on* attributes");
+        assert.doesNotMatch(xml, /\b(?:xlink:)?href\s*=\s*["'](?!#)/i, "no external href (fragment refs only)");
+        assert.doesNotMatch(xml, /url\(\s*["']?(?!#)/i, "no external url()");
+        assert.ok(buf.length <= 16 * 1024, `${buf.length} bytes > 16 KB`);
+      });
+    }
+    test("the checker itself rejects bad input (script, unbalanced, on*, external href)", () => {
+      assert.equal(wellFormed('<svg viewBox="0 0 1 1"><path d="M0 0"/></svg>'), null);
+      assert.ok(wellFormed('<svg viewBox="0 0 1 1"><g></svg>'));
+      assert.ok(wellFormed('<svg viewBox="0 0 1 1"><path d="M0 0"></svg>'));
+      assert.ok(wellFormed('<svg viewBox="0 0 1 1"></svg><svg></svg>'));
+    });
   });
 });
 

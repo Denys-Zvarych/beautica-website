@@ -257,6 +257,15 @@ describe("salon page", async () => {
   });
 });
 
+describe("salon page: category icons in the first HTML (phase 035)", async () => {
+  const res = await get("/book/s/wiz-massage-0001");
+  const icons = [...res.body.matchAll(/<details class="cat-group"[\s\S]*?<span class="lbl[^>]*>([^<]+)<\/span>/g)].map((m) => [m[0].match(/data-src="([^"]+)"/)[1], m[1]]);
+  test("a BODY_MASSAGE group shows the massage icon", () => assert.ok(icons.some(([src, name]) => name === "Масаж і догляд за тілом" && src === "/icons/category_body_massage.svg"), JSON.stringify(icons)));
+  test("an unknown key with a massage name maps via the name rule", () => assert.ok(icons.some(([src, name]) => name === "Антицелюлітний масаж" && src === "/icons/category_body_massage.svg"), JSON.stringify(icons)));
+  test("the other groups keep their own icons", () => assert.ok(icons.some(([src, name]) => name === "Нігтьовий сервіс" && src === "/icons/category_nail_service.svg"), JSON.stringify(icons)));
+  test("the massage icon file is served", async () => assert.equal((await get("/icons/category_body_massage.svg")).status, 200));
+});
+
 describe("salon hero card: rating line, address rule, note, image preconnect, cover <img>", async () => {
   const page = async (slug) => (await get(`/book/s/${slug}`)).body;
   const ratingLine = (html) => strip(html.match(/<div class="ratingline">[\s\S]*?<\/div>/)?.[0] ?? "").replace(/\s*·/, " ·");
