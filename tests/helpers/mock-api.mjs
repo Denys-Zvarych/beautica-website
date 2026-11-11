@@ -187,6 +187,11 @@ const wizCats = [["NAIL_SERVICE", "Нігтьовий сервіс"], ["BROWS", 
 /** A slug containing "many" adds 12 more nail services (14 in all) so the 10-services cap can be reached. */
 const wizExtra = (slug) => (slug.includes("many") ? Array.from({ length: 12 }, (_, i) => ({ n: 20 + i, id: uid("d", 20 + i), name: `Додаткова послуга ${i + 1}`, min: 30, price: 100, label: "100 ₴", category: "NAIL_SERVICE" })) : []);
 /** A slug containing "crowd" adds 5 masters (8 in all, past the salon page's cap of 6) and makes the 8th the only one who does service 4. */
+/** A slug containing "massage" adds two categories: the BODY_MASSAGE key, and an unknown key whose name only the keyword rule («масаж») resolves. */
+const wizMassage = (slug) => (slug.includes("massage") ? [
+  { category: "BODY_MASSAGE", displayName: "Масаж і догляд за тілом", count: 1, services: [{ id: uid("d", 40), name: "Релакс-масаж", baseDurationMinutes: 60, priceMin: 700, priceDisplay: "700 ₴" }] },
+  { category: "NOPE", displayName: "Антицелюлітний масаж", count: 1, services: [{ id: uid("d", 41), name: "Антицелюліт", baseDurationMinutes: 45, priceMin: 500, priceDisplay: "500 ₴" }] },
+] : []);
 const wizCrowd = (slug) => (slug.includes("crowd") ? [4, 5, 6, 7, 8].map((n) => ({ n, id: uid("e", n), slug: null, name: `Майстер ${n}` })) : []);
 const wizInfo = (slug = "") => ({
   salonId: WIZ.salonId,
@@ -208,7 +213,7 @@ const wizInfo = (slug = "") => ({
   serviceCategories: wizCats.map(([category, displayName]) => {
     const services = [...WIZ.services, ...wizExtra(slug)].filter((sv) => sv.category === category).map((sv) => ({ id: sv.id, name: slug.includes("dollar") && sv.n === 3 ? "Брови $& тест" : sv.name, baseDurationMinutes: sv.min, priceMin: sv.price, priceDisplay: sv.label }));
     return { category, displayName, count: services.length, services };
-  }),
+  }).concat(wizMassage(slug)),
   ratingDistribution: [5, 4, 3, 2, 1].map((rating, i) => ({ rating, count: [8, 3, 1, 0, 0][i] })),
   latestReviews: [],
   serviceCoverage: [...WIZ.services, ...wizExtra(slug)].map((sv) => ({ serviceId: sv.id, masters: (slug.includes("crowd") && sv.n === 4 ? [8] : WIZ.coverage[sv.n] ?? [1]).map((m) => ({ masterId: uid("e", m), masterServiceId: wizAssign(m, sv.n) })) })),

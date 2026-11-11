@@ -25,7 +25,7 @@ Columns:
 | Guest can cancel a booking until 2 hours before it starts | l/cancel#st-closed | `../beautica-backend/src/main/java/com/beautica/config/BookingSmsProperties.java:33` | live |
 | After that window the cancel is refused (422) and the guest is told to contact the master | l/cancel#st-closed | `../beautica-backend/src/main/java/com/beautica/booking/service/BookingCancellationService.java:150` | live |
 | A used or unknown cancel link answers 404 («вже використано або недійсне») | l/cancel#st-notfound | `../beautica-backend/src/main/java/com/beautica/booking/controller/PublicBookingController.java:234` | live |
-| Invite email links to /invite/accept?token= (opens in the app) | l/invite#main | `../beautica-backend/src/main/java/com/beautica/auth/InviteService.java:426` | live |
+| Invite email links to /invite/accept?token= (opens in the app) | l/invite#main | `../beautica-backend/src/main/java/com/beautica/auth/InviteService.java:427` | live |
 | Booking email links to /bookings/{id} (details in the app) | l/booking#main | `../beautica-backend/src/main/java/com/beautica/notification/service/NotificationService.java:523` | live |
 | Review email links to /bookings/{id}/review (review left in the app) | l/review#main | `../beautica-backend/src/main/java/com/beautica/notification/service/NotificationService.java:510` | live |
 | Guest cancel SMS/email links to /c/{token} (short alias; the old /book/cancel/{token} links keep working) | l/cancel#main | `../beautica-backend/src/main/java/com/beautica/booking/service/GuestCancelUrlBuilder.java:21` | live |
@@ -87,7 +87,7 @@ Columns:
 | Telegram (opt-in, guests): the confirmation of a booking the master / salon made for the guest can go to Telegram (2026-11-04) | privacy#guest | `../beautica-backend/src/main/java/com/beautica/notification/channel/GuestMessageKind.java:14` | live |
 | Telegram link is keyed by an HMAC-SHA-256 of the phone | privacy#guest | `../beautica-backend/src/main/java/com/beautica/common/security/PhoneHasher.java:29` | live |
 | Telegram link row holds the phone hash and no raw phone (the number shared in the bot is compared once and discarded) | privacy#guest | `../beautica-backend/src/main/java/com/beautica/notification/telegram/link/TelegramLink.java:42` | live |
-| Telegram link is deleted with the guest data 12 months after the last visit | privacy#retention | `../beautica-backend/src/main/resources/application.yml:683` | live |
+| Telegram link is deleted with the guest data 12 months after the last visit | privacy#retention | `../beautica-backend/src/main/resources/application.yml:688` | live |
 | Telegram link is deleted 12 months after the bot was blocked (phase 409 D2, NOT SHIPPED: release gate) | privacy#retention | `../docs/backend-phases/phase-409-telegram-retention-erasure.md:20` | not-live |
 | Telegram link codes are deleted at most 2 days after they expire: 1 day past expiry, daily job (phase 409 D4, NOT SHIPPED: release gate) | privacy#retention | `../docs/backend-phases/phase-409-telegram-retention-erasure.md:25` | not-live |
 | In-app crash reports are on by default (opt-out switch) | privacy#data | `../beautica-mobile/lib/core/diagnostics/install_id.dart:93` | live |
@@ -100,3 +100,4 @@ Columns:
 | In-app crash reports: menu → «Акаунт» → switch «Надсилати звіти про збої» works for a client and an independent master | privacy#data | `../beautica-mobile/integration_test/crash_reports_toggle_flow_test.dart:104` | live |
 | In-app crash reports: menu → «Акаунт» → switch «Надсилати звіти про збої» works for an independent master (via its menu) | privacy#data | `../beautica-mobile/integration_test/crash_reports_toggle_flow_test.dart:166` | live |
 | Sentry transfer mechanism: Functional Software, Inc. is self-certified under the EU-U.S. Data Privacy Framework; Standard Contractual Clauses (Decision 2021/914) are the fallback (sentry.io/privacy + DPA 5.1.0 at sentry.io/legal/dpa, verified 2026-11-05) | privacy#transfers | `../docs/website-phases/phase-028-privacy-crash-diagnostics.md:34` | live |
+| 21 category icons: «Масаж і догляд за тілом» is the 21st, shown with the app's own icon (guarded by tests/booking-lib.test.mjs «category icon files (21)») | src:src/lib/categoryIcon.ts#"масаж і догляд за тілом": "body_massage" | `../beautica-mobile/lib/core/icons/category_icons.dart:172` | live |
