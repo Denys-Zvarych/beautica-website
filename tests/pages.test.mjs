@@ -162,7 +162,7 @@ describe("open in app (Android only)", () => {
   const ANDROID = "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Mobile Safari/537.36";
   const IPHONE = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1";
   const DESKTOP = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36";
-  const PKG = "com.beautica.beautica_mobile";
+  const PKG = "com.beautica.app";
 
   for (const r of ROUTES.filter((x) => x.openInApp)) {
     const label = r.path.replace(TOKEN, ":id");
@@ -173,7 +173,11 @@ describe("open in app (Android only)", () => {
         const btn = page.getByRole("link", { name: uk.appLink.openInApp });
         await btn.waitFor({ state: "visible" });
         assert.ok(await visibleBox(btn));
-        assert.equal(await btn.getAttribute("href"), `intent://beautica.app${r.path}#Intent;scheme=https;package=${PKG};end`);
+        const href = await btn.getAttribute("href");
+        assert.equal(href, `intent://beautica.app${r.path}#Intent;scheme=https;package=${PKG};end`);
+        assert.ok(href.includes("package=com.beautica.app;"), "prod applicationId");
+        assert.ok(!href.includes("beautica_mobile"), "stale placeholder package");
+        assert.ok(href.startsWith(`intent://beautica.app${r.path}#Intent`), "keeps the real address-bar path");
       } finally {
         await context.close();
       }
