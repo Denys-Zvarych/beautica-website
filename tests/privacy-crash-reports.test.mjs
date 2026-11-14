@@ -77,9 +77,8 @@ describe("the opt-out switch label is one string across the policy and the app",
 });
 
 describe("the policy version is one value", () => {
-  test("front matter is 1.8 and its date equals PRIVACY_POLICY_VERSION", () => {
-    assert.equal(/^version: "([^"]+)"/m.exec(md)[1], "1.8");
+  test("front matter date equals PRIVACY_POLICY_VERSION", () => {
     assert.equal(/^updated: (\S+)/m.exec(md)[1], PRIVACY_POLICY_VERSION);
   });
-  test("the page shows version 1.8", () => assert.match(text, /Версія 1\.8/));
+  test("the page shows the front-matter version", () => assert.ok(text.includes(`Версія ${/^version: "([^"]+)"/m.exec(md)[1]}`)));
 });

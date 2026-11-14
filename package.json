@@ -17,7 +17,7 @@
     "list:not-live": "node scripts/list-not-live.mjs",
     "check:cls": "node scripts/measure-cls.mjs",
     "test": "node scripts/run-tests.mjs",
-    "test:static": "node --test --test-reporter=spec tests/static-build.test.mjs tests/legal-bump.test.mjs tests/privacy-telegram.test.mjs tests/privacy-crash-reports.test.mjs",
+    "test:static": "node --test --test-reporter=spec tests/static-build.test.mjs tests/legal-bump.test.mjs tests/privacy-telegram.test.mjs tests/privacy-crash-reports.test.mjs tests/legal-owner-delete.test.mjs",
     "test:contract": "node --test --test-reporter=spec tests/contract-booking-api.test.mjs tests/claims-pins.test.mjs tests/booking-config.test.mjs tests/privacy-telegram.test.mjs tests/ci-wiring.test.mjs tests/reminder-channel.test.mjs",
     "check:cls:ci": "node scripts/measure-cls.mjs --runs 1 --routes /,/privacy,/delete-account,/l/cancel",
     "check:lighthouse": "lhci autorun",

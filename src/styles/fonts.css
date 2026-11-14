@@ -70,6 +70,29 @@
   descent-override: 35.75%;
   line-gap-override: 0%;
 }
+/* Word space: it comes from the Latin file, which lands a frame after the Cyrillic one, so for a moment the real Cyrillic letters sat
+   between fallback spaces (Arial's 0.278em against Nunito's 0.258 / 0.271 bold) and a prose line near the wrap width re-wrapped (CLS 0.0075
+   on /terms, first paragraph, 1 Lighthouse run in 3). A space-only face scales the fallback space to the Nunito advance, so every swap
+   stage has the same line breaks. Same ascent/descent as the faces above. */
+@font-face {
+  font-family: "Nunito Fallback";
+  src: local("Arial"), local("Liberation Sans"), local("Arimo");
+  unicode-range: U+0020,U+00A0;
+  size-adjust: 92.86%;
+  ascent-override: 103.37%;
+  descent-override: 36.09%;
+  line-gap-override: 0%;
+}
+@font-face {
+  font-family: "Nunito Fallback";
+  font-weight: 700;
+  src: local("Arial Bold"), local("Liberation Sans Bold"), local("Arimo Bold");
+  unicode-range: U+0020,U+00A0;
+  size-adjust: 97.54%;
+  ascent-override: 104.1%;
+  descent-override: 36.35%;
+  line-gap-override: 0%;
+}
 @font-face {
   font-family: "Comfortaa";
   font-style: normal;
