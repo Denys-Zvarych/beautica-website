@@ -77,6 +77,7 @@ jobs:
           sparse-checkout: |
             lib/core/theme
             lib/features/booking/presentation
+            lib/l10n
             android/app/build.gradle.kts
 
       - name: Token parity (CSS vs Dart)
