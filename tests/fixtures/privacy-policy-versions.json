@@ -36,6 +36,10 @@
     {
       "version": "2026-11-07",
       "sha256": "384754e6c5c9bb8fb680fd76aa39f710d38d7186f03054a25ce91b7f2fef4ca3"
+    },
+    {
+      "version": "2026-11-14",
+      "sha256": "fcf86ef4862187a3c2bb3cc206db00e4cd607d4987d8ae904b11a5d92c55b606"
     }
   ]
 }

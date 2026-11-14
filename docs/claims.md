@@ -13,10 +13,10 @@ Columns:
 
 | claim | page anchor | source | status |
 |---|---|---|---|
-| Client, independent master, salon master and salon admin can delete their account in the app (owner cannot) | delete-account#app | `../beautica-mobile/lib/features/auth/presentation/auth_selectors.dart:142` | live |
+| Client, independent master, salon master and salon admin can delete their account in the app; a salon owner can once no active salon remains (first «Видалити салон» per salon) | delete-account#app | `../beautica-mobile/lib/features/auth/presentation/auth_selectors.dart:152` | live |
 | «Акаунт» → «Видалити акаунт» is the last row of the account page | delete-account#app | `../beautica-mobile/lib/features/settings/presentation/settings_screen.dart:564` | live |
 | Row label is «Видалити акаунт» | delete-account#app | `../beautica-mobile/lib/l10n/app_uk.arb:3079` | live |
-| Salon owner has only «Видалити салон» on the account page | delete-account#app | `../beautica-mobile/lib/features/settings/presentation/settings_screen.dart:310` | live |
+| Salon owner sees «Видалити салон» per salon; «Видалити акаунт» appears only after every salon is deleted (backend 409 OWNER_HAS_ACTIVE_SALONS / OWNER_SALON_HAS_STAFF otherwise) | delete-account#app | `../beautica-mobile/lib/features/settings/presentation/settings_screen.dart:548` | live |
 | Client path starts at the hub row «Акаунт» | delete-account#app | `../beautica-mobile/lib/features/home/presentation/client_settings_hub_screen.dart:187` | live |
 | Salon admin opens settings from the profile tune button | delete-account#app | `../beautica-mobile/lib/features/salon/presentation/admin_own_profile_screen.dart:347` | live |
 | Client with more than 50 future bookings must cancel some first | delete-account#app | `../beautica-backend/src/main/java/com/beautica/user/ClientAccountDeletionService.java:77` | live |
