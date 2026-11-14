@@ -77,6 +77,7 @@ jobs:
           sparse-checkout: |
             lib/core/theme
             lib/features/booking/presentation
+            android/app/build.gradle.kts
 
       - name: Token parity (CSS vs Dart)
         if: steps.mobile.outcome == 'success'
@@ -100,6 +101,9 @@ jobs:
       - name: Static build checks (CSP-safe markup, budgets, header parity)
         timeout-minutes: 5
         run: npm run test:static
+        env:
+          MOBILE_DIR: beautica-mobile
+          REQUIRE_MOBILE: ${{ steps.mobile.outcome == 'success' && '1' || '0' }}
 
       # Site <-> backend contract (phases 008/009): the mock backend, the parsers and every request body are compared with the backend's
       # Java records, and the numbers the pages state (2 h cancel, 60 days, 10 services) with the backend constants. The backend repo is
