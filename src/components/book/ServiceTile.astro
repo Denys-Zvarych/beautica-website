@@ -16,8 +16,10 @@ interface Props {
   checkbox?: boolean;
   time?: string;
   note?: string;
+  /** Phase 036: disambiguates same-name services (custom name or duration); rendered « · {hint}» after the name. */
+  hint?: string;
 }
-const { name, price, duration, selectable = false, id, minutes, priceFrom, filterId, checkbox = false, time, note } = Astro.props;
+const { name, price, duration, selectable = false, id, minutes, priceFrom, filterId, checkbox = false, time, note, hint } = Astro.props;
 const Tag = checkbox ? "label" : selectable ? "button" : "div";
 ---
 
@@ -27,6 +29,7 @@ const Tag = checkbox ? "label" : selectable ? "button" : "div";
   aria-pressed={selectable && !checkbox ? "false" : undefined}
   data-id={selectable ? id : undefined}
   data-name={selectable ? name : undefined}
+  data-display={selectable && hint ? `${name} · ${hint}` : undefined}
   data-min={selectable ? minutes : undefined}
   data-price={selectable ? priceFrom : undefined}
   data-label={selectable ? price : undefined}
@@ -35,7 +38,7 @@ const Tag = checkbox ? "label" : selectable ? "button" : "div";
   {checkbox && <input type="checkbox" value={id} />}
   {(selectable || checkbox) && <span class="chk" aria-hidden="true"><Icon name="done" /></span>}
   <span class="info">
-    <span class="t-strong name">{name}</span>
+    <span class="t-strong name">{name}{hint ? ` · ${hint}` : null}</span>
     <span class="meta">
       {(!checkbox || price || time) && <span class="t-fb deep">{checkbox ? time : price}</span>}
       <span class="dur t-fb muted"><Icon name="schedule" />{duration}</span>

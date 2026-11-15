@@ -104,10 +104,17 @@ const masterInfo = (over = {}) => ({
   ...over,
 });
 
+// Phase 036 copy-hint fixtures (own slugs, shared fixtures untouched): a master / a salon with two services of ONE displayed name (60 + 90 min) next to a unique one.
+export const DUP_SVC = [
+  { id: "a1111111-1111-4111-8111-111111111111", name: "Класичний масаж", durationMinutes: 60, priceFrom: 500, category: "NAIL_SERVICE" },
+  { id: "a2222222-2222-4222-8222-222222222222", name: "Класичний масаж", durationMinutes: 90, priceFrom: 700, category: "NAIL_SERVICE" },
+  { id: "a3333333-3333-4333-8333-333333333333", name: "Корекція брів", durationMinutes: 30, priceFrom: 250, category: "BROWS" },
+];
 const wizBooked = new Set();
 const reviewSpent = new Set();
 const MASTERS = {
   "oksana-ab12": () => masterInfo(),
+  "dupcopy-0361": () => masterInfo({ services: DUP_SVC }), // phase 036: two same-name services (60 + 90 min) + a unique one
   "sparse-0001": () => masterInfo({ masterName: "Нова Майстриня", avatarUrl: null, bio: null, professionalTitle: null, city: null, region: null, avgRating: null, reviewCount: 0, categories: [], ratingDistribution: DIST.map((b) => ({ ...b, count: 0 })), street: null, buildingNo: null, locationNote: null, portfolio: [], latestReviews: [] }),
   "closed-aaaa": () => masterInfo({ bookable: false }),
   "conflict-9999": () => masterInfo(),
@@ -251,7 +258,8 @@ const HERO_SALONS = {
   "salonrc11-7031": rc(11),
   "salonrated-7012": rc(12, { coverImageUrl: "https://cover.beautica.test/c.jpg", avatarUrl: "https://avatar.beautica.test/a.jpg" }),
 };
-const SALONS = { ...HERO_SALONS, "evilsalon-0666": () => salonInfo({ description: EVIL.salon }), "lavanda-1111": () => salonInfo(), "salonhdr-4444": () => salonInfo(), "chans-6002": () => salonInfo(), "shut-2222": () => salonInfo({ bookable: false, masters: [] }) };
+const dupSalon = () => salonInfo({ serviceCategories: [{ category: "NAIL_SERVICE", displayName: "Нігтьовий сервіс", count: 2, services: DUP_SVC.slice(0, 2).map((s, i) => ({ id: uid("d", 40 + i), name: s.name, baseDurationMinutes: s.durationMinutes, priceMin: s.priceFrom, priceDisplay: `${s.priceFrom} ₴` })) }, { category: "BROWS", displayName: "Оформлення брів", count: 1, services: [{ id: uid("d", 42), name: "Корекція брів", baseDurationMinutes: 30, priceMin: 250, priceDisplay: "250 ₴" }] }], serviceCoverage: [40, 41].map((n) => ({ serviceId: uid("d", n), masters: [0, 1].map((i) => ({ masterId: uid("e", 100 + i), masterServiceId: uid("f", 100 + i * 10 + n) })) })) });
+const SALONS = { ...HERO_SALONS, "dupsalon-0362": dupSalon, "evilsalon-0666": () => salonInfo({ description: EVIL.salon }), "lavanda-1111": () => salonInfo(), "salonhdr-4444": () => salonInfo(), "chans-6002": () => salonInfo(), "shut-2222": () => salonInfo({ bookable: false, masters: [] }) };
 
 /** UTC offset of Europe/Kyiv on a calendar date, "+02:00" / "+03:00". */
 function kyivOffset(date) {
@@ -376,7 +384,7 @@ export async function startMockApi() {
       const date = url.searchParams.get("date");
       const ids = url.searchParams.getAll("serviceId");
       if (!/^\d{4}-\d{2}-\d{2}$/.test(date ?? "") || ids.length === 0) return err(res, 400, "Bad request");
-      const minutes = ids.reduce((a, id) => a + (SVC.find((s) => s.id === id)?.durationMinutes ?? 0), 0);
+      const minutes = ids.reduce((a, id) => a + ([...SVC, ...DUP_SVC].find((s) => s.id === id)?.durationMinutes ?? 0), 0);
       return json(res, 200, slotsFor(date, minutes));
     }
     if ((m = /^\/api\/v1\/book\/([a-z0-9-]+)\/bookable-days$/.exec(path))) {
@@ -390,7 +398,7 @@ export async function startMockApi() {
       const iso = (d) => d.toISOString().slice(0, 10);
       const max = iso(new Date(new Date(`${today}T12:00:00Z`).getTime() + 60 * 86400000));
       if (from < today || to > max) return err(res, 400, "Window out of range");
-      if (ids.some((id) => !SVC.some((s) => s.id === id))) return err(res, 404, "Not found");
+      if (ids.some((id) => ![...SVC, ...DUP_SVC].some((s) => s.id === id))) return err(res, 404, "Not found");
       const out = [];
       for (let d = new Date(`${from}T12:00:00Z`); iso(d) <= to; d = new Date(d.getTime() + 86400000)) out.push({ date: iso(d), working: d.getUTCDay() !== 0 && !(ids.includes(SVC[2].id) && d.getUTCDay() === 6) });
       return json(res, 200, out);
@@ -431,8 +439,8 @@ export async function startMockApi() {
         if (wizBooked.has(k)) return err(res, 409, "Slot not available");
         wizBooked.add(k);
       }
-      const names = ids.map((id) => SVC.find((s) => s.id === id)?.name).filter(Boolean);
-      const minutes = ids.reduce((a, id) => a + (SVC.find((s) => s.id === id)?.durationMinutes ?? 0), 0);
+      const names = ids.map((id) => [...SVC, ...DUP_SVC].find((s) => s.id === id)?.name).filter(Boolean);
+      const minutes = ids.reduce((a, id) => a + ([...SVC, ...DUP_SVC].find((s) => s.id === id)?.durationMinutes ?? 0), 0);
       return json(res, 201, { bookingId: "b0b0b0b0-1111-4222-8333-944455556666", appointmentId: ids.length > 1 ? "a0a0a0a0-1111-4222-8333-944455556666" : null, startsAt: b.startsAt, masterName: "Оксана Коваленко", serviceName: names.join(", "), durationMinutes: minutes, cancelUrl: slug === "nocancel-8888" ? null : slug === "foreigncancel-4242" ? FOREIGN_CANCEL_URL : CANCEL_URL, ...(slug.startsWith("tgdone") ? { telegram: { available: true, linked: false } } : {}) });
     }
     // Guest review invites, the real backend 401 shapes (bare JSON, state discriminator, null fields omitted). Tokens by prefix (16+ chars, [A-Za-z0-9_-]):

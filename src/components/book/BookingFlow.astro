@@ -17,6 +17,7 @@ import { t } from "../../i18n/t";
 import { safeJson } from "../../lib/safeJson";
 import { formatDuration, formatPriceFrom, groupByCategory } from "../../lib/booking/format";
 import type { MasterInfo } from "../../lib/booking/types";
+import { serviceNameHints } from "../../lib/booking/serviceHint.ts";
 
 interface Props {
   /** The master being booked (master link). Exactly one of `info` / `salon`. */
@@ -53,6 +54,7 @@ const jsJson = safeJson({ ...js, ...sf });
 // Master link: the master's services grouped by category. Salon: the island fills the catalogue from the salon info (templates below).
 const groups = info ? groupByCategory(info.services, info.categories, t("book.master.otherServices")).map((g) => ({ ...g, items: g.items.map((s) => ({ id: s.id, name: s.name, durationMinutes: s.durationMinutes, priceFrom: s.priceFrom, price: formatPriceFrom(s.priceFrom) })) })) : [];
 const strip = info ? { name: info.masterName, subtitle: info.professionalTitle, avatarUrl: info.avatarUrl, rating: info.avgRating, reviewCount: info.reviewCount, salonMaster: !!info.salon } : null;
+const hints = serviceNameHints(info?.services ?? []);
 ---
 
 <section class="screen" data-screen="services" hidden>
@@ -69,7 +71,7 @@ const strip = info ? { name: info.masterName, subtitle: info.professionalTitle, 
         {
           groups.map((g) => (
             <CategoryGroup name={g.name} categoryKey={g.key || null} count={g.items.length} selectable open={!salon || g === groups[0]}>
-              {g.items.map((s) => <ServiceTile selectable id={s.id} name={s.name} minutes={s.durationMinutes} priceFrom={s.priceFrom} price={s.price} duration={formatDuration(s.durationMinutes)} />)}
+              {g.items.map((s) => <ServiceTile selectable id={s.id} name={s.name} minutes={s.durationMinutes} priceFrom={s.priceFrom} price={s.price} duration={formatDuration(s.durationMinutes)} hint={hints.get(s.id)} />)}
             </CategoryGroup>
           ))
         }
