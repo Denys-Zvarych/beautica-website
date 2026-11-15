@@ -21,6 +21,12 @@ export const SUPPORT_EMAIL = "support@beautica.app";
  */
 export const PRIVACY_POLICY_VERSION = "2026-11-14";
 
+/**
+ * Terms version = `updated:` of src/content/legal/uk/terms.md (registration consent records it; mobile `kTermsVersion` must equal it).
+ * tests/booking-config.test.mjs pins the terms body by sha256 per version: bump this, `updated:` and add a pin together.
+ */
+export const TERMS_VERSION = "2026-11-14";
+
 /** Tokens usable in the legal Markdown bodies as {{key}}. */
 export const LEGAL_VARS = {
   operator: OPERATOR_NAME,
@@ -28,3 +34,11 @@ export const LEGAL_VARS = {
   privacyEmail: PRIVACY_EMAIL,
   supportEmail: SUPPORT_EMAIL,
 };
+
+/** Replaces {{token}} with values from `vars` (default: LEGAL_VARS), so the operator name is edited in ONE place. Used by src/content.config.ts and the terms pin. */
+export function applyLegalVars(markdown, vars = LEGAL_VARS) {
+  return markdown.replace(/\{\{(\w+)\}\}/g, (_, key) => {
+    if (!(key in vars)) throw new Error(`legal: unknown token {{${key}}}`);
+    return vars[key];
+  });
+}

@@ -1,0 +1,13 @@
+{
+  "_": "One entry per PUBLISHED terms version (= terms.md `updated:`), oldest first, append-only (tests/legal-pins-append-only.test.mjs). sha256 = termsDigest() in tests/helpers/legal-pin.mjs: title, metaTitle, description and the body after {{token}} substitution (what /terms renders). 2026-10-29 is terms 1.1, rebuilt from git 9770f4c^ with the legal.mjs values of that commit.",
+  "versions": [
+    {
+      "version": "2026-10-29",
+      "sha256": "bcea7d02d72d92c0a29cc04158310596eecf9dab7c5473f2a3ed799f4e610a64"
+    },
+    {
+      "version": "2026-11-14",
+      "sha256": "975192c278f415580cf991c83b8f9a41661f2d47bdc45f720ea552898574b83d"
+    }
+  ]
+}
