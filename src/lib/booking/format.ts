@@ -1,7 +1,8 @@
 // Display formatting shared by the SSR pages and the booking island (pure, no DOM). Currency is ₴; times are Europe/Kyiv.
 
-export const KYIV = "Europe/Kyiv";
-const nbsp = " ";
+import { nbsp } from "./duration.ts";
+
+export { KYIV, formatDuration } from "./duration.ts";
 
 /** 1250 -> "1 250" (no-break space groups). */
 export function groupThousands(n: number): string {
@@ -11,13 +12,6 @@ export function groupThousands(n: number): string {
 /** The API sends `priceFrom` only (no max, no price type), so every price reads "від N ₴". */
 export function formatPriceFrom(n: number): string {
   return `від${nbsp}${groupThousands(n)}${nbsp}₴`;
-}
-
-export function formatDuration(minutes: number): string {
-  const h = Math.floor(minutes / 60);
-  const m = minutes % 60;
-  if (minutes < 60) return `${minutes}${nbsp}хв`;
-  return m ? `${h}${nbsp}год${nbsp}${m}${nbsp}хв` : `${h}${nbsp}год`;
 }
 
 /** 1 послуга / 2 послуги / 5 послуг. */

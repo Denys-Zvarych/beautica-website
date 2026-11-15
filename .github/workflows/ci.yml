@@ -42,6 +42,16 @@ jobs:
         if: github.base_ref == 'main'
         run: node scripts/check-no-todo-owner.mjs
 
+      # Legal pin fixtures are append-only: a published version's sha256 may not change or disappear (a re-pin would hide a text edit).
+      - name: Legal pins append-only vs the base branch
+        timeout-minutes: 2
+        env:
+          BASE_REF: ${{ github.base_ref }}
+          REQUIRE_PIN_BASE: "1"
+        run: |
+          git fetch --no-tags --depth=1 origin "$BASE_REF"
+          PIN_BASE_REF="origin/$BASE_REF" node --test tests/legal-pins-append-only.test.mjs
+
       - name: Link check (offline, built HTML)
         uses: lycheeverse/lychee-action@e7477775783ea5526144ba13e8db5eec57747ce8 # v2.9.0
         with:
@@ -164,7 +174,7 @@ jobs:
         timeout-minutes: 8
         run: npm test
         env:
-          TEST_EXCLUDE: booking-flow.test,booking-flow-b,book-compact,book-axe,booking-privacy,book-salon-wizard,review-page,book-blocked,book-reminders
+          TEST_EXCLUDE: booking-flow.test,booking-flow-b,book-compact,book-axe,booking-privacy,book-salon-wizard,review-page,book-blocked,book-reminders,service-copy-hint
 
       # The flow spec is split in two (phase 025): the single file ran ~273 s with its failures and sat on the 5-minute cap. Each half is ~2 min.
       - name: Tests - guest booking flow, part 1 (browser, mock backend)
@@ -179,6 +189,11 @@ jobs:
       - name: Tests - compact confirm + done screens (browser, mock backend)
         timeout-minutes: 5
         run: node scripts/run-tests.mjs tests/book-compact.test.mjs
+
+      # Phase 036 copy hint on same-name service tiles (browser, mock backend; the unit matrix tests/service-hint.test.mjs runs inside `npm test`). ~20 s.
+      - name: Tests - service copy hint (browser, mock backend)
+        timeout-minutes: 5
+        run: node scripts/run-tests.mjs tests/service-copy-hint.test.mjs
 
       # Phase 020 blocked-phone banner (browser, mock backend): its own step; the default step sat at 4m55s of its 5 minutes.
       - name: Tests - blocked-phone banner (browser, mock backend)

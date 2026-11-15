@@ -68,7 +68,7 @@ export async function initBooking(root: HTMLElement): Promise<{ open(): void }> 
   const address = root.dataset.address ?? "";
   const note = root.dataset.note ?? "";
   const S: Strings = JSON.parse($("#book-i18n").textContent ?? "{}");
-  const services: Svc[] = $$("#svc-list [data-id]").map((b) => ({ id: b.dataset.id!, name: b.dataset.name!, minutes: Number(b.dataset.min), price: Number(b.dataset.price), ...(salonMode ? { label: b.dataset.label } : {}) }));
+  const services: Svc[] = $$("#svc-list [data-id]").map((b) => ({ id: b.dataset.id!, name: b.dataset.name!, ...(b.dataset.display ? { display: b.dataset.display } : {}), minutes: Number(b.dataset.min), price: Number(b.dataset.price), ...(salonMode ? { label: b.dataset.label } : {}) }));
   const today = kyivToday();
   const maxOffset = maxMonthOffset(today);
 
@@ -198,11 +198,11 @@ export async function initBooking(root: HTMLElement): Promise<{ open(): void }> 
         for (const s of list) {
           const entry = el("div", "sel-entry");
           const top = el("div", "top");
-          top.append(el("span", "t-strong ellipsis", s.name), el("span", "t-accent-12", priceText(s)));
+          top.append(el("span", "t-strong ellipsis", s.display ?? s.name), el("span", "t-accent-12", priceText(s)));
           if (step === "services") {
             const x = el("button", "xbtn");
             x.type = "button";
-            x.setAttribute("aria-label", fmt(S.remove, { name: s.name }));
+            x.setAttribute("aria-label", fmt(S.remove, { name: s.display ?? s.name }));
             x.innerHTML = icon(closeRounded);
             x.addEventListener("click", () => toggle(s.id, false));
             top.append(x);
@@ -721,7 +721,7 @@ export async function initBooking(root: HTMLElement): Promise<{ open(): void }> 
     v.services.forEach((s, i, all) => {
       const row = el("div", "recap-row dense");
       const grow = el("div", "grow");
-      grow.append(el("div", "t-strong11", s.name), el("div", "t-fb muted", formatDuration(s.minutes)));
+      grow.append(el("div", "t-strong11", s.display ?? s.name), el("div", "t-fb muted", formatDuration(s.minutes)));
       row.append(grow, el("span", "t-accent-11", priceText(s)));
       into.append(row);
       if (i < all.length - 1) into.append(el("div", "recap-div"));
@@ -815,10 +815,10 @@ export async function initBooking(root: HTMLElement): Promise<{ open(): void }> 
   let calMod: typeof import("./calendar-button") | null = null;
   let calP: Promise<unknown> | null = null;
   const calendarReady = (): Promise<unknown> => (calP ??= import("./calendar-button").then((m) => (calMod = m)).catch(() => undefined));
-  const calendarButton = (b: { startsAt: string; minutes: number; master: string; services: string; cancelPath?: string | null }): HTMLElement =>
+  const calendarButton = (b: { startsAt: string; minutes: number; master: string; services: { name: string; minutes: number }[]; cancelPath?: string | null }): HTMLElement =>
     calMod
       ? calMod.buildCalendarButton(
-          { calendar: S.calendar!, calendarGoogle: S.calendarGoogle!, calendarApple: S.calendarApple!, calendarIabHint: S.calendarIabHint!, calendarMetaHint: S.calendarMetaHint!, icsSummary: S.icsSummary!, icsDescription: S.icsDescription!, icsCancel: S.icsCancel! },
+          { calendar: S.calendar!, calendarGoogle: S.calendarGoogle!, calendarApple: S.calendarApple!, calendarIabHint: S.calendarIabHint!, calendarMetaHint: S.calendarMetaHint!, icsSummary: S.icsSummary!, icsSummaryMore: S.icsSummaryMore!, icsDescription: S.icsDescription!, icsLine: S.icsLine!, icsCancel: S.icsCancel! },
           { ...b, location: [salonName, city, address].filter(Boolean).join(", ") },
         )
       : el("div"); // the module failed to load (offline): the done card shows without the chooser
@@ -827,7 +827,7 @@ export async function initBooking(root: HTMLElement): Promise<{ open(): void }> 
     recap(card);
     const minutes = totals().minutes || b.durationMinutes;
     const cPath = cancelPath(b.cancelUrl);
-    card.append(el("div", "rule"), calendarButton({ startsAt: b.startsAt, minutes, master: masterName, services: chosen().map((s) => s.name).join(", "), cancelPath: cPath }));
+    card.append(el("div", "rule"), calendarButton({ startsAt: b.startsAt, minutes, master: masterName, services: chosen().map((s) => ({ name: s.name, minutes: s.minutes })), cancelPath: cPath }));
     mountReminders({ root: document.getElementById("done-reminders"), api, token: cancelToken(cPath), telegram: b.telegram, navigate: (u) => location.assign(u), track });
   }
 

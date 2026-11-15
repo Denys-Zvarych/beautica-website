@@ -137,6 +137,17 @@ describe("phase 018 (legal bump, legal fonts) is guarded on every PR", () => {
   });
 });
 
+describe("phase 037 (legal pins append-only) is guarded on every PR", () => {
+  test("legal-pins-append-only.test.mjs runs in the site job against the fetched base branch and a missing base fails there", () => {
+    const st = steps.find((x) => x.text.includes("tests/legal-pins-append-only.test.mjs"));
+    assert.equal(st?.job, "site");
+    assert.match(st.text, /git fetch --no-tags --depth=1 origin "\$BASE_REF"/);
+    assert.match(st.text, /PIN_BASE_REF="origin\/\$BASE_REF"/);
+    assert.match(st.text, /REQUIRE_PIN_BASE: "1"/);
+    assert.match(st.text, /timeout-minutes:/);
+  });
+});
+
 describe("phase 021 (privacy 1.4, Telegram section) is guarded on every PR", () => {
   test("privacy-telegram.test.mjs runs after the build in the server-less site job: test:static (dist checks) and test:contract (backend-pinned, REQUIRE_BACKEND)", () => {
     assert.match(pkg.scripts["test:static"], /tests\/privacy-telegram\.test\.mjs/);

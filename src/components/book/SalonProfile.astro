@@ -12,6 +12,7 @@ import Icon from "../Icon.astro";
 import { t } from "../../i18n/t";
 import { formatDuration, formatRating, pluralReviews, streetLine, type ReviewSort } from "../../lib/booking/format";
 import type { ReviewItem, SalonInfo } from "../../lib/booking/types";
+import { serviceNameHints } from "../../lib/booking/serviceHint.ts";
 
 interface Props {
   info: SalonInfo;
@@ -33,6 +34,7 @@ const note = vis(info.locationNote);
 // The logo initial skips the word «Салон» («Салон «Лаванда»» -> Л), like the app's monogram of the brand name.
 const monogram = Array.from(info.name.replace(/^салон\s+/iu, "").replace(/^[^\p{L}\p{N}]+/u, ""))[0]?.toUpperCase() ?? "";
 const firstName = (n: string) => n.trim().split(/\s+/)[0] ?? n;
+const hints = serviceNameHints(info.serviceCategories.flatMap((g) => g.services));
 const filterable = info.serviceCoverage.length > 0 && info.masters.length > 0;
 const canBook = info.masters.length > 0 && info.serviceCategories.length > 0 && info.serviceCoverage.some((c) => c.masters.length > 0);
 ---
@@ -164,7 +166,7 @@ const canBook = info.masters.length > 0 && info.serviceCategories.length > 0 && 
       {
         info.serviceCategories.map((g, i) => (
           <CategoryGroup name={g.displayName} categoryKey={g.category} count={g.count} open={i === 0}>
-            {g.services.map((sv) => <ServiceTile name={sv.name} price={sv.priceLabel} duration={formatDuration(sv.durationMinutes)} filterId={filterable ? sv.id : undefined} />)}
+            {g.services.map((sv) => <ServiceTile name={sv.name} price={sv.priceLabel} duration={formatDuration(sv.durationMinutes)} hint={hints.get(sv.id)} filterId={filterable ? sv.id : undefined} />)}
           </CategoryGroup>
         ))
       }

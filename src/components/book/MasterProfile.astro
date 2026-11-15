@@ -12,6 +12,7 @@ import ReviewsSection from "./ReviewsSection.astro";
 import { t } from "../../i18n/t";
 import { formatDuration, formatPriceFrom, formatRating, groupByCategory, streetLine, type ReviewSort } from "../../lib/booking/format";
 import type { MasterInfo, ReviewItem } from "../../lib/booking/types";
+import { serviceNameHints } from "../../lib/booking/serviceHint.ts";
 
 interface Props {
   info: MasterInfo;
@@ -24,6 +25,7 @@ const { info, apiOrigin, sort, reviews } = Astro.props;
 // Independent masters have a street (the app's rule): "Київ, вул. Хрещатик, 22", else the city only.
 const location = [info.city ?? info.region, streetLine(info.street, info.buildingNo)].filter(Boolean).join(", ") || null;
 const groups = groupByCategory(info.services, info.categories, t("book.master.otherServices"));
+const hints = serviceNameHints(info.services);
 const cut = info.avgRating === null ? 100 : Math.max(0, Math.min(100, (1 - info.avgRating / 5) * 100));
 // The app always renders the chip: the professional title, else the role label (masterRoleLabel).
 const roleLabel = info.professionalTitle?.trim() || t(info.salon ? "book.strip.roleSalonMaster" : "book.strip.roleIndependent");
@@ -132,7 +134,7 @@ const canBook = info.bookable && info.services.length > 0;
           {
             groups.map((g) => (
               <CategoryGroup name={g.name} categoryKey={g.key || null} count={g.items.length} open={false}>
-                {g.items.map((sv) => <ServiceTile name={sv.name} price={formatPriceFrom(sv.priceFrom)} duration={formatDuration(sv.durationMinutes)} />)}
+                {g.items.map((sv) => <ServiceTile name={sv.name} price={formatPriceFrom(sv.priceFrom)} duration={formatDuration(sv.durationMinutes)} hint={hints.get(sv.id)} />)}
               </CategoryGroup>
             ))
           }

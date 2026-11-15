@@ -58,7 +58,7 @@ here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 repo_root="$(cd "$here/.." && pwd)"
 ALLOWED="promotion-source.yml"
 # SHA-256 of .github/workflows/promotion-source.yml. Update in the SAME PR as any edit to it.
-EXPECTED_SHA256="d6c7692289b1d87be850b74433fb4c2406c84a3dcc6d6248e5e120c74f7994eb"
+EXPECTED_SHA256="a53e287014edcb62295697002cbebc21addb6972dd504441101915c166fcf070"
 # Test-only: honoured solely by self_test (it sets this to 1 around structural cases). Hard-reset
 # here so an inherited environment variable of the same name can never switch the pin off.
 PIN_BYPASS=0

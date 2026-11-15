@@ -4,7 +4,7 @@ Marketing, legal and booking-link site for Beautica — <https://beautica.app>. 
 Astro 7 (static) + `@astrojs/cloudflare`, hosted as a Cloudflare Worker with static assets (Workers Builds, Worker `beautica-site`).
 Plan and decisions: `docs/website-phases/` in the monorepo (README = decisions, `phase-NNN-*.md` = checklists).
 
-## Commands (Node 22, see `.nvmrc`)
+## Commands (Node 24, see `.nvmrc`)
 
 ```bash
 npm ci

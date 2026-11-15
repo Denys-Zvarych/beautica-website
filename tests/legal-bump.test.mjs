@@ -12,7 +12,7 @@ import { existsSync, readFileSync, statSync } from "node:fs";
 import { brotliDecompressSync } from "node:zlib";
 import { join } from "node:path";
 import { ROOT, uk } from "./helpers/env.mjs";
-import { PRIVACY_POLICY_VERSION } from "../src/config/legal.mjs";
+import { PRIVACY_POLICY_VERSION, TERMS_VERSION } from "../src/config/legal.mjs";
 import { BASIC_GLYPHS, BASIC_RANGE } from "../scripts/subset-fonts.mjs";
 
 const DIST = join(ROOT, "dist", "client");
@@ -46,6 +46,7 @@ describe("the version and the date shown on the legal pages come from the source
     assert.deepEqual(front(privacyMd), { version: "1.9", updated: "2026-11-14" });
     assert.deepEqual(front(termsMd), { version: "1.2", updated: "2026-11-14" });
     assert.equal(PRIVACY_POLICY_VERSION, "2026-11-14");
+    assert.equal(TERMS_VERSION, "2026-11-14");
   });
 });
 
