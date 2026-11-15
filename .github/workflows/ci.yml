@@ -42,6 +42,16 @@ jobs:
         if: github.base_ref == 'main'
         run: node scripts/check-no-todo-owner.mjs
 
+      # Legal pin fixtures are append-only: a published version's sha256 may not change or disappear (a re-pin would hide a text edit).
+      - name: Legal pins append-only vs the base branch
+        timeout-minutes: 2
+        env:
+          BASE_REF: ${{ github.base_ref }}
+          REQUIRE_PIN_BASE: "1"
+        run: |
+          git fetch --no-tags --depth=1 origin "$BASE_REF"
+          PIN_BASE_REF="origin/$BASE_REF" node --test tests/legal-pins-append-only.test.mjs
+
       - name: Link check (offline, built HTML)
         uses: lycheeverse/lychee-action@e7477775783ea5526144ba13e8db5eec57747ce8 # v2.9.0
         with:

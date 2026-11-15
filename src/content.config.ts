@@ -1,15 +1,7 @@
 import { defineCollection } from "astro:content";
 import { readdirSync, readFileSync } from "node:fs";
 import { z } from "astro/zod";
-import { LEGAL_VARS } from "./config/legal.mjs";
-
-/** Replaces {{token}} with values from src/config/legal.mjs, so the operator name is edited in ONE place. */
-function applyLegalVars(markdown: string): string {
-  return markdown.replace(/\{\{(\w+)\}\}/g, (_, key: string) => {
-    if (!(key in LEGAL_VARS)) throw new Error(`legal: unknown token {{${key}}}`);
-    return LEGAL_VARS[key as keyof typeof LEGAL_VARS];
-  });
-}
+import { applyLegalVars } from "./config/legal.mjs";
 
 /**
  * "## Заголовок {#guest}" -> plain "## Заголовок" plus the list of h2 headings (id + text) for the table of contents;
