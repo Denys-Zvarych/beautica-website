@@ -68,7 +68,7 @@ export async function initBooking(root: HTMLElement): Promise<{ open(): void }> 
   const address = root.dataset.address ?? "";
   const note = root.dataset.note ?? "";
   const S: Strings = JSON.parse($("#book-i18n").textContent ?? "{}");
-  const services: Svc[] = $$("#svc-list [data-id]").map((b) => ({ id: b.dataset.id!, name: b.dataset.name!, minutes: Number(b.dataset.min), price: Number(b.dataset.price), ...(salonMode ? { label: b.dataset.label } : {}) }));
+  const services: Svc[] = $$("#svc-list [data-id]").map((b) => ({ id: b.dataset.id!, name: b.dataset.name!, ...(b.dataset.display ? { display: b.dataset.display } : {}), minutes: Number(b.dataset.min), price: Number(b.dataset.price), ...(salonMode ? { label: b.dataset.label } : {}) }));
   const today = kyivToday();
   const maxOffset = maxMonthOffset(today);
 
@@ -198,11 +198,11 @@ export async function initBooking(root: HTMLElement): Promise<{ open(): void }> 
         for (const s of list) {
           const entry = el("div", "sel-entry");
           const top = el("div", "top");
-          top.append(el("span", "t-strong ellipsis", s.name), el("span", "t-accent-12", priceText(s)));
+          top.append(el("span", "t-strong ellipsis", s.display ?? s.name), el("span", "t-accent-12", priceText(s)));
           if (step === "services") {
             const x = el("button", "xbtn");
             x.type = "button";
-            x.setAttribute("aria-label", fmt(S.remove, { name: s.name }));
+            x.setAttribute("aria-label", fmt(S.remove, { name: s.display ?? s.name }));
             x.innerHTML = icon(closeRounded);
             x.addEventListener("click", () => toggle(s.id, false));
             top.append(x);
@@ -721,7 +721,7 @@ export async function initBooking(root: HTMLElement): Promise<{ open(): void }> 
     v.services.forEach((s, i, all) => {
       const row = el("div", "recap-row dense");
       const grow = el("div", "grow");
-      grow.append(el("div", "t-strong11", s.name), el("div", "t-fb muted", formatDuration(s.minutes)));
+      grow.append(el("div", "t-strong11", s.display ?? s.name), el("div", "t-fb muted", formatDuration(s.minutes)));
       row.append(grow, el("span", "t-accent-11", priceText(s)));
       into.append(row);
       if (i < all.length - 1) into.append(el("div", "recap-div"));

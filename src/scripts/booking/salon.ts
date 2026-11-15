@@ -2,6 +2,7 @@
 // services -> masters (assign every service to ONE master, no "any master") -> date + time once per chosen master -> contact/OTP once
 // -> confirm (one card per master, own comment, no grand total) -> one booking per master, sequentially, with the same guest token.
 // The island (app.ts) keeps the generic steps; this module owns the assignment, the per-master schedule and the per-master submit.
+import { serviceNameHints } from "../../lib/booking/serviceHint";
 import { formatDuration, formatRating, pluralRecords } from "../../lib/booking/format";
 import { categoryIconFor } from "../../lib/categoryIcon";
 import type { SalonInfo } from "../../lib/booking/types";
@@ -17,6 +18,8 @@ import { firstWithToken, mountReminders } from "./reminder-channel";
 export interface Svc {
   id: string;
   name: string;
+  /** Phase 036: «name · hint» for same-name services; display only, never sent to the API. */
+  display?: string;
   minutes: number;
   /** Floor price (master link: `priceFrom`; salon: `priceMin`). */
   price: number;
@@ -96,6 +99,7 @@ export function buildCatalogue(root: HTMLElement, info: SalonInfo): void {
   const cat = (root.querySelector<HTMLTemplateElement>("#tpl-cat")!).content.firstElementChild as HTMLElement;
   const svc = (root.querySelector<HTMLTemplateElement>("#tpl-svc")!).content.firstElementChild as HTMLElement;
   list.replaceChildren();
+  const hints = serviceNameHints(info.serviceCategories.flatMap((g) => g.services));
   info.serviceCategories.forEach((g, i) => {
     const group = cat.cloneNode(true) as HTMLDetailsElement;
     group.open = i === 0; // the first category starts open, as the app
@@ -108,10 +112,11 @@ export function buildCatalogue(root: HTMLElement, info: SalonInfo): void {
       const tile = svc.cloneNode(true) as HTMLElement;
       tile.dataset.id = sv.id;
       tile.dataset.name = sv.name;
+      if (hints.has(sv.id)) tile.dataset.display = `${sv.name} · ${hints.get(sv.id)}`;
       tile.dataset.min = String(sv.durationMinutes);
       tile.dataset.price = String(sv.priceMin);
       tile.dataset.label = sv.priceLabel;
-      tile.querySelector<HTMLElement>(".name")!.textContent = sv.name;
+      tile.querySelector<HTMLElement>(".name")!.textContent = hints.has(sv.id) ? `${sv.name} · ${hints.get(sv.id)}` : sv.name;
       tile.querySelector<HTMLElement>(".deep")!.textContent = sv.priceLabel;
       tile.querySelector<HTMLElement>(".dur")!.append(formatDuration(sv.durationMinutes));
       body.append(tile);
@@ -201,7 +206,7 @@ export function createSalon(core: Core, info: SalonInfo) {
       input.type = "checkbox";
       input.checked = pm.has(m.id);
       input.dataset.master = m.id;
-      const covered = pickedNow.filter((s) => covers(m.id, s.id)).map((s) => s.name).join(" · ");
+      const covered = pickedNow.filter((s) => covers(m.id, s.id)).map((s) => s.display ?? s.name).join(" · ");
       input.setAttribute("aria-label", fmt(S.mastersToggle ?? "", { name: m.name, covered }));
       input.addEventListener("change", () => {
         if (input.checked) pm.add(m.id);
@@ -245,7 +250,7 @@ export function createSalon(core: Core, info: SalonInfo) {
           const w = el("div", "pwell");
           const top = el("div", `top ${sel ? "ok" : "open"}`);
           top.innerHTML = icon(sel ? checkOutline : errorOutline);
-          top.append(el("span", "t-strong ellipsis", s.name));
+          top.append(el("span", "t-strong ellipsis", s.display ?? s.name));
           if (!sel) top.append(el("span", "t-fb muted", S.chooseMaster));
           const chips = el("div", "mchips");
           for (const mid of candidates(s.id)) {
@@ -273,14 +278,14 @@ export function createSalon(core: Core, info: SalonInfo) {
         const av = el("span", `ravatar ${avatarClass(g.i)}`);
         av.innerHTML = icon(person);
         const grow = el("div", "grow");
-        grow.append(el("div", "t-name-13w800 ellipsis", g.m.name), el("div", "t-fb sec", g.services.map((s) => s.name).join(", ")));
+        grow.append(el("div", "t-name-13w800 ellipsis", g.m.name), el("div", "t-fb sec", g.services.map((s) => s.display ?? s.name).join(", ")));
         row.append(av, grow);
         box.append(row);
       }
       for (const s of uncovered) {
         const row = el("div", "puncov");
         row.innerHTML = icon(errorOutline);
-        row.append(el("span", "t-fb", fmt(S.uncovered ?? "", { service: s.name })));
+        row.append(el("span", "t-fb", fmt(S.uncovered ?? "", { service: s.display ?? s.name })));
         box.append(row);
       }
     }
