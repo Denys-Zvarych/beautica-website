@@ -4,6 +4,7 @@
 // and a static line says to open the page in Safari (the done URL /c/{token}?n=1 then shows the Apple button). Content: time, master, services, place and the cancel link, never a phone or name.
 import { brandMarks } from "../../lib/icons/brandMarks";
 import { calendarLinks, calendarOrder, isIosInApp, isIosMetaInApp } from "./calendar-links";
+import { icsServiceLines, icsSummary, type IcsService } from "./ics-lines";
 import { currentEnv } from "./otp-format";
 import { el } from "./recap-row";
 
@@ -15,9 +16,11 @@ export interface CalendarStrings {
   calendarIabHint: string;
   /** Static line for Instagram / Facebook on iOS. */
   calendarMetaHint: string;
-  /** Event title / description templates with {master} / {services}, and the cancel line label. */
+  /** Event title templates (one service / several), the description intro, the per-service line template and the cancel line label (ics-lines.ts). */
   icsSummary: string;
+  icsSummaryMore: string;
   icsDescription: string;
+  icsLine: string;
   icsCancel: string;
 }
 
@@ -25,13 +28,11 @@ export interface CalendarBooking {
   startsAt: string;
   minutes: number;
   master: string;
-  services: string;
+  services: IcsService[];
   /** Event location text (salon, city, address); "" = none. */
   location: string;
   cancelPath?: string | null;
 }
-
-const fmt = (s: string, vars: Record<string, string>) => s.replace(/\{(\w+)\}/g, (_, k: string) => vars[k] ?? "");
 
 export function buildCalendarButton(S: CalendarStrings, b: CalendarBooking): HTMLElement {
   const wrap = el("div", "calwrap");
@@ -40,8 +41,8 @@ export function buildCalendarButton(S: CalendarStrings, b: CalendarBooking): HTM
   const links = calendarLinks({
     startsAt: b.startsAt,
     minutes: b.minutes,
-    title: fmt(S.icsSummary, { master: b.master }),
-    description: fmt(S.icsDescription, { services: b.services }),
+    title: icsSummary(b.services, b.master, { summary: S.icsSummary, summaryMore: S.icsSummaryMore }),
+    description: [S.icsDescription, ...icsServiceLines(b.services, b.startsAt, { line: S.icsLine })].join("\n"),
     location: b.location,
     ...(b.cancelPath ? { cancel: { url: `${location.origin}${b.cancelPath}`, label: S.icsCancel } } : {}),
   }, env, location.origin);
@@ -82,7 +83,7 @@ export function calendarHint(S: Pick<CalendarStrings, "calendarIabHint" | "calen
   return hint;
 }
 
-const CAL_KEYS = ["calCalendar", "calGoogle", "calApple", "calIab", "calMeta", "calSummary", "calDescription", "calCancel"] as const;
+const CAL_KEYS = ["calCalendar", "calGoogle", "calApple", "calIab", "calMeta", "calSummary", "calSummaryMore", "calDescription", "calLine", "calCancel"] as const;
 
 /** /c/{token}?n=1 (phase 032): the chooser for one visit, strings from the page's `data-cal-*` attributes. start = first service, end = end of the last one. A missing string is a
  *  build error, never an empty label: the block is skipped (null) and the gap is logged. Lives here (not in the cancel page's script) so other /c/ visits never load it. */
@@ -96,7 +97,7 @@ export function buildVisitCalendar(d: DOMStringMap, items: { startsAt: string; d
   }
   const minutes = Math.round((new Date(last.startsAt).getTime() + last.durationMinutes * 60000 - new Date(first.startsAt).getTime()) / 60000);
   return buildCalendarButton(
-    { calendar: d.calCalendar!, calendarGoogle: d.calGoogle!, calendarApple: d.calApple!, calendarIabHint: d.calIab!, calendarMetaHint: d.calMeta!, icsSummary: d.calSummary!, icsDescription: d.calDescription!, icsCancel: d.calCancel! },
-    { startsAt: first.startsAt, minutes, master, services: items.map((i) => i.serviceName).join(", "), location: where, cancelPath: path },
+    { calendar: d.calCalendar!, calendarGoogle: d.calGoogle!, calendarApple: d.calApple!, calendarIabHint: d.calIab!, calendarMetaHint: d.calMeta!, icsSummary: d.calSummary!, icsSummaryMore: d.calSummaryMore!, icsDescription: d.calDescription!, icsLine: d.calLine!, icsCancel: d.calCancel! },
+    { startsAt: first.startsAt, minutes, master, services: items.map((i) => ({ name: i.serviceName, minutes: i.durationMinutes, startsAt: i.startsAt })), location: where, cancelPath: path },
   );
 }

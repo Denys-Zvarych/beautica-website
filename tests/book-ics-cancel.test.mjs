@@ -1,5 +1,6 @@
 // Phase 030 QA: the cancel link in «Додати в календар» on BOTH done screens (master + salon): Google details line, Apple c= token and the .ics it returns, the Google link's
 // rel/target (the bearer token must not leak via Referer), the 500-char cap that never cuts the cancel line, and the iOS in-app hint only where it belongs.
+import { DESCRIPTION_MAX } from "../src/scripts/booking/ics-lines.ts";
 import { test, describe, before, after } from "node:test";
 import assert from "node:assert/strict";
 import { launch } from "./helpers/browser.mjs";
@@ -83,14 +84,14 @@ describe("salon done screen: each master's booking carries its own cancel link",
   });
 });
 
-describe("the cancel line survives the 500-character Google details cap", () => {
+describe("the cancel line survives the Google details cap", () => {
   const ev = { startsAt: "2026-11-08T12:00:00Z", minutes: 60, title: "Запис", location: "" };
   for (const [name, url] of [["short token", "https://beautica.app/c/Ab3dEf7hJk9mNp2Q"], ["legacy uuid token", CANCEL_URL]])
-    test(`${name}: 40 very long services -> details is <= 500, the services text is cut with an ellipsis, the line is whole at the end`, () => {
-      const description = "Послуги: " + Array.from({ length: 40 }, (_, i) => `Надзвичайно довга назва послуги ${i}`).join(", ");
+    test(`${name}: 90 very long services -> details is <= DESCRIPTION_MAX, the services text is cut with an ellipsis, the line is whole at the end`, () => {
+      const description = "Послуги: " + Array.from({ length: 90 }, (_, i) => `Надзвичайно довга назва послуги ${i}`).join(", ");
       const d = new URL(calendarLinks({ ...ev, description, cancel: { url, label: uk.book.ics.cancel } }).google).searchParams.get("details");
       const line = `${uk.book.ics.cancel}: ${url}`;
-      assert.ok(d.length <= 500, String(d.length));
+      assert.ok(d.length <= DESCRIPTION_MAX, String(d.length));
       assert.ok(d.endsWith(`…\n${line}`), d);
     });
 });

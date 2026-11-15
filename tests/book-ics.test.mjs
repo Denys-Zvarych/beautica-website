@@ -7,6 +7,7 @@ import { BASE, uk } from "./helpers/env.mjs";
 import { bookPage, mockLog, driveTo } from "./helpers/book.mjs";
 import { parseIcs } from "./helpers/ics-parse.mjs";
 import { buildIcs, CANCEL_LABEL } from "../src/scripts/booking/ics.ts";
+import { icsSummary, icsServiceLines, DESCRIPTION_MAX } from "../src/scripts/booking/ics-lines.ts";
 import { appleHref, calendarLinks, calendarOrder } from "../src/scripts/booking/calendar-links.ts";
 import { CANCEL_URL, FOREIGN_CANCEL_URL } from "./helpers/mock-api.mjs";
 
@@ -99,7 +100,8 @@ describe("calendar link in the browser", () => {
     assert.equal(/cancel|https?:/i.test(href), false, href);
     assert.equal(filename, "beautica-booking.ics");
     const p = parseIcs(ics);
-    assert.match(p.text.SUMMARY, /^Запис до /);
+    assert.match(p.text.SUMMARY, /^Манікюр класичний · Оксана Коваленко$/);
+    assert.match(p.text.DESCRIPTION, new RegExp(`^${uk.book.ics.description.replace(".", "\\.")}\\n\\d{2}:\\d{2} Манікюр класичний · \\d+\\s(хв|год)`), p.text.DESCRIPTION);
   });
 
   test("the file has the cancel link (URL + DESCRIPTION line, own origin), no guest name or phone", async () => {
@@ -131,11 +133,11 @@ describe("GET /api/ics: over-long real bookings are cut, not rejected (phase 025
   const call = (params, headers = {}) => GET({ url: new URL(`https://beautica.app/api/ics?${new URLSearchParams(params)}`), request: new Request("https://beautica.app/api/ics", { headers }) });
   const times = { s: "2026-11-08T12:00:00Z", e: "2026-11-08T13:00:00Z" };
   test("10 long service names + long place -> 200, DESCRIPTION capped with an ellipsis", async () => {
-    const d = "Послуги: " + Array.from({ length: 10 }, (_, i) => `Дуже довга назва послуги номер ${i}`.repeat(2)).join(", ");
+    const d = "Послуги: " + Array.from({ length: 40 }, (_, i) => `Дуже довга назва послуги номер ${i}`.repeat(2)).join(", ");
     const res = await call({ ...times, t: "Запис до " + "М".repeat(200), l: "вул. ".repeat(100), d });
     assert.equal(res.status, 200);
     const p = parseIcs(await res.text());
-    assert.ok(p.text.DESCRIPTION.length <= 500 && p.text.DESCRIPTION.endsWith("…"), p.text.DESCRIPTION.length);
+    assert.ok(p.text.DESCRIPTION.length <= DESCRIPTION_MAX && p.text.DESCRIPTION.endsWith("…"), p.text.DESCRIPTION.length);
     assert.ok(p.text.SUMMARY.length <= 120 && p.text.LOCATION.length <= 200);
   });
   test("missing t, bad times, year out of range -> 400; cross-site -> 403; same-origin / none / absent -> 200", async () => {
@@ -176,11 +178,11 @@ describe("calendar chooser: Google / Apple .ics (works in in-app webviews)", () 
     assert.equal(calendarLinks(ev, droid).apple, links.apple, "the .ics link is untouched");
     for (const ua of ["Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 Mobile/15E148 Safari/604.1", "Mozilla/5.0 (X11; Linux x86_64) Chrome/126.0.0.0 Safari/537.36", ""]) assert.equal(calendarLinks(ev, ua).google, https, ua);
   });
-  test("apple link stays /api/ics; long input is capped (t 120, l 200, d 500)", () => {
+  test("apple link stays /api/ics; long input is capped (t 120, l 200, d DESCRIPTION_MAX)", () => {
     assert.match(links.apple, /^\/api\/ics\?s=/);
-    const l = calendarLinks({ ...ev, title: "М".repeat(300), description: "Д".repeat(900), location: "Л".repeat(400) });
+    const l = calendarLinks({ ...ev, title: "М".repeat(300), description: "Д".repeat(DESCRIPTION_MAX + 400), location: "Л".repeat(400) });
     assert.equal(new URL(l.google).searchParams.get("text").length, 120);
-    assert.equal(new URL(l.google).searchParams.get("details").length, 500);
+    assert.ok(new URL(l.google).searchParams.get("details").length <= DESCRIPTION_MAX && l.google.length <= 8000); // encoded Cyrillic is bounded (W038)
     assert.equal(new URL(l.google).searchParams.get("location").length, 200);
   });
   test("the file has METHOD:PUBLISH and a -PT1H display alarm, and still no URL / name / phone", () => {
@@ -254,10 +256,10 @@ describe("calendarLinks: cancel link and iOS in-app Apple href (phase 030)", () 
   const ev = { startsAt: "2026-11-08T12:00:00Z", minutes: 60, title: "Запис", description: "Послуги: A.", location: "", cancel: { url: "https://beautica.app/c/Ab3dEf7hJk9mNp2Q", label: CANCEL_LABEL } };
   const IG = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 Instagram 330.0.0.1";
   test("Apple link carries only the token as c; Google details end with the cancel line, even when the services text is cut", () => {
-    const l = calendarLinks({ ...ev, description: "Д".repeat(900) });
+    const l = calendarLinks({ ...ev, description: "Д".repeat(DESCRIPTION_MAX + 400) });
     assert.equal(new URL(l.apple, "https://x.example").searchParams.get("c"), "Ab3dEf7hJk9mNp2Q");
     const d = new URL(l.google).searchParams.get("details");
-    assert.ok(d.length <= 500 && d.endsWith(`${CANCEL_LABEL}: https://beautica.app/c/Ab3dEf7hJk9mNp2Q`), d);
+    assert.ok(d.length <= DESCRIPTION_MAX && d.endsWith(`${CANCEL_LABEL}: https://beautica.app/c/Ab3dEf7hJk9mNp2Q`), d);
   });
   test("no cancel, a foreign URL or a bad path -> no c and no line", () => {
     for (const cancel of [undefined, { url: "https://evil.example/c/Ab3dEf7hJk9mNp2Q/x", label: "L" }, { url: "https://beautica.app/other", label: "L" }]) {
@@ -304,4 +306,51 @@ describe("iOS Instagram in-app browser (phase 030)", () => {
         await env.context.close();
       }
     });
+});
+
+describe("ics-lines (GST-78): title and one line per service, no price", () => {
+  const S = { summary: uk.book.ics.summary, summaryMore: uk.book.ics.summaryMore, line: uk.book.ics.line };
+  const nb = (x) => x.replace(/\u00a0/g, " ");
+  test("title: one service «A · M», several «A +n · M»", () => {
+    assert.equal(icsSummary([{ name: "Манікюр", minutes: 45 }], "Олена", S), "Манікюр · Олена");
+    assert.equal(icsSummary([{ name: "Манікюр", minutes: 45 }, { name: "Педикюр", minutes: 60 }], "Олена", S), "Манікюр +1 · Олена");
+  });
+  test("lines chain from the slot (Kyiv time) with app-style durations", () => {
+    const l = icsServiceLines([{ name: "Манікюр", minutes: 45 }, { name: "Педикюр", minutes: 90 }, { name: "Брови", minutes: 60 }], "2026-11-08T12:00:00Z", S).map(nb);
+    assert.deepEqual(l, ["14:00 Манікюр · 45 хв", "14:45 Педикюр · 1 год 30 хв", "16:15 Брови · 1 год"]);
+  });
+  test("an item's own startsAt wins (/c/ visit)", () => {
+    const l = icsServiceLines([{ name: "A", minutes: 30 }, { name: "B", minutes: 30, startsAt: "2026-11-08T13:00:00Z" }], "2026-11-08T12:00:00Z", S).map(nb);
+    assert.deepEqual(l, ["14:00 A · 30 хв", "15:00 B · 30 хв"]);
+  });
+  test("10 services with 100-char names: all 10 lines + the cancel line, untruncated (Google link and .ics)", async () => {
+    const items = Array.from({ length: 10 }, (_, i) => ({ name: String(i).repeat(100), minutes: 90 }));
+    const lines = icsServiceLines(items, "2026-11-08T12:00:00Z", S);
+    const description = lines.join("\n");
+    const cancel = { url: CANCEL_URL, label: CANCEL_LABEL };
+    const links = calendarLinks({ title: "t", description, location: "", startsAt: "2026-11-08T12:00:00Z", minutes: 900, cancel }, "", BASE);
+    const gd = new URL(links.google).searchParams.get("details");
+    assert.equal(gd, `${description}\n${CANCEL_LABEL}: ${CANCEL_URL}`);
+    const res = await fetch(`${BASE}${links.apple}`);
+    assert.equal(res.status, 200);
+    const p = parseIcs(await res.text());
+    assert.equal(p.text.DESCRIPTION, `${description}\n${CANCEL_LABEL}: ${new URL(CANCEL_URL).origin === BASE ? CANCEL_URL : BASE + new URL(CANCEL_URL).pathname}`);
+    assert.equal(p.text.DESCRIPTION.split("\n").length, 11);
+  });
+  test("no price in the line template", () => assert.equal(/₴|price/i.test(S.line + S.summary + S.summaryMore + uk.book.ics.description), false));
+});
+
+describe("calendarLinks: worst-case Google URL is bounded (W038)", () => {
+  test("10 services x 100+ Cyrillic chars: Google URL <= 8000, cancel line kept, .ics keeps all lines", () => {
+    const lines = Array.from({ length: 10 }, (_, i) => `${i + 1}`.padStart(2, "0") + "ж".repeat(137));
+    const url = "https://beautica.app/c/Ab3dEf7hJk9mNp2Q";
+    const links = calendarLinks({ startsAt: "2026-11-08T12:00:00Z", minutes: 60, title: "Запис", description: lines.join("\n"), location: "", cancel: { url, label: CANCEL_LABEL } });
+    assert.ok(links.google.length <= 8000, String(links.google.length));
+    const d = new URL(links.google).searchParams.get("details");
+    assert.ok(d.endsWith(`${CANCEL_LABEL}: ${url}`));
+    assert.ok(d.includes("\n…\n"));
+    const ics = new URL(links.apple, "https://beautica.app").searchParams.get("d").split("\n");
+    assert.equal(ics.length, 10);
+    assert.equal(ics.join("\n"), lines.join("\n"));
+  });
 });

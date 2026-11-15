@@ -2,6 +2,7 @@
 // Google is a top-level navigation (target=_blank) to Google Calendar's own "new event" page: it works in every in-app webview (Telegram, Instagram,
 // Facebook) and on Android, where a downloaded .ics has no handler. The .ics link (/api/ics, served inline) is for iPhone / iPad / macOS.
 import { cancelPath, cancelToken } from "./cancel-path.ts";
+import { DESCRIPTION_MAX } from "./ics-lines.ts";
 import { isIosInAppBrowser, isIosMetaInAppBrowser, type OtpEnv } from "./otp-format.ts";
 
 export interface CalendarEvent {
@@ -17,8 +18,11 @@ export interface CalendarEvent {
 
 export type CalendarKind = "google" | "apple";
 
-/** Same limits as GET /api/ics (t 120, l 200, d 500), cut with «…». */
+/** Same limits as GET /api/ics (t 120, l 200, d DESCRIPTION_MAX), cut with «…». */
 export const cap = (v: string, max: number): string => (v.length > max ? `${v.slice(0, max - 1).replace(/[\uD800-\uDBFF]$/, "").trimEnd()}…` : v);
+
+/** Cap on the encoded Google Calendar URL (browsers/Google reject far longer ones). */
+export const GOOGLE_URL_MAX = 8000;
 
 const utc = (d: Date): string => d.toISOString().replace(/\.\d{3}Z$/, "Z");
 
@@ -50,15 +54,30 @@ export function calendarLinks(ev: CalendarEvent, env: CalEnv = "", origin = ""):
   const token = cancelToken(path);
   // The cancel line is never the part that is cut: the services text gives way first.
   const line = token && ev.cancel ? `${ev.cancel.label}: ${ev.cancel.url}` : "";
-  const details = line ? `${cap(ev.description, Math.max(0, 500 - line.length - 1))}\n${line}` : cap(ev.description, 500);
+  const body = line ? cap(ev.description, Math.max(0, DESCRIPTION_MAX - line.length - 1)) : cap(ev.description, DESCRIPTION_MAX);
   const where = cap(ev.location, 200);
-  const ics = new URLSearchParams({ s: utc(start), e: utc(end), t: title, d: cap(ev.description, 500) }); // the .ics endpoint adds the cancel line itself
+  const ics = new URLSearchParams({ s: utc(start), e: utc(end), t: title, d: cap(ev.description, DESCRIPTION_MAX) }); // the .ics endpoint adds the cancel line itself
   if (where) ics.set("l", where);
   if (token) ics.set("c", token);
-  const g = new URLSearchParams({ action: "TEMPLATE", text: title, ctz: "Europe/Kyiv", dates: `${utc(start).replace(/[-:]/g, "")}/${utc(end).replace(/[-:]/g, "")}`, details });
-  if (where) g.set("location", where);
+  const gUrl = (details: string): string => {
+    const g = new URLSearchParams({ action: "TEMPLATE", text: title, ctz: "Europe/Kyiv", dates: `${utc(start).replace(/[-:]/g, "")}/${utc(end).replace(/[-:]/g, "")}`, details });
+    if (where) g.set("location", where);
+    return `https://calendar.google.com/calendar/render?${g}`;
+  };
+  // The ENCODED Google URL is bounded (Cyrillic is 6 bytes per char once encoded): whole trailing service lines go first, then a «…» line; the cancel line stays. The .ics keeps the full text.
+  const lines = body.split("\n");
+  const build = (n: number): string => [...lines.slice(0, n), ...(n < lines.length ? ["…"] : []), ...(line ? [line] : [])].join("\n");
+  let n = lines.length;
+  while (n > 0 && gUrl(build(n)).length > GOOGLE_URL_MAX) n--;
+  if (n === 0 && gUrl(build(0)).length > GOOGLE_URL_MAX) {
+    // one oversized line: cut its characters instead.
+    let max = lines[0].length;
+    while (max > 1 && gUrl([cap(lines[0], max), ...(line ? [line] : [])].join("\n")).length > GOOGLE_URL_MAX) max = Math.floor(max * 0.9);
+    lines.splice(0, lines.length, cap(lines[0], max));
+    n = 1;
+  }
   return {
-    google: googleHref(`https://calendar.google.com/calendar/render?${g}`, e.ua),
+    google: googleHref(gUrl(build(n)), e.ua),
     apple: appleHref(`/api/ics?${ics}`, origin, e),
   };
 }

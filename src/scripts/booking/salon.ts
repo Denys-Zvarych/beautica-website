@@ -58,7 +58,7 @@ export interface Core {
   recap: (into: HTMLElement, view: RecapView) => void;
   /** Resolves once the lazy calendar chooser module is loaded (never rejects); `calendarButton` is synchronous after it. */
   calendarReady: () => Promise<unknown>;
-  calendarButton: (b: { startsAt: string; minutes: number; master: string; services: string; cancelPath?: string | null }) => HTMLElement;
+  calendarButton: (b: { startsAt: string; minutes: number; master: string; services: { name: string; minutes: number }[]; cancelPath?: string | null }) => HTMLElement;
   /** The guest token was refused (401): back to the code step with the session banner. */
   sessionExpired: () => void;
   /** Re-open the time step for the current master with the «already taken» notice. */
@@ -516,7 +516,7 @@ export function createSalon(core: Core, info: SalonInfo) {
       // The cancel link is a bearer token (it arrives by SMS): it goes into the calendar event only (phase 030), never analytics or logs.
       const path = cancelPath(r.data.cancelUrl);
       const minutes = g.services.reduce((n, s) => n + s.minutes, 0) || r.data.durationMinutes;
-      body.append(el("div", "rule"), core.calendarButton({ startsAt: r.data.startsAt, minutes, master: g.name, services: g.services.map((s) => s.name).join(", "), cancelPath: path }));
+      body.append(el("div", "rule"), core.calendarButton({ startsAt: r.data.startsAt, minutes, master: g.name, services: g.services.map((s) => ({ name: s.name, minutes: s.minutes })), cancelPath: path }));
       host.append(a);
       offers.push({ token: cancelToken(path), telegram: r.data.telegram });
     }

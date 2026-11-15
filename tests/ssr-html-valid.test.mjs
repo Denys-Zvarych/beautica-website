@@ -4,16 +4,18 @@ import { test, describe } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { HtmlValidate, FileSystemConfigLoader } from "html-validate/node";
-import { rawRequest, requireBase, ROOT } from "./helpers/env.mjs";
+import { rawRequest, requireBase, ROOT, TOKEN, SHORT_TOKEN } from "./helpers/env.mjs";
 
 requireBase();
 const config = JSON.parse(readFileSync(`${ROOT}/.htmlvalidate.json`, "utf8"));
 const validator = new HtmlValidate(config);
 const PAGES = ["/book/oksana-ab12", "/book/sparse-0001", "/book/oksana-ab12?sort=OLDEST", "/book/s/lavanda-1111", "/book/s/lavanda-1111?sort=LOWEST", "/book/closed-aaaa", "/book/nobody-0000", "/book/s/shut-2222", "/book/evil-0666", "/book/s/wiz-html-0001", "/book/retired-bbbb", "/book/s/retiredsalon-bbbb", "/book-steps/salon"];
+// Phase 038: CancelPage.astro (token route, plain + confirmed «Додати в календар» variant) as the Worker serves it for both token URL shapes.
+const CANCEL = [`/book/cancel/${TOKEN}`, `/book/cancel/${TOKEN}?n=1`, `/c/${SHORT_TOKEN}`, `/c/${SHORT_TOKEN}?n=1`];
 const REVIEW = ["rvopen", "rvdone", "zznone"].map((k) => `/r/${k}-test-00000077`);
 
 describe("rendered /book/* HTML validates", () => {
-  for (const path of [...PAGES, ...REVIEW]) {
+  for (const path of [...PAGES, ...CANCEL, ...REVIEW]) {
     test(path, async () => {
       const html = (await rawRequest(path)).body;
       const report = await validator.validateString(html);

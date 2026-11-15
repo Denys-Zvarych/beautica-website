@@ -419,8 +419,10 @@
       }
     },
     "ics": {
-      "summary": "Запис до {master}",
-      "description": "Запис через Beautica. Послуги: {services}.",
+      "summary": "{first} · {master}",
+      "summaryMore": "{first} +{n} · {master}",
+      "description": "Запис через Beautica.",
+      "line": "{time} {name} · {duration}",
       "cancel": "Скасувати запис"
     },
     "reviews": {

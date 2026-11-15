@@ -5,11 +5,12 @@
 import type { APIRoute } from "astro";
 import { cancelPathFromToken } from "../../scripts/booking/api.ts";
 import { buildIcs } from "../../scripts/booking/ics.ts";
+import { DESCRIPTION_MAX } from "../../scripts/booking/ics-lines.ts";
 
 export const prerender = false;
 
 const headers = { "Cache-Control": "no-store", "X-Robots-Tag": "noindex, nofollow" };
-const MAX = { t: 120, l: 200, d: 500 } as const;
+const MAX = { t: 120, l: 200, d: DESCRIPTION_MAX } as const;
 const MAX_MINUTES = 24 * 60;
 const YEARS = { min: 2020, max: 2100 } as const;
 /** C0/C1 controls and the Unicode line/paragraph separators. */
@@ -23,9 +24,10 @@ const forbidden = (): Response => new Response("Forbidden", { status: 403, heade
 
 /** Single line, no control characters, trimmed; over `max` characters it is cut and ends with «…» (a long real booking still works).
  *  null = missing or empty when required. */
-function text(raw: string | null, max: number, required: boolean): string | null {
+function text(raw: string | null, max: number, required: boolean, multiline = false): string | null {
   if (raw === null) return required ? null : "";
-  const clean = raw.replace(CONTROLS, " ").trim();
+  // `multiline` (the description only, GST-78 one line per service): CR/LF/CRLF survive as "\n" (buildIcs escapes it as the TEXT `\n`, never a raw break); every other control is still a space.
+  const clean = (multiline ? raw.replace(/\r\n|\r/g, "\n").split("\n").map((l) => l.replace(CONTROLS, " ").trim()).filter(Boolean).join("\n") : raw.replace(CONTROLS, " ")).trim();
   if (required && !clean) return null;
   return clean.length > max ? `${clean.slice(0, max - 1).replace(/[\uD800-\uDBFF]$/, "").trimEnd()}…` : clean;
 }
@@ -56,7 +58,7 @@ export const GET: APIRoute = ({ url, request }) => {
   if (year < YEARS.min || year > YEARS.max) return bad();
   const summary = text(q.get("t"), MAX.t, true);
   const location = text(q.get("l"), MAX.l, false);
-  const description = text(q.get("d"), MAX.d, false);
+  const description = text(q.get("d"), MAX.d, false, true);
   if (summary === null || location === null || description === null) return bad();
   const c = q.get("c");
   const cancelPath = c === null ? null : cancelPathFromToken(c);
