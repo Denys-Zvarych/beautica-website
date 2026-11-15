@@ -1,6 +1,6 @@
 // Calendar event text for a guest booking (phase 038, GST-78): title «{first} · {master}» / «{first} +{n} · {master}», one description line per service
 // «{HH:mm} {name} · {duration}» (no price). Pure, no DOM; shared by the done screens and /c/{token}?n=1. Times are Europe/Kyiv.
-import { KYIV, formatDuration } from "../../lib/booking/duration.ts";
+import { KYIV, formatDuration } from "../../lib/booking/duration.ts?ics";
 
 export interface IcsService {
   name: string;
