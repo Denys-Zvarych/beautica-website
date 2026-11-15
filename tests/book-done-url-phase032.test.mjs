@@ -76,8 +76,8 @@ describe("/c/{token}?n=1 confirmed view", () => {
       assert.equal(apple.pathname, "/api/ics");
       assert.equal(apple.searchParams.get("s"), "20300305T100000Z".replace(/^(\d{4})(\d\d)(\d\d)T(\d\d)(\d\d)(\d\d)Z$/, "$1-$2-$3T$4:$5:$6Z"));
       assert.equal(apple.searchParams.get("e"), "2030-03-05T11:30:00Z");
-      assert.equal(apple.searchParams.get("t"), "Запис до Олена Коваль");
-      assert.match(apple.searchParams.get("d"), /Манікюр, Педикюр/);
+      assert.equal(apple.searchParams.get("t"), "Манікюр +1 · Олена Коваль");
+      assert.match(apple.searchParams.get("d"), /^Запис через Beautica\.\n\d{2}:\d{2} Манікюр · .+\n\d{2}:\d{2} Педикюр · /);
       assert.equal(apple.searchParams.get("l"), "Студія Лілія, вул. Хрещатик, 1");
       assert.equal(apple.searchParams.get("c"), SHORT_TOKEN);
       const g = new URL(await page.locator('#c-cal [data-cal="google"]').getAttribute("href"));

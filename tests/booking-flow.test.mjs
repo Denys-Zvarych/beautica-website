@@ -162,7 +162,7 @@ describe("happy path: one service", () => {
       const raw = await res.text();
       const ics = raw.replace(/\r\n /g, "");
       assert.match(ics, /^BEGIN:VCALENDAR\r\n/);
-      assert.match(ics, /SUMMARY:Запис до Оксана Коваленко/);
+      assert.match(ics, /SUMMARY:Манікюр класичний · Оксана Коваленко/);
       assert.match(ics, /DTSTART:\d{8}T\d{6}Z\r\n/);
       assert.match(ics, /LOCATION:Київ/);
       const cancelUrl = `${new URL(BASE).origin}/book/cancel/${TOKEN}`;

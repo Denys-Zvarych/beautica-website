@@ -1,5 +1,6 @@
 // Phase 025: contract of GET /api/ics (src/pages/api/ics.ts) against `wrangler dev` - status codes, headers, validation, truncation, and that the
 // calendar file carries the cancel link only from a valid `c` token (own origin), never a phone or guest name. No browser, no mock backend.
+import { DESCRIPTION_MAX } from "../src/scripts/booking/ics-lines.ts";
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync, existsSync } from "node:fs";
@@ -56,12 +57,12 @@ describe("GET /api/ics: success", () => {
     parseIcs(body);
   });
   test("over-long summary / place / description are cut with «…», not rejected", async () => {
-    const res = await get({ ...good, t: "М".repeat(300), l: "в".repeat(400), d: "д".repeat(900) });
+    const res = await get({ ...good, t: "М".repeat(300), l: "в".repeat(400), d: "д".repeat(DESCRIPTION_MAX + 400) });
     assert.equal(res.status, 200);
     const p = parseIcs(await res.text());
     assert.ok(p.text.SUMMARY.length === 120 && p.text.SUMMARY.endsWith("…"));
     assert.ok(p.text.LOCATION.length === 200 && p.text.LOCATION.endsWith("…"));
-    assert.ok(p.text.DESCRIPTION.length === 500 && p.text.DESCRIPTION.endsWith("…"));
+    assert.ok(p.text.DESCRIPTION.length === DESCRIPTION_MAX && p.text.DESCRIPTION.endsWith("…"));
   });
   test("line breaks in the query cannot inject properties", async () => {
     const res = await get({ ...good, t: "A\r\nATTENDEE:mailto:x@y.z", d: "b\nURL:https://evil.example" });

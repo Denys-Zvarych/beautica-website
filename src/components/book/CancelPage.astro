@@ -50,8 +50,10 @@ import "../../styles/calendar-button.css"; // phase 032: inline on purpose, the 
     data-cal-apple={t("book.done.calendarApple")}
     data-cal-iab={t("book.done.calendarIabHint")}
     data-cal-meta={t("book.done.calendarMetaHint")}
-    data-cal-summary={t("book.ics.summary", { master: "{master}" })}
-    data-cal-description={t("book.ics.description", { services: "{services}" })}
+    data-cal-summary={t("book.ics.summary", { first: "{first}", master: "{master}" })}
+    data-cal-summary-more={t("book.ics.summaryMore", { first: "{first}", n: "{n}", master: "{master}" })}
+    data-cal-description={t("book.ics.description")}
+    data-cal-line={t("book.ics.line", { time: "{time}", name: "{name}", duration: "{duration}" })}
     data-cal-cancel={t("book.ics.cancel")}
     data-h-confirm={t("cancel.confirmTitle")}
     data-h-cancelled={t("cancel.doneTitle")}

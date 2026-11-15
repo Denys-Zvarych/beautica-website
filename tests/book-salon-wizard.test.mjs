@@ -230,7 +230,7 @@ describe("016: the whole story, one booking per master", () => {
       assert.equal(res.status(), 200);
       const ics = parseIcs(await res.text());
       assert.match(ics.VEVENT.URL, /\/book\/cancel\/123e4567-e89b-42d3-a456-426614174002$/, "master 2's own cancel link (phase 030)");
-      assert.equal(ics.text.SUMMARY, "Запис до Ірина Мельник");
+      assert.match(ics.text.SUMMARY, /^.+ · Ірина Мельник$/);
       assert.equal(await page.locator("#done-list").evaluate((e) => e.scrollWidth <= e.clientWidth), true);
       noProblems(env);
     } finally {
