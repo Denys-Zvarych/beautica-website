@@ -47,15 +47,15 @@ describe("the old «owner cannot delete the account in the app» text is gone", 
 
 describe("versions shipped with the change", () => {
   const front = (p) => ({ version: /^version: "([^"]+)"/m.exec(src(p))[1], updated: /^updated: (\S+)/m.exec(src(p))[1] });
-  test("privacy 1.9, terms 1.2, delete-account 1.1, all dated 2026-11-14, PRIVACY_POLICY_VERSION 2026-11-14", () => {
-    assert.deepEqual(front("privacy"), { version: "1.9", updated: "2026-11-14" });
-    assert.deepEqual(front("terms"), { version: "1.2", updated: "2026-11-14" });
+  test("privacy 2.0, terms 1.4 (2026-11-19), delete-account 1.1 (2026-11-14), PRIVACY_POLICY_VERSION 2026-11-19", () => {
+    assert.deepEqual(front("privacy"), { version: "2.0", updated: "2026-11-19" });
+    assert.deepEqual(front("terms"), { version: "1.4", updated: "2026-11-19" });
     assert.deepEqual(front("delete-account"), { version: "1.1", updated: "2026-11-14" });
-    assert.equal(PRIVACY_POLICY_VERSION, "2026-11-14");
+    assert.equal(PRIVACY_POLICY_VERSION, "2026-11-19");
   });
   test("the built pages show those versions", () => {
-    assert.match(text("privacy"), /Версія 1\.9/);
-    assert.match(text("terms"), /Версія 1\.2/);
+    assert.match(text("privacy"), /Версія 2\.0/);
+    assert.match(text("terms"), /Версія 1\.4/);
     assert.match(text("delete-account"), /Версія 1\.1/);
   });
 });
