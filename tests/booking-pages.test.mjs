@@ -342,11 +342,11 @@ describe("legal pages say what the booking does (guest booking is live)", () => 
     const t = strip((await get("/privacy")).body);
     assert.equal(t.includes("поки що не можна"), false);
     assert.ok(t.includes("за посиланням, яким поділився майстер або салон"));
-    assert.ok(/бачить ваше ім.я, прізвище, номер телефону/.test(t), "the master sees the phone (user decision 2026-10-22)");
+    assert.ok(/майстер або власник і адміністратори салону[^.;]*бачать ваше ім.я, прізвище, номер телефону/.test(t), "the master sees the phone and the name (policy 2.0, approved 2026-11-19)");
     assert.equal(t.includes("Номер телефону їм не показується"), false);
     assert.ok(t.includes("Cloudflare Turnstile") && t.includes("позначку згоди"));
-    assert.ok(t.includes("перевірка Turnstile під час гостьового запису"), "Turnstile is listed under the Cloudflare processor");
-    assert.ok((await get("/privacy")).body.includes("2026-10-22") || t.includes("22 жовтня 2026") || t.includes("2026"), "page shows its date");
+    assert.ok(/Cloudflare \(перевірка Turnstile\)/.test(t), "Turnstile is listed under the Cloudflare processor");
+    assert.ok(t.includes("Дата набрання чинності: 19 листопада 2026"), "page shows its date (2026-11-19)");
   });
   test("terms and support: guest booking is described as available; no guest-booking «add when live» markers remain", async () => {
     const terms = strip((await get("/terms")).body);
