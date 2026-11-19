@@ -95,6 +95,8 @@ describe("validation", () => {
     ["a malformed email", { email: "not-an-email" }, "email"],
     ["an email without a dot in the domain", { email: "a@b" }, "email"],
     ["an incomplete phone", { phone: "+380 (50) 12" }, "phone"],
+    ["an account identifier that is neither an email nor a UA mobile", { email: "12345" }, "email"],
+    ["a non-UA number as the account identifier", { email: "+48123456789" }, "email"],
     ["an unknown role", { role: "admin" }, "role"],
     ["a comment over 1000 characters", { comment: "x".repeat(1001) }, "comment"],
     ["a missing consent", { consent: "" }, "consent"],
@@ -139,6 +141,16 @@ describe("accepted request", () => {
     assert.match(mail, /\+380501234567/, "phone is normalised to +380XXXXXXXXX");
     assert.ok(await until(() => log().includes("delete-request: sent")), "the status line was not logged");
     assert.equal(log().includes(marker), false, "submitted data leaked into the Worker log");
+  });
+
+  test("SUP-21: an account identified by a phone (0… or +380…) is accepted, normalised to E.164 in the team email, no Reply-To needed", async () => {
+    const tail = `${Date.now()}`.slice(-7);
+    const { res, json } = await post(validFields({ email: `050 ${tail.slice(0, 3)}-${tail.slice(3, 5)}-${tail.slice(5)}` }));
+    assert.equal(res.status, 200);
+    assert.deepEqual(json, { ok: true });
+    const e164 = `+38050${tail}`;
+    assert.ok(await until(() => sentEmails().some((t) => t.includes(e164))), "the team email with the E.164 account phone was not produced");
+    assert.match(sentEmails().find((t) => t.includes(e164)), new RegExp(`Email або телефон акаунта: \\${e164}`));
   });
 
   test("a phone is normalised in the email, a missing one reads «не вказано»", async () => {

@@ -137,6 +137,14 @@ describe("phase 018 (legal bump, legal fonts) is guarded on every PR", () => {
   });
 });
 
+describe("W042/W043 (delete-account phone identifier, SMSClub policy facts) are guarded on every PR", () => {
+  test("delete-request-account-identifier.test.mjs runs in the server-less site job (npm run test:static) and in npm test", () => {
+    assert.match(pkg.scripts["test:static"], /tests\/delete-request-account-identifier\.test\.mjs/);
+    assert.equal(steps.find((x) => /npm run test:static/.test(x.text))?.job, "site");
+    assert.equal(excluded.some((x) => "delete-request-account-identifier.test.mjs".includes(x)), false);
+  });
+});
+
 describe("phase 037 (legal pins append-only) is guarded on every PR", () => {
   test("legal-pins-append-only.test.mjs runs in the site job against the fetched base branch and a missing base fails there", () => {
     const st = steps.find((x) => x.text.includes("tests/legal-pins-append-only.test.mjs"));
