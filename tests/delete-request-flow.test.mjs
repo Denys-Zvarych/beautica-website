@@ -223,6 +223,12 @@ describe("phone mask", () => {
 });
 
 describe("submit", () => {
+  withDialog("SUP-21: a phone account identifier (0…) is accepted and sent as E.164", {}, async ({ ui, posts, fillValid }) => {
+    await fillValid({ email: "050 123-45-67" });
+    await ui.submit.click();
+    await ui.done.waitFor({ state: "visible" });
+    assert.match(posts[0].body, /name="email"\r\n\r\n\+380501234567\r\n/);
+  });
   withDialog("success: sends one multipart POST with the entered fields, shows the confirmation, focuses it, and a reopen starts clean", {}, async ({ ui, page, posts, fillValid, isOpen }) => {
     await fillValid({ phone: "0501234567" });
     await ui.comment.fill("Прошу видалити");

@@ -25,7 +25,7 @@ Columns:
 | Guest can cancel a booking until 2 hours before it starts | l/cancel#st-closed | `../beautica-backend/src/main/java/com/beautica/config/BookingSmsProperties.java:33` | live |
 | After that window the cancel is refused (422) and the guest is told to contact the master | l/cancel#st-closed | `../beautica-backend/src/main/java/com/beautica/booking/service/BookingCancellationService.java:150` | live |
 | A used or unknown cancel link answers 404 («вже використано або недійсне») | l/cancel#st-notfound | `../beautica-backend/src/main/java/com/beautica/booking/controller/PublicBookingController.java:234` | live |
-| Invite email links to /invite/accept?token= (opens in the app) | l/invite#main | `../beautica-backend/src/main/java/com/beautica/auth/InviteService.java:427` | live |
+| SMS invite link to /invite/accept?token= (opens in the app) | l/invite#main | `../beautica-backend/src/main/java/com/beautica/auth/InviteService.java:371` | live |
 | Booking email links to /bookings/{id} (details in the app) | l/booking#main | `../beautica-backend/src/main/java/com/beautica/notification/service/NotificationService.java:629` | live |
 | Review email links to /bookings/{id}/review (review left in the app) | l/review#main | `../beautica-backend/src/main/java/com/beautica/notification/service/NotificationService.java:616` | live |
 | Guest cancel SMS/email links to /c/{token} (short alias; the old /book/cancel/{token} links keep working) | l/cancel#main | `../beautica-backend/src/main/java/com/beautica/booking/service/GuestCancelUrlBuilder.java:21` | live |
