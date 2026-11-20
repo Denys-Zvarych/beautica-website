@@ -36,7 +36,7 @@ const msgs = {
 
       <div class="field">
         <label class="vt-label" for="dr-email">{t("deleteRequest.email")}</label>
-        <input id="dr-email" name="email" type="email" inputmode="email" autocomplete="email" required maxlength={EMAIL_MAX} aria-describedby="dr-email-err" />
+        <input id="dr-email" name="email" type="text" inputmode="email" autocomplete="username" required maxlength={EMAIL_MAX} aria-describedby="dr-email-err" />
         <p class="err" id="dr-email-err" hidden></p>
       </div>
 
@@ -412,7 +412,7 @@ const msgs = {
       FIELDS.filter((f) => {
         const el = input(f);
         const v = el.value.trim();
-        if (f === "email") return !EMAIL_RE.test(v);
+        if (f === "email") return v.includes("@") ? !EMAIL_RE.test(v) : !normalizePhone(v);
         if (f === "phone") return normalizePhone(v) === null;
         if (f === "role") return v === "";
         if (f === "comment") return el.value.length > 1000;
@@ -462,6 +462,9 @@ const msgs = {
       }
       if (sending) return;
       const body = new FormData(form);
+      // A phone account identifier goes out as E.164 (+380XXXXXXXXX); an email is sent as typed.
+      const account = String(body.get("email") ?? "").trim();
+      if (account && !account.includes("@")) body.set("email", normalizePhone(account) ?? account);
       setSending(true);
       const ctrl = new AbortController();
       const timer = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
