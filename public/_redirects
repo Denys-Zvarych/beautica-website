@@ -16,3 +16,6 @@
 /r/:token/ /r/:token 307
 /r/ / 307
 /r / 307
+
+# /admin/ -> /admin at the asset layer (not Astro's own 301, which answers before the middleware and carries no headers); the _headers /admin* block puts the admin headers on it.
+/admin/ /admin 307

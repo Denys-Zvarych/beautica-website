@@ -2,10 +2,19 @@
 // Replaces Astro's built-in checkOrigin (disabled in astro.config.mjs): that check answers 403 before user middleware,
 // so the rejection would carry no security / no-store / noindex headers.
 import { defineMiddleware } from "astro:middleware";
-import { withSecurityHeaders } from "./lib/securityHeaders";
+import { withSecurityHeaders, adminPath } from "./lib/securityHeaders";
 
 /** SSR link pages: /book/{slug} and /book/s/{slug} (never /book/cancel/{token}: two segments, static shell). */
 const LINK_PAGE = /^\/book\/(?:s\/)?[^/]+$/;
+
+/** Pathname for header selection in the error path: never throws. */
+const safePath = (request: Request): string | undefined => {
+  try {
+    return new URL(request.url).pathname;
+  } catch {
+    return undefined;
+  }
+};
 
 const FORM_TYPES = ["application/x-www-form-urlencoded", "multipart/form-data", "text/plain"];
 
@@ -17,6 +26,7 @@ export const onRequest = defineMiddleware(async (ctx, next) => {
     console.error("middleware: unexpected", (err as { name?: string } | undefined)?.name);
     return withSecurityHeaders(
       new Response("Internal Server Error", { status: 500, headers: { "Cache-Control": "no-store", "X-Robots-Tag": "noindex, nofollow" } }),
+      safePath(ctx.request),
     );
   }
 });
@@ -33,8 +43,20 @@ async function guard(ctx: Parameters<Parameters<typeof defineMiddleware>[0]>[0],
           status: 403,
           headers: { "Cache-Control": "no-store", "X-Robots-Tag": "noindex, nofollow" },
         }),
+        new URL(request.url).pathname,
       );
     }
+  }
+  const adminHit = adminPath(new URL(request.url).pathname);
+  if (adminHit.malformed) return withSecurityHeaders(new Response("Not Found", { status: 404 }), "/admin"); // fail closed
+  if (adminHit.admin) {
+    // Private /admin* (phase 039): the Access JWT is verified for EVERY method and path under it before any route runs; anything else is a plain 404.
+    // Lazy import: only this branch needs the Worker env (cloudflare:workers).
+    const [{ requireOwner }, { adminConfig }] = await Promise.all([import("./lib/admin/access.ts"), import("./lib/admin/runtime.ts")]);
+    const owner = await requireOwner(request, adminConfig());
+    if (owner instanceof Response) return withSecurityHeaders(owner, "/admin");
+    (ctx.locals as { adminActor?: string }).adminActor = owner.email;
+    return withSecurityHeaders(await next(), "/admin");
   }
   if (request.method === "GET" && LINK_PAGE.test(new URL(request.url).pathname)) return cachedLinkPage(ctx, next);
   return withSecurityHeaders(await next(), new URL(request.url).pathname);

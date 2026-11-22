@@ -1,0 +1,54 @@
+---
+// Private operator shell (phase 039). The middleware has already verified the Cloudflare Access JWT (src/middleware.ts); the page re-checks the
+// actor it left in locals (404 if absent), so a route can never render without the gate. No scripts, no analytics, no-store, noindex.
+export const prerender = false;
+
+import Layout from "../../components/Layout.astro";
+import "../../styles/fonts-legal.css"; // after Layout (its later @font-face wins): the small Latin subset, like the legal pages
+import NeuCard from "../../components/NeuCard.astro";
+import Chip from "../../components/Chip.astro";
+import { t } from "../../i18n/t";
+import { requireActor } from "../../lib/admin/access.ts";
+
+const actor = requireActor(Astro.locals);
+if (actor instanceof Response) return actor;
+---
+
+<Layout title={t("admin.metaTitle")} description={t("admin.metaDescription")} canonicalPath="/admin" noindex noReferrer analytics={false} hideHeader hideFooter basicLatin>
+  <main id="main" class="admin">
+    <NeuCard as="section">
+      <h1 class="vt-heading">{t("admin.h1")}</h1>
+      <p class="who">{t("admin.actor", { email: actor })}</p>
+      <!-- W040/W041 turn these into links; until the routes exist they are plain labels, never dead links. -->
+      <ul class="nav" aria-label={t("admin.navLabel")}>
+        <li><Chip>{t("admin.requests")} · {t("admin.soon")}</Chip></li>
+        <li><Chip>{t("admin.catalog")} · {t("admin.soon")}</Chip></li>
+      </ul>
+    </NeuCard>
+  </main>
+</Layout>
+
+<style>
+  .admin {
+    width: 100%;
+    max-width: var(--vt-max-width);
+    margin: 0 auto;
+    padding: var(--vt-space-md);
+  }
+  .who {
+    margin-top: var(--vt-space-sm);
+  }
+  .nav {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--vt-space-md);
+    margin: var(--vt-space-lg) 0 0;
+    padding: 0;
+    list-style: none;
+  }
+  @media (min-width: 600px) {
+    .admin {
+      padding: var(--vt-space-lg);
+    }
+  }
+</style>

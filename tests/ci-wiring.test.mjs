@@ -78,11 +78,28 @@ describe("every route is under Lighthouse", () => {
   const staticRoutes = routes("").filter((r) => !r.includes("[") && !r.startsWith("/book-steps/")).map((r) => (r === "/index" ? "/index" : r));
   // Catch-all 404 routes ([...rest]) are not pages either: they only re-serve the static /404 page through the middleware so that malformed
   // token paths get the token headers (phase 007). Listed by name so a new catch-all cannot slip past Lighthouse unnoticed; /404 is measured.
-  const CATCH_ALL_404 = ["/book/cancel/[...rest]", "/c/[...rest]"];
+  // /admin/[...rest] (phase 039) is the gate's catch-all: the middleware answers its unauthenticated 404 (admin headers); an owner gets a plain 404 too.
+  const CATCH_ALL_404 = ["/admin/[...rest]", "/book/cancel/[...rest]", "/c/[...rest]"];
   const catchAll = routes("").filter((r) => r.includes("[..."));
   const dynamicRoutes = routes("").filter((r) => r.includes("[") && !r.includes("[..."));
   const lhciUrls = lhci.ci.collect.url.map((u) => new URL(u).pathname.replace(/\.html$/, ""));
-  for (const r of staticRoutes)
+  // /admin (phase 039) sits behind Cloudflare Access, so lhci over dist/ cannot reach it: scripts/lighthouserc-admin.json measures it through the test harness.
+  const adminLhci = JSON.parse(read("scripts/lighthouserc-admin.json")).ci;
+  const ADMIN_ROUTES = { "/admin/index": "/admin" };
+  for (const r of staticRoutes.filter((x) => ADMIN_ROUTES[x]))
+    test(`admin page ${r} is measured by scripts/lighthouserc-admin.json (3 runs, median), and check-admin.mjs runs in CI`, () => {
+      assert.ok(adminLhci.collect.url.some((u) => new URL(u).pathname === ADMIN_ROUTES[r]), `${r} has no admin Lighthouse URL`);
+      assert.equal(adminLhci.collect.numberOfRuns, 3);
+      assert.equal(adminLhci.assert.aggregationMethod, "median");
+      assert.ok(steps.some((x) => x.text.includes("node scripts/check-admin.mjs")), "no CI step runs scripts/check-admin.mjs");
+      const gate = steps.find((x) => x.text.includes("node scripts/check-admin.mjs")).text;
+      assert.match(gate, /if: always\(\)/, "the admin gate must run even when lhci is red");
+      const src = read("scripts/check-admin.mjs");
+      assert.match(src, /lighthouserc-admin\.json/);
+      assert.match(src, /check-responsive\.mjs/);
+      assert.match(src, /check-axe\.mjs/);
+    });
+  for (const r of staticRoutes.filter((x) => !ADMIN_ROUTES[x]))
     test(`static page ${r} is in lighthouserc.json (3 runs, median)`, () => {
       assert.ok(lhciUrls.includes(r), `${r} has no Lighthouse URL`);
       assert.equal(lhci.ci.collect.numberOfRuns, 3);
@@ -105,6 +122,12 @@ describe("every route is under Lighthouse", () => {
   test("the only catch-all routes are the listed 404 re-servers (their page, /404, is under Lighthouse)", () => {
     assert.deepEqual(catchAll.sort(), CATCH_ALL_404);
     assert.ok(lhciUrls.includes("/404"));
+  });
+  test("the /admin catch-all's gated 404 (admin headers, with and without a JWT or actor) is asserted by admin-access.test.mjs", () => {
+    const t = read("tests/admin-access.test.mjs");
+    assert.match(t, /\/admin\/anything/);
+    assert.match(t, /catchAll\(\{ locals: \{\} \}\)\.status, 404/);
+    assert.match(t, /Cf-Access-Jwt-Assertion": "forged\.jwt\.value"/);
   });
   test("the guest-cancel token route is measured through its static shell /l/cancel", () => assert.ok(lhciUrls.includes("/l/cancel")));
 });

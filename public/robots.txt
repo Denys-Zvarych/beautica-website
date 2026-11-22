@@ -7,6 +7,7 @@ Disallow: /book/cancel/
 Disallow: /c/
 Disallow: /r/
 Disallow: /api/
+Disallow: /admin
 Disallow: /book-steps/
 
 Sitemap: https://beautica.app/sitemap-index.xml

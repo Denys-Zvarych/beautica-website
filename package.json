@@ -13,6 +13,8 @@
     "check": "astro check",
     "check:tokens": "node scripts/check-tokens.mjs",
     "check:responsive": "node scripts/check-responsive.mjs",
+    "check:axe": "node scripts/check-axe.mjs",
+    "check:admin": "node scripts/check-admin.mjs",
     "check:claims": "node scripts/check-claims.mjs",
     "list:not-live": "node scripts/list-not-live.mjs",
     "check:cls": "node scripts/measure-cls.mjs",
@@ -28,11 +30,13 @@
     "@astrojs/sitemap": "3.7.4",
     "@fontsource-variable/comfortaa": "5.3.0",
     "@fontsource-variable/nunito": "5.3.0",
-    "astro": "7.3.8"
+    "astro": "7.3.8",
+    "jose": "6.2.18"
   },
   "devDependencies": {
     "@astrojs/check": "0.9.10",
     "@lhci/cli": "0.15.1",
+    "axe-core": "4.14.0",
     "html-validate": "11.16.4",
     "playwright-core": "1.64.1",
     "sharp": "0.35.5",

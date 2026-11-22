@@ -2,7 +2,8 @@
 // Responsive check at 360 / 768 / 1280 px (also 320 for overflow): no horizontal scroll, tap targets >= 48 px,
 // targets >= 8 px apart. Serves dist/client with a tiny static server (unknown path -> 404.html, like Pages).
 //
-//   npm run build && node scripts/check-responsive.mjs [--routes /,/404] [--shots shots/]
+//   npm run build && node scripts/check-responsive.mjs [--routes /,/404] [--shots shots/] [--base http://127.0.0.1:4399]
+// `--base <url>` checks a running server instead of serving dist/client (e.g. the /admin harness: node scripts/render-admin.mjs --serve 4399).
 //
 // Browser: playwright-core + a Chromium. Set CHROMIUM_PATH, or install one with `npx playwright install chromium`.
 import { createServer } from "node:http";
@@ -17,7 +18,8 @@ const WIDTHS = [320, 360, 768, 1280];
 const DIST = resolve("dist/client");
 const MIME = { ".html": "text/html; charset=utf-8", ".css": "text/css", ".png": "image/png", ".webp": "image/webp", ".woff2": "font/woff2", ".ico": "image/x-icon", ".xml": "application/xml", ".txt": "text/plain" };
 
-const server = createServer((req, res) => {
+const BASE = arg("--base", "");
+const server = BASE ? null : createServer((req, res) => {
   const path = new URL(req.url, "http://x").pathname;
   const candidates = [path, path + ".html", join(path, "index.html")];
   const hit = candidates.map((c) => join(DIST, c)).find((p) => p.startsWith(DIST) && existsSync(p) && /\.[a-z0-9]+$/.test(p));
@@ -25,8 +27,8 @@ const server = createServer((req, res) => {
   res.writeHead(hit ? 200 : 404, { "content-type": MIME[extname(file)] ?? "application/octet-stream" });
   res.end(readFileSync(file));
 });
-await new Promise((r) => server.listen(0, "127.0.0.1", r));
-const base = `http://127.0.0.1:${server.address().port}`;
+if (server) await new Promise((r) => server.listen(0, "127.0.0.1", r));
+const base = BASE ? BASE.replace(/\/$/, "") : `http://127.0.0.1:${server.address().port}`;
 
 const executablePath = process.env.CHROMIUM_PATH ?? ["/usr/bin/chromium-browser", "/usr/bin/chromium", "/snap/bin/chromium"].find(existsSync);
 const browser = await chromium.launch({ executablePath, args: ["--no-sandbox"] });
@@ -70,7 +72,7 @@ for (const route of ROUTES) {
   }
 }
 await browser.close();
-server.close();
+server?.close();
 if (problems.length) {
   console.error("check-responsive: FAIL\n  - " + problems.join("\n  - "));
   process.exit(1);
