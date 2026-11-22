@@ -134,6 +134,7 @@ const MASTERS = {
   "ambig-504a": () => masterInfo(),
   "nocancel-8888": () => masterInfo(),
   "tgdone-3131": () => masterInfo(), // booking response carries telegram {available:true, linked:false} (phase 022)
+  "attached-7171": () => masterInfo(), // phase 046: the booking response carries attachedToAccount: true (B527)
   "foreigncancel-4242": () => masterInfo(),
   "bookdays-5151": () => masterInfo(),
   "expired-6666": () => masterInfo(),
@@ -358,7 +359,8 @@ export async function startMockApi() {
         if (wizBooked.has(taken)) return err(res, 409, "Slot not available");
         wizBooked.add(taken);
         const minutes = r.services.reduce((a, x) => a + x.min, 0);
-        return json(res, 201, { bookingId: uid("1", r.master.n), appointmentId: r.services.length > 1 ? uid("2", r.master.n) : null, startsAt: b.startsAt, masterName: r.master.name, serviceName: r.services.map((x) => x.name).join(", "), durationMinutes: minutes, cancelUrl: `https://beautica.app/book/cancel/123e4567-e89b-42d3-a456-42661417400${r.master.n}` });
+        // phase 046: a slug containing "attm2" attaches only master 2's booking to the guest's account (the visit shows the line when ANY booking is attached)
+        return json(res, 201, { ...(slug.includes("attm2") && r.master.n === 2 ? { attachedToAccount: true } : {}), bookingId: uid("1", r.master.n), appointmentId: r.services.length > 1 ? uid("2", r.master.n) : null, startsAt: b.startsAt, masterName: r.master.name, serviceName: r.services.map((x) => x.name).join(", "), durationMinutes: minutes, cancelUrl: `https://beautica.app/book/cancel/123e4567-e89b-42d3-a456-42661417400${r.master.n}` });
       }
       const r = wizResolve(masterId, ids);
       if (!r) return err(res, 404, "Not found");
@@ -441,7 +443,7 @@ export async function startMockApi() {
       }
       const names = ids.map((id) => [...SVC, ...DUP_SVC].find((s) => s.id === id)?.name).filter(Boolean);
       const minutes = ids.reduce((a, id) => a + ([...SVC, ...DUP_SVC].find((s) => s.id === id)?.durationMinutes ?? 0), 0);
-      return json(res, 201, { bookingId: "b0b0b0b0-1111-4222-8333-944455556666", appointmentId: ids.length > 1 ? "a0a0a0a0-1111-4222-8333-944455556666" : null, startsAt: b.startsAt, masterName: "Оксана Коваленко", serviceName: names.join(", "), durationMinutes: minutes, cancelUrl: slug === "nocancel-8888" ? null : slug === "foreigncancel-4242" ? FOREIGN_CANCEL_URL : CANCEL_URL, ...(slug.startsWith("tgdone") ? { telegram: { available: true, linked: false } } : {}) });
+      return json(res, 201, { bookingId: "b0b0b0b0-1111-4222-8333-944455556666", appointmentId: ids.length > 1 ? "a0a0a0a0-1111-4222-8333-944455556666" : null, startsAt: b.startsAt, masterName: "Оксана Коваленко", serviceName: names.join(", "), durationMinutes: minutes, cancelUrl: slug === "nocancel-8888" ? null : slug === "foreigncancel-4242" ? FOREIGN_CANCEL_URL : CANCEL_URL, ...(slug.startsWith("tgdone") ? { telegram: { available: true, linked: false } } : {}), ...(slug.startsWith("attached") ? { attachedToAccount: true } : {}) });
     }
     // Guest review invites, the real backend 401 shapes (bare JSON, state discriminator, null fields omitted). Tokens by prefix (16+ chars, [A-Za-z0-9_-]):
     //   rvopen...   one service (master)      rvmulti...  two services (master)      rvsalon...  two services, two masters (salon)

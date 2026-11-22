@@ -174,10 +174,15 @@ try {
   if (!Number.isInteger(concurrency) || concurrency < 1) throw new Error("--concurrency must be a whole number >= 1");
   const targets = files.length ? files : readdirSync("tests").filter((f) => f.endsWith(".test.mjs") && !(process.env.TEST_EXCLUDE ?? "").split(",").filter(Boolean).some((x) => f.includes(x))).map((f) => join("tests", f));
   const run = spawn(process.execPath, ["--test", `--test-concurrency=${concurrency}`, "--test-reporter=spec", ...(grep ? [`--test-name-pattern=${grep}`] : []), ...targets], {
-    stdio: "inherit",
+    stdio: ["inherit", "pipe", "inherit"],
     env: { ...process.env, TEST_BASE_URL: base, TEST_WRANGLER_LOG: logPath, TEST_API_ORIGIN: mockApi.origin },
   });
+  // The spec reporter ends with «ℹ tests N / pass N / fail N / skipped N»: echo it as one line so the totals are never missed in a long log.
+  let out = "";
+  run.stdout.on("data", (d) => (process.stdout.write(d), (out = (out + d).slice(-4000))));
   code = await new Promise((resolve) => run.on("exit", (c) => resolve(c ?? 1)));
+  const n = (k) => Number(new RegExp(`^ℹ ${k} (\\d+)`, "m").exec(out)?.[1] ?? NaN);
+  console.log(`run-tests: ${n("tests")} tests, ${n("pass")} pass, ${n("fail")} fail, ${n("skipped")} skipped, exit ${code}`);
 } catch (err) {
   console.error("run-tests:", err.message);
 } finally {

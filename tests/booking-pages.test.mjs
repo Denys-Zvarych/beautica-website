@@ -7,6 +7,7 @@ import { launch } from "./helpers/browser.mjs";
 import { bookPage, mockLog, logMark, callsTo, shot } from "./helpers/book.mjs";
 import { EVIL } from "./helpers/mock-api.mjs";
 import { visibleBox } from "./helpers/browser.mjs";
+import { PRIVACY_POLICY_VERSION } from "../src/config/legal.mjs";
 const text = (loc) => loc.innerText().then((s) => s.replace(/\s+/g, " ").trim());
 
 requireBase();
@@ -342,11 +343,12 @@ describe("legal pages say what the booking does (guest booking is live)", () => 
     const t = strip((await get("/privacy")).body);
     assert.equal(t.includes("поки що не можна"), false);
     assert.ok(t.includes("за посиланням, яким поділився майстер або салон"));
-    assert.ok(/майстер або власник і адміністратори салону[^.;]*бачать ваше ім.я, прізвище, номер телефону/.test(t), "the master sees the phone and the name (policy 2.0, approved 2026-11-19)");
+    assert.ok(/майстер або власник і адміністратори салону[^.;]*бачать ваше ім.я, прізвище, номер телефону/.test(t), "the master sees the phone and the name");
     assert.equal(t.includes("Номер телефону їм не показується"), false);
     assert.ok(t.includes("Cloudflare Turnstile") && t.includes("позначку згоди"));
     assert.ok(/Cloudflare \(перевірка Turnstile\)/.test(t), "Turnstile is listed under the Cloudflare processor");
-    assert.ok(t.includes("Дата набрання чинності: 19 листопада 2026"), "page shows its date (2026-11-19)");
+    const longDate = new Date(PRIVACY_POLICY_VERSION.slice(0, 10)).toLocaleDateString("uk-UA", { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" }).replace(/\s*р\.$/, "");
+    assert.ok(t.includes(`Дата набрання чинності: ${longDate}`), `page shows its date (${PRIVACY_POLICY_VERSION}, «${longDate}»)`);
   });
   test("terms and support: guest booking is described as available; no guest-booking «add when live» markers remain", async () => {
     const terms = strip((await get("/terms")).body);
