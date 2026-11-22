@@ -307,6 +307,7 @@ const hints = serviceNameHints(info?.services ?? []);
         <h2 class="t-heading-lg" data-step-heading tabindex="-1" aria-level="1">{t("book.done.h")}</h2>
       </div>
       <p class="t-body11 centered reveal">{salon ? t("book.salonFlow.done.sub") : t("book.done.sub")}</p>
+      <p class="t-body11 centered reveal" id="done-attached" hidden>{t("book.done.attached")}</p>
       <div class="g-md"></div>
       {salon ? <div class="appts reveal" id="done-list"></div> : <NeuCard bordered pad="md" class="reveal sumcard"><div id="done-card"></div></NeuCard>}
       <div class="g-md"></div>

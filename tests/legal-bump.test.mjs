@@ -42,11 +42,14 @@ describe("the version and the date shown on the legal pages come from the source
     const html = page("terms");
     assert.match(html, shown(version, updated), `/terms does not show «Версія ${version}» / ${updated} (${shownDate(updated)})`);
   });
-  test("the bump is the one the phase doc ships: terms 1.4 / 2026-11-19, privacy 2.0 / 2026-11-19 (the backend gate compares this version string)", () => {
-    assert.deepEqual(front(privacyMd), { version: "2.0", updated: "2026-11-19" });
-    assert.deepEqual(front(termsMd), { version: "1.4", updated: "2026-11-19" });
-    assert.equal(PRIVACY_POLICY_VERSION, "2026-11-19");
-    assert.equal(TERMS_VERSION, "2026-11-19");
+  test("the shipped versions are the current ones: both `updated:` dates equal the legal.mjs constants, are in the pin fixtures as the newest entry, and the version label is X.Y (the backend gate compares the date string)", () => {
+    const pins = (f) => JSON.parse(read(`tests/fixtures/${f}`)).versions.at(-1).version;
+    assert.equal(front(privacyMd).updated, PRIVACY_POLICY_VERSION);
+    assert.equal(front(termsMd).updated, TERMS_VERSION);
+    assert.equal(pins("privacy-policy-versions.json"), PRIVACY_POLICY_VERSION, "newest privacy pin is the current version");
+    assert.equal(pins("terms-versions.json"), TERMS_VERSION, "newest terms pin is the current version");
+    assert.match(front(privacyMd).version, /^\d+\.\d+$/);
+    assert.match(front(termsMd).version, /^\d+\.\d+$/);
   });
 });
 

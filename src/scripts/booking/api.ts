@@ -19,6 +19,8 @@ export interface BookingCreated {
   cancelUrl: string | null;
   /** Backend 407 D6: the Telegram reminder channel for the booker's phone. `null` = field absent / malformed = no choice is offered. */
   telegram: TelegramAvailability | null;
+  /** Backend B527: the booking was attached to the Beautica account registered with the booker's phone. Absent / non-boolean = false. */
+  attachedToAccount: boolean;
 }
 export interface TelegramAvailability {
   available: boolean;
@@ -79,7 +81,7 @@ export function createBooking(api: string, slug: string, guestToken: string, b: 
     (j) => {
       const o = obj(j);
       return typeof o.startsAt === "string"
-        ? { startsAt: o.startsAt, masterName: String(o.masterName ?? ""), serviceName: String(o.serviceName ?? ""), durationMinutes: Number(o.durationMinutes ?? 0), cancelUrl: typeof o.cancelUrl === "string" ? o.cancelUrl : null, telegram: readTelegram(o.telegram) }
+        ? { startsAt: o.startsAt, masterName: String(o.masterName ?? ""), serviceName: String(o.serviceName ?? ""), durationMinutes: Number(o.durationMinutes ?? 0), cancelUrl: typeof o.cancelUrl === "string" ? o.cancelUrl : null, telegram: readTelegram(o.telegram), attachedToAccount: o.attachedToAccount === true }
         : null;
     },
     true,
