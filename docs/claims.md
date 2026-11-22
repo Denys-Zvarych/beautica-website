@@ -21,7 +21,7 @@ Columns:
 | Salon admin opens settings from the profile tune button | delete-account#app | `../beautica-mobile/lib/features/salon/presentation/admin_own_profile_screen.dart:347` | live |
 | Client with more than 50 future bookings must cancel some first | delete-account#app | `../beautica-backend/src/main/java/com/beautica/user/ClientAccountDeletionService.java:77` | live |
 | Master with more than 500 future bookings must cancel some first | delete-account#app | `../beautica-backend/src/main/java/com/beautica/user/StaffAccountSelfDeletionService.java:73` | live |
-| Reply to a deletion request within 30 calendar days (policy commitment, no code behind it) | delete-account#request | `src/content/legal/uk/privacy.md:223` | live |
+| Reply to a deletion request within 30 calendar days (policy commitment, no code behind it) | delete-account#request | `src/content/legal/uk/privacy.md:224` | live |
 | Guest can cancel a booking until 2 hours before it starts | l/cancel#st-closed | `../beautica-backend/src/main/java/com/beautica/config/BookingSmsProperties.java:33` | live |
 | After that window the cancel is refused (422) and the guest is told to contact the master | l/cancel#st-closed | `../beautica-backend/src/main/java/com/beautica/booking/service/BookingCancellationService.java:150` | live |
 | A used or unknown cancel link answers 404 («вже використано або недійсне») | l/cancel#st-notfound | `../beautica-backend/src/main/java/com/beautica/booking/controller/PublicBookingController.java:234` | live |

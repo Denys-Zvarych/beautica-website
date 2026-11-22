@@ -822,8 +822,9 @@ export async function initBooking(root: HTMLElement): Promise<{ open(): void }> 
           { ...b, location: [salonName, city, address].filter(Boolean).join(", ") },
         )
       : el("div"); // the module failed to load (offline): the done card shows without the chooser
-  function renderDone(b: { startsAt: string; durationMinutes: number; cancelUrl: string | null; telegram: TelegramAvailability | null }): void {
+  function renderDone(b: { startsAt: string; durationMinutes: number; cancelUrl: string | null; telegram: TelegramAvailability | null; attachedToAccount: boolean }): void {
     const card = $("#done-card");
+    $("#done-attached").hidden = !b.attachedToAccount;
     recap(card);
     const minutes = totals().minutes || b.durationMinutes;
     const cPath = cancelPath(b.cancelUrl);

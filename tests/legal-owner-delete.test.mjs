@@ -9,7 +9,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { ROOT } from "./helpers/env.mjs";
 import { OWNER_COPY } from "./fixtures/legal-owner-copy.mjs";
-import { PRIVACY_POLICY_VERSION } from "../src/config/legal.mjs";
+import { PRIVACY_POLICY_VERSION, TERMS_VERSION } from "../src/config/legal.mjs";
 
 const DIST = join(ROOT, "dist", "client");
 assert.ok(existsSync(DIST), "dist/client is missing: run `npm run build` first");
@@ -47,15 +47,14 @@ describe("the old «owner cannot delete the account in the app» text is gone", 
 
 describe("versions shipped with the change", () => {
   const front = (p) => ({ version: /^version: "([^"]+)"/m.exec(src(p))[1], updated: /^updated: (\S+)/m.exec(src(p))[1] });
-  test("privacy 2.0, terms 1.4 (2026-11-19), delete-account 1.1 (2026-11-14), PRIVACY_POLICY_VERSION 2026-11-19", () => {
-    assert.deepEqual(front("privacy"), { version: "2.0", updated: "2026-11-19" });
-    assert.deepEqual(front("terms"), { version: "1.4", updated: "2026-11-19" });
+  test("privacy / terms front matter match legal.mjs; delete-account stays 1.1 (2026-11-14)", () => {
+    assert.equal(front("privacy").updated, PRIVACY_POLICY_VERSION);
+    assert.equal(front("terms").updated, TERMS_VERSION);
     assert.deepEqual(front("delete-account"), { version: "1.1", updated: "2026-11-14" });
-    assert.equal(PRIVACY_POLICY_VERSION, "2026-11-19");
   });
   test("the built pages show those versions", () => {
-    assert.match(text("privacy"), /Версія 2\.0/);
-    assert.match(text("terms"), /Версія 1\.4/);
+    assert.match(text("privacy"), new RegExp(`Версія ${front("privacy").version.replace(".", "\\.")}`));
+    assert.match(text("terms"), new RegExp(`Версія ${front("terms").version.replace(".", "\\.")}`));
     assert.match(text("delete-account"), /Версія 1\.1/);
   });
 });

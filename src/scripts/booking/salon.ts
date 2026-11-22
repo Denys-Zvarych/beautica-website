@@ -509,6 +509,10 @@ export function createSalon(core: Core, info: SalonInfo) {
     first.querySelector("[data-done-title]")!.remove();
     first.querySelector<HTMLElement>("[data-done-body]")!.innerHTML = core.lrow(S.salonLabel!, core.salonName) + core.lrow(S.addressLabel!, [core.city, core.address].filter(Boolean).join(", "), core.note);
     host.append(first);
+    $("#done-attached").hidden = !plan.some((g) => {
+      const r = results.get(g.masterId);
+      return r?.ok === true && r.data.attachedToAccount;
+    });
     for (const g of plan) {
       const r = results.get(g.masterId);
       const day = dayOf(g);

@@ -19,13 +19,13 @@ export const SUPPORT_EMAIL = "support@beautica.app";
  * not in the future). Must equal the `updated:` date in src/content/legal/uk/privacy.md (tests/booking-config.test.mjs checks it).
  * Bump the two together whenever the policy text changes.
  */
-export const PRIVACY_POLICY_VERSION = "2026-11-19";
+export const PRIVACY_POLICY_VERSION = "2026-11-21";
 
 /**
  * Terms version = `updated:` of src/content/legal/uk/terms.md (registration consent records it; mobile `kTermsVersion` must equal it).
  * tests/booking-config.test.mjs pins the terms body by sha256 per version: bump this, `updated:` and add a pin together.
  */
-export const TERMS_VERSION = "2026-11-19";
+export const TERMS_VERSION = "2026-11-21";
 
 /** Tokens usable in the legal Markdown bodies as {{key}}. */
 export const LEGAL_VARS = {
