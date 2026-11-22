@@ -14,6 +14,7 @@ const MESSAGES: Record<string, string> = {
   REQUEST_NOT_PENDING: "Заявку вже опрацьовано.",
   DUPLICATE_PENDING: "Заявка з такою назвою вже очікує розгляду.",
   TYPE_EXISTS: "Тип послуги з такою назвою вже існує.",
+  CATEGORY_ICON_REQUIRED: "Спершу додайте іконку категорії.",
   CATALOG_IN_USE: "Неможливо видалити: елемент каталогу використовується. Сховайте його.",
 };
 
@@ -61,9 +62,8 @@ export async function adminFetch(cfg: AdminConfig, method: "GET" | "POST" | "PUT
   return { ok: false, status: res.status, code: errorCode(json), message: errorMessage(res.status, errorCode(json)) };
 }
 
-/** Typed code of an error envelope: `code`, `errorCode`, `data.code` or an UPPER_SNAKE `message` (B502+ fix the exact field). */
+/** Typed code of an error envelope: ONLY `data.code` (`{"success":false,"data":{"code":X},"message":...}`, services spec SVC-55/SVC-06). `message` is never read. */
 function errorCode(json: unknown): string {
-  const j = json as { code?: unknown; errorCode?: unknown; message?: unknown; data?: { code?: unknown } | null } | null;
-  for (const v of [j?.code, j?.errorCode, j?.data?.code, j?.message]) if (typeof v === "string" && /^[A-Z][A-Z0-9_]{2,60}$/.test(v)) return v;
-  return "";
+  const code = (json as { data?: { code?: unknown } | null } | null)?.data?.code;
+  return typeof code === "string" && /^[A-Z][A-Z0-9_]{2,60}$/.test(code) ? code : "";
 }

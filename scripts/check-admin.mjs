@@ -1,27 +1,44 @@
 #!/usr/bin/env node
-// /admin quality gate (phase 039): starts the test-only harness (scripts/render-admin.mjs --serve), then check-responsive --base, check-axe and
-// Lighthouse (scripts/lighthouserc-admin.json) on /admin. Needs a built dist/. `npm run check:admin`.
+// /admin quality gate (phases 039 + 040): starts the test-only harness (scripts/render-admin.mjs --serve <free port>), then check-responsive --base,
+// check-axe and Lighthouse (budgets of scripts/lighthouserc-admin.json) on /admin and /admin/requests. A second harness with CATALOG_MOCK_ROWS=100
+// asserts page 1 of a 100-row queue (25 cards) against the SAME budgets. Needs a built dist/. `npm run check:admin`.
+// Every harness is killed on exit (its process group, which holds wrangler), also on SIGINT / SIGTERM / a thrown error.
 import { spawn, spawnSync } from "node:child_process";
+import { createServer } from "node:net";
 
-const PORT = 4399;
-const base = `http://127.0.0.1:${PORT}`;
-const harness = spawn(process.execPath, ["scripts/render-admin.mjs", "--serve", String(PORT)], { stdio: "inherit", detached: true });
-const stop = () => { try { process.kill(-harness.pid, "SIGTERM"); } catch { /* gone */ } };
-process.on("exit", stop);
+const freePort = () => new Promise((res, rej) => { const s = createServer(); s.once("error", rej); s.listen(0, "127.0.0.1", () => { const { port } = s.address(); s.close(() => res(port)); }); });
+const harnesses = [];
+const stopAll = () => { for (const h of harnesses) { try { process.kill(-h.pid, "SIGTERM"); } catch { /* gone */ } } };
+process.on("exit", stopAll);
 for (const s of ["SIGINT", "SIGTERM"]) process.on(s, () => process.exit(130));
-for (let i = 0; ; i++) {
-  try { if ((await fetch(`${base}/admin`, { signal: AbortSignal.timeout(2000) })).status === 200) break; } catch { /* not up */ }
-  if (i > 400) { console.error("check-admin: harness did not start"); process.exit(1); }
-  await new Promise((r) => setTimeout(r, 250));
+process.on("uncaughtException", (e) => { console.error(e); process.exit(1); });
+
+async function start(env) {
+  const port = await freePort();
+  const h = spawn(process.execPath, ["scripts/render-admin.mjs", "--serve", String(port)], { stdio: "inherit", detached: true, env: { ...process.env, ...env } });
+  harnesses.push(h);
+  const base = `http://127.0.0.1:${port}`;
+  for (let i = 0; ; i++) {
+    try { if ((await fetch(`${base}/admin`, { signal: AbortSignal.timeout(2000) })).status === 200) return base; } catch { /* not up */ }
+    if (i > 400) { console.error("check-admin: harness did not start"); process.exit(1); }
+    await new Promise((r) => setTimeout(r, 250));
+  }
 }
-const steps = [
-  ["check-responsive", [process.execPath, "scripts/check-responsive.mjs", "--base", base, "--routes", "/admin"]],
-  ["check-axe", [process.execPath, "scripts/check-axe.mjs", `${base}/admin`]],
-  ...(process.argv.includes("--no-lighthouse") ? [] : [["lighthouse", ["npx", "--no-install", "lhci", "autorun", "--config=scripts/lighthouserc-admin.json"]]]),
-];
+
+const noLh = process.argv.includes("--no-lighthouse");
+const lh = (urls) => ["npx", "--no-install", "lhci", "autorun", "--config=scripts/lighthouserc-admin.json", ...urls.map((u) => `--collect.url=${u}`)];
 let failed = 0;
-for (const [name, [cmd, ...args]] of steps) {
+const run = (name, [cmd, ...args]) => {
   console.log(`\n== ${name}`);
   if (spawnSync(cmd, args, { stdio: "inherit" }).status !== 0) { failed++; console.error(`check-admin: ${name} FAILED`); }
-}
+};
+
+const base = await start({});
+run("check-responsive", [process.execPath, "scripts/check-responsive.mjs", "--base", base, "--routes", "/admin,/admin/requests"]);
+run("check-axe", [process.execPath, "scripts/check-axe.mjs", `${base}/admin`, `${base}/admin/requests`]);
+if (!noLh) run("lighthouse (sample data)", lh([`${base}/admin`, `${base}/admin/requests`]));
+
+const big = await start({ CATALOG_MOCK_ROWS: "100" });
+run("check-responsive (100 rows, page 1 + page 4)", [process.execPath, "scripts/check-responsive.mjs", "--base", big, "--routes", "/admin/requests,/admin/requests?p=4"]);
+if (!noLh) run("lighthouse (100-row queue, page 1)", lh([`${big}/admin/requests`]));
 process.exit(failed ? 1 : 0);

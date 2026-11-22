@@ -40,11 +40,15 @@ for (const route of ROUTES) {
     const page = await browser.newPage({ viewport: { width, height: 800 } });
     await page.goto(base + route, { waitUntil: "networkidle" });
     await page.waitForTimeout(1500); // let entrance animations settle before measuring
+    // Open every <details> first: their controls (legal contents links, the admin reject forms) are real targets once the owner opens them, and a closed
+    // one keeps no usable box. Only elements still invisible after this are skipped below.
+    await page.evaluate(() => new Promise((done) => { document.querySelectorAll("details").forEach((d) => { d.open = true; }); requestAnimationFrame(() => requestAnimationFrame(done)); }));
     const r = await page.evaluate(() => {
       // WCAG 2.5.8 "inline" exception: links inside running legal prose (.prose p/li) whose paragraph has more text than the link are not tap-target buttons.
       const targets = [...document.querySelectorAll("a[href], button, input, select, textarea, summary, [role=button]")]
         .filter((el) => {
           const host = el.closest(".prose p, .prose li");
+          if (el.checkVisibility && !el.checkVisibility()) return false; // still not rendered after every <details> was opened (display:none, hidden)
           if (getComputedStyle(el).pointerEvents === "none") return false; // inert (e.g. the always-open contents summary from 600 px)
           return !(host && el.matches(".prose a") && host.textContent.trim().length > el.textContent.trim().length);
         })

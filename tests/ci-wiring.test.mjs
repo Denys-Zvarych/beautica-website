@@ -85,7 +85,7 @@ describe("every route is under Lighthouse", () => {
   const lhciUrls = lhci.ci.collect.url.map((u) => new URL(u).pathname.replace(/\.html$/, ""));
   // /admin (phase 039) sits behind Cloudflare Access, so lhci over dist/ cannot reach it: scripts/lighthouserc-admin.json measures it through the test harness.
   const adminLhci = JSON.parse(read("scripts/lighthouserc-admin.json")).ci;
-  const ADMIN_ROUTES = { "/admin/index": "/admin" };
+  const ADMIN_ROUTES = { "/admin/index": "/admin", "/admin/requests": "/admin/requests" };
   for (const r of staticRoutes.filter((x) => ADMIN_ROUTES[x]))
     test(`admin page ${r} is measured by scripts/lighthouserc-admin.json (3 runs, median), and check-admin.mjs runs in CI`, () => {
       assert.ok(adminLhci.collect.url.some((u) => new URL(u).pathname === ADMIN_ROUTES[r]), `${r} has no admin Lighthouse URL`);

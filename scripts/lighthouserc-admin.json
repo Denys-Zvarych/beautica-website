@@ -1,7 +1,7 @@
 {
   "ci": {
     "collect": {
-      "url": ["http://127.0.0.1:4399/admin"],
+      "url": ["http://127.0.0.1:4399/admin", "http://127.0.0.1:4399/admin/requests"],
       "numberOfRuns": 3,
       "settings": { "chromeFlags": "--no-sandbox --headless=new" }
     },

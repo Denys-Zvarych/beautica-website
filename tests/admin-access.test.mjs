@@ -99,12 +99,18 @@ describe("adminFetch", () => {
   });
   test("typed 409 codes map to their own Ukrainian message, never the generic server error", async () => {
     for (const code of ["REQUEST_NOT_PENDING", "DUPLICATE_PENDING", "TYPE_EXISTS", "CATALOG_IN_USE"]) {
-      const r = await withFetch(async () => Response.json({ success: false, message: code }, { status: 409 }), () => adminFetch(cfg, "POST", "/api/v1/internal/catalog/x", "owner@example.com", {}));
+      const r = await withFetch(async () => Response.json({ success: false, data: { code }, message: "x" }, { status: 409 }), () => adminFetch(cfg, "POST", "/api/v1/internal/catalog/x", "owner@example.com", {}));
       assert.equal(r.ok, false);
       assert.equal(r.code, code);
       assert.notEqual(r.message, errorMessage(500, ""));
     }
     assert.notEqual(errorMessage(409, "UNKNOWN"), errorMessage(500, ""));
+  });
+  test("the code is read ONLY from data.code: top-level code/errorCode and an UPPER_SNAKE message are ignored", async () => {
+    for (const body of [{ code: "TYPE_EXISTS" }, { errorCode: "TYPE_EXISTS" }, { message: "TYPE_EXISTS" }, { data: { message: "TYPE_EXISTS" } }, { data: null }]) {
+      const r = await withFetch(async () => Response.json({ success: false, ...body }, { status: 409 }), () => adminFetch(cfg, "POST", "/api/v1/internal/catalog/x", "owner@example.com", {}));
+      assert.equal(r.code, "", JSON.stringify(body));
+    }
   });
   test("network failure -> unavailable result, not a throw", async () => {
     const r = await withFetch(async () => { throw new TypeError("x"); }, () => adminFetch(cfg, "GET", "/api/v1/internal/catalog/x", "owner@example.com"));

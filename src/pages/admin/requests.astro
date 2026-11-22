@@ -1,0 +1,262 @@
+---
+// W040: pending catalog requests (phase 040). GET lists them; each card is a plain <form method="post"> back to this same route (no scripts: ADMIN_CSP has
+// none). POST -> backend call(s) -> 303 -> GET with a flash code in the query (src/lib/admin/requests.ts); a refresh never re-submits a decision.
+// (One route for GET and POST: Astro cannot map requests.astro and requests.ts to the same path.)
+export const prerender = false;
+
+import Layout from "../../components/Layout.astro";
+import "../../styles/fonts-legal.css"; // after Layout (its later @font-face wins): the small Latin subset, like the legal pages
+import NeuCard from "../../components/NeuCard.astro";
+import Chip from "../../components/Chip.astro";
+import CtaButton from "../../components/CtaButton.astro";
+import { t } from "../../i18n/t";
+import { requireActor } from "../../lib/admin/access.ts";
+import { adminConfig } from "../../lib/admin/runtime.ts";
+import { DONE_CODES, ERR_CODES, FLASH_COOKIE, KEEP_MAX, PAGE_SIZE, REASON_MAX, decide, formatDate, listPending, parsePage, type CatalogRequest } from "../../lib/admin/requests.ts";
+
+const actor = requireActor(Astro.locals);
+if (actor instanceof Response) return actor;
+const cfg = adminConfig();
+if (!cfg) return new Response("Not Found", { status: 404, headers: { "Cache-Control": "no-store", "X-Robots-Tag": "noindex, nofollow" } });
+
+if (Astro.request.method === "POST") {
+  let form: FormData;
+  try {
+    form = await Astro.request.formData();
+  } catch {
+    return Astro.redirect("/admin/requests?err=FAILED", 303);
+  }
+  const d = await decide(cfg, actor, form);
+  // The typed name of a failed edit rides in a one-shot cookie (not in the URL: no history / log / Referer copy of it).
+  if (d.typed) Astro.cookies.set(FLASH_COOKIE, d.typed, { httpOnly: true, secure: true, sameSite: "strict", path: "/admin/requests", maxAge: 60 });
+  return Astro.redirect(d.location, 303); // relative Location: works on prod and staging origins alike
+}
+if (Astro.request.method !== "GET" && Astro.request.method !== "HEAD") return new Response(null, { status: 405, headers: { Allow: "GET, HEAD, POST", "Cache-Control": "no-store" } });
+
+const q = Astro.url.searchParams;
+const done = (DONE_CODES as readonly string[]).includes(q.get("done") ?? "") ? q.get("done") : null;
+const err = (ERR_CODES as readonly string[]).includes(q.get("err") ?? "") ? q.get("err") : null;
+const flash = done ? { ok: true, text: t(`admin.requests.flash.${done}`) } : err ? { ok: false, text: t(`admin.requests.flash.${err}`) } : null;
+const keepCard = q.get("card") ?? "";
+const keepName = (Astro.cookies.get(FLASH_COOKIE)?.value ?? "").slice(0, KEEP_MAX);
+if (Astro.cookies.has(FLASH_COOKIE)) Astro.cookies.delete(FLASH_COOKIE, { path: "/admin/requests" }); // read once
+
+const page = parsePage(q.get("p"));
+const list = await listPending(cfg, actor, page);
+// A decision can empty the last page: send the owner to the new last page (flash and card ride along).
+if (list.ok && list.items.length === 0 && page > 1 && list.total > 0) {
+  const to = new URLSearchParams(q);
+  if (list.totalPages > 1) to.set("p", String(list.totalPages)); else to.delete("p");
+  return Astro.redirect(`/admin/requests${to.size ? `?${to}` : ""}`, 303);
+}
+const pageUrl = (n: number) => `/admin/requests${n > 1 ? `?p=${n}` : ""}`;
+const from = (page - 1) * PAGE_SIZE + 1;
+const items = list.ok ? list.items : [];
+const groups = [
+  { id: "cat", title: t("admin.requests.categories"), rows: items.filter((r) => r.kind === "CATEGORY") },
+  { id: "svc", title: t("admin.requests.serviceTypes"), rows: items.filter((r) => r.kind === "SERVICE_TYPE") },
+];
+const L = {
+  category: t("admin.requests.category"), requester: t("admin.requests.requester"), sent: t("admin.requests.sent"), description: t("admin.requests.description"),
+  name: t("admin.requests.name"), initialService: t("admin.requests.initialService"), save: t("admin.requests.save"), approve: t("admin.requests.approve"),
+  reject: t("admin.requests.reject"), rejectOpen: t("admin.requests.rejectOpen"), reason: t("admin.requests.reason"), reasonHint: t("admin.requests.reasonHint"),
+  pager: t("admin.requests.pager"), prev: t("admin.requests.prev"), next: t("admin.requests.next"),
+};
+const badCard = err === "BAD_INPUT" ? keepCard : "";
+const nameOf = (r: CatalogRequest) => (r.kind === "CATEGORY" ? r.displayName ?? r.name : r.name);
+const typed = (r: CatalogRequest) => (keepCard === `${r.kind}:${r.id}` && keepName !== "" ? keepName : nameOf(r));
+---
+
+<Layout title={t("admin.requests.metaTitle")} description={t("admin.requests.metaDescription")} canonicalPath="/admin/requests" noindex noReferrer analytics={false} hideHeader hideFooter basicLatin>
+  <main id="main" class="admin">
+    <NeuCard as="section">
+      <h1 class="vt-heading">{t("admin.requests.h1")}</h1>
+      <p class="back"><Chip href="/admin">{t("admin.back")}</Chip></p>
+      {flash && <p class:list={["flash vt-body", flash.ok ? "ok" : "bad"]} role={flash.ok ? "status" : "alert"}>{flash.text}</p>}
+      {!list.ok && <p class="flash bad vt-body" role="alert">{t("admin.requests.loadFailed")}</p>}
+      {list.ok && list.total > items.length && <p class="vt-label note">{t("admin.requests.range", { shown: `${from}–${from + items.length - 1}`, total: list.total })}</p>}
+    </NeuCard>
+
+    {list.ok && items.length === 0 && (
+      <div class="gap"><NeuCard as="section"><p class="vt-body">{t("admin.requests.empty")}</p></NeuCard></div>
+    )}
+
+    {groups.filter((g) => g.rows.length > 0).map((g) => (
+      <section class="group" aria-labelledby={`h-${g.id}`}>
+        <h2 id={`h-${g.id}`} class="vt-card-title">{g.title} · {g.rows.length}</h2>
+        <ul class="cards">
+          {g.rows.map((r) => {
+            const k = r.id;
+            return (
+              <NeuCard as="li" pad="md">
+                <form method="post" action="/admin/requests" class="req">
+                  <input type="hidden" name="kind" value={r.kind} />
+                  <input type="hidden" name="id" value={r.id} />
+                  {page > 1 && <input type="hidden" name="p" value={page} />}
+                  <input type="hidden" name="origName" value={nameOf(r)} />
+                  {r.kind === "CATEGORY" && <input type="hidden" name="origInitialServiceName" value={r.initialServiceName ?? ""} />}
+                  <dl class="facts vt-body">
+                    {r.kind === "SERVICE_TYPE" && r.categoryName && <div><dt class="vt-label">{L.category}</dt><dd>{r.categoryName}</dd></div>}
+                    <div><dt class="vt-label">{L.requester}</dt><dd>{r.requesterLabel}</dd></div>
+                    {r.createdAt && <div><dt class="vt-label">{L.sent}</dt><dd><time datetime={r.createdAt}>{formatDate(r.createdAt)}</time></dd></div>}
+                    {r.description && <div><dt class="vt-label">{L.description}</dt><dd class="desc">{r.description}</dd></div>}
+                  </dl>
+                  <label class="vt-label" for={`n-${k}`}>{L.name}</label>
+                  <input id={`n-${k}`} name="name" type="text" required maxlength="400" value={typed(r)} autocomplete="off" aria-invalid={badCard === `${r.kind}:${r.id}` ? "true" : undefined} />
+                  {r.kind === "CATEGORY" && (
+                    <>
+                      <label class="vt-label" for={`s-${k}`}>{L.initialService}</label>
+                      <input id={`s-${k}`} name="initialServiceName" type="text" maxlength="400" value={r.initialServiceName ?? ""} autocomplete="off" />
+                    </>
+                  )}
+                  <div class="actions">
+                    <CtaButton type="submit" name="action" value="save">{L.save}</CtaButton>
+                    <CtaButton type="submit" name="action" value="approve">{L.approve}</CtaButton>
+                  </div>
+                  <details class="rej">
+                    <summary class="vt-label"><span class="vt-u">{L.rejectOpen}</span></summary>
+                    <label class="vt-label" for={`r-${k}`}>{L.reason}</label>
+                    <textarea id={`r-${k}`} name="reason" rows="3" maxlength={REASON_MAX} aria-describedby={`rh-${k}`}></textarea>
+                    <p class="vt-label" id={`rh-${k}`}>{L.reasonHint}</p>
+                    <CtaButton type="submit" name="action" value="reject">{L.reject}</CtaButton>
+                  </details>
+                </form>
+              </NeuCard>
+            );
+          })}
+        </ul>
+      </section>
+    ))}
+    {list.ok && list.totalPages > 1 && (
+      <nav class="pager" aria-label={L.pager}>
+        {page > 1 ? <Chip href={pageUrl(page - 1)}>{L.prev}</Chip> : <span />}
+        <span class="vt-label" aria-current="page">{page} / {list.totalPages}</span>
+        {page < list.totalPages ? <Chip href={pageUrl(page + 1)}>{L.next}</Chip> : <span />}
+      </nav>
+    )}
+  </main>
+</Layout>
+
+<style>
+  .admin {
+    width: 100%;
+    max-width: var(--vt-max-width);
+    margin: 0 auto;
+    padding: var(--vt-space-md);
+  }
+  .back {
+    margin: var(--vt-space-md) 0 0;
+  }
+  .flash {
+    margin: var(--vt-space-md) 0 0;
+    padding: var(--vt-space-sm) var(--vt-space-md);
+    border-radius: var(--vt-radius-field);
+    background: var(--vt-color-base-emphasis);
+    box-shadow: var(--vt-shadow-bordered-card);
+  }
+  .flash.ok {
+    color: var(--vt-color-success);
+  }
+  .flash.bad {
+    color: var(--vt-color-error);
+  }
+  .note {
+    margin-top: var(--vt-space-sm);
+  }
+  .gap,
+  .group {
+    margin-top: var(--vt-space-lg);
+  }
+  .group h2 {
+    margin: 0 0 var(--vt-space-md);
+  }
+  .pager {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--vt-space-md);
+    margin-top: var(--vt-space-lg);
+  }
+  .cards {
+    display: grid;
+    gap: var(--vt-space-lg);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  .req {
+    display: grid;
+    gap: var(--vt-space-sm);
+  }
+  .facts {
+    display: grid;
+    gap: var(--vt-space-sm);
+    margin: 0 0 var(--vt-space-sm);
+  }
+  .facts dd {
+    margin: 0;
+    overflow-wrap: anywhere;
+  }
+  .desc {
+    white-space: pre-line;
+  }
+  input:not([type="hidden"]),
+  textarea {
+    box-sizing: border-box;
+    width: 100%;
+    min-height: var(--vt-size-field);
+    padding: var(--vt-space-sm) var(--vt-space-md);
+    border: 0;
+    border-radius: var(--vt-radius-field);
+    background: var(--vt-color-base-emphasis);
+    box-shadow: var(--vt-shadow-bordered-card);
+    color: var(--vt-color-text);
+    font-family: var(--vt-font-body);
+    font-size: var(--vt-fs-prose);
+    font-weight: var(--vt-fw-prose);
+    line-height: var(--vt-lh-prose);
+  }
+  textarea {
+    resize: vertical;
+  }
+  [aria-invalid="true"] {
+    outline: medium solid var(--vt-color-error);
+    outline-offset: 0;
+  }
+  .actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--vt-space-md);
+    margin-top: var(--vt-space-sm);
+  }
+  .rej {
+    margin-top: var(--vt-space-sm);
+  }
+  .rej[open] {
+    display: grid;
+    gap: var(--vt-space-sm);
+  }
+  .rej summary {
+    display: flex;
+    align-items: center;
+    min-height: var(--vt-touch-min);
+    cursor: pointer;
+  }
+  .rej[open] summary {
+    margin-bottom: var(--vt-space-xs);
+  }
+  .rej :global(.cta) {
+    justify-self: start;
+  }
+  @media (min-width: 600px) {
+    .admin {
+      padding: var(--vt-space-lg);
+    }
+  }
+  @media (min-width: 1024px) {
+    .cards {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      align-items: start;
+    }
+  }
+</style>

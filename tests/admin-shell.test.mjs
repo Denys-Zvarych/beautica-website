@@ -28,13 +28,12 @@ describe("/admin shell, signed in (built Worker via render-admin)", () => {
     assert.ok(main.includes(escapeHtml(EMAIL)), "escaped email missing from <main>");
     assert.ok(!main.includes("<i>b"), "raw markup from the email reached the page");
   });
-  test("both «скоро» chips are plain labels, not links", () => {
+  test("«Заявки» is a real link to /admin/requests; «Каталог» is still a plain «скоро» label (W041)", () => {
     const items = [...main.matchAll(/<li\b[^>]*>([\s\S]*?)<\/li>/g)].map((m) => m[1]);
     assert.equal(items.length, 2);
-    for (const [i, label] of [uk.admin.requests, uk.admin.catalog].entries()) {
-      assert.equal(items[i].replace(/<[^>]*>/g, ""), `${label} · ${uk.admin.soon}`);
-    }
-    assert.ok(!/<a[\s>]/.test(main), "a link inside the shell");
+    assert.match(items[0], new RegExp(`<a [^>]*href="/admin/requests"[^>]*>[\\s\\S]*${uk.admin.requests.label}`));
+    assert.equal(items[1].replace(/<[^>]*>/g, ""), `${uk.admin.catalog} · ${uk.admin.soon}`);
+    assert.equal([...main.matchAll(/<a[\s>]/g)].length, 1, "exactly one link in the shell");
   });
   test("the page has no <script> and no inline handler", () => {
     assert.ok(!/<script/i.test(html), "script tag");
@@ -60,7 +59,7 @@ describe("jose stays out of the public build", () => {
     const name = base(access[0]).replace(/\.mjs$/, "");
     const staticImport = new RegExp(`^\\s*(?:import|export)\\b[^\\n;]*?["'][^"'\\n]*${name}`, "m");
     const importers = server.filter((f) => f !== access[0] && staticImport.test(readFileSync(f, "utf8")));
-    assert.equal(importers.length, 2, "the /admin page and the catch-all route: " + importers.map(base)); // a third importer = a public route now loads jose
+    assert.equal(importers.length, 3, "the /admin page, /admin/requests (W040) and the catch-all route: " + importers.map(base)); // a fourth importer = a public route (or an unlisted admin route) now loads jose
     for (const f of importers) assert.match(readFileSync(f, "utf8"), /requireActor\(/, `${base(f)} imports jose code but is not an admin route`);
     const lazy = server.filter((f) => new RegExp(`\\bimport\\(\\s*["'][^"']*${name}`).test(readFileSync(f, "utf8"))).map(base);
     assert.deepEqual(lazy, ["virtual_astro_middleware.mjs"]);
