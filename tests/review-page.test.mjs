@@ -564,16 +564,23 @@ describe("fonts ahead of the first paint (audit cycle 2)", () => {
     test(`${token.slice(0, 6)}: no Latin letters on the page, so 4 font files / <= 110 KB and the big Latin files are never requested`, async () => {
       const env = await reviewPage(token);
       try {
-        const fonts = [];
-        env.page.on("response", async (r) => {
-          if (/\.woff2(\?|$)/.test(r.url())) fonts.push({ file: new URL(r.url()).pathname.split("/").pop(), bytes: (await r.body().catch(() => Buffer.alloc(0))).length });
+        // Distinct files keyed by name: a font fetched twice (late first-load response, reload refetch) counts once.
+        const byFile = new Map();
+        const pending = [];
+        env.page.on("response", (r) => {
+          if (!/\.woff2(\?|$)/.test(r.url())) return;
+          const file = new URL(r.url()).pathname.split("/").pop();
+          pending.push(r.body().catch(() => Buffer.alloc(0)).then((b) => { byFile.set(file, Math.max(byFile.get(file) ?? 0, b.length)); }));
         });
         await env.page.reload({ waitUntil: "networkidle" });
         await env.page.evaluate(() => document.fonts.ready);
         await env.page.waitForLoadState("networkidle");
-        assert.deepEqual(fonts.filter((f) => /^(nunito|comfortaa)-latin-wght/.test(f.file)), [], "a visible Latin letter (e.g. SMS) pulls the full Latin face");
-        assert.ok(fonts.length <= 4, `${fonts.length} font files`);
-        assert.ok(fonts.reduce((n, f) => n + f.bytes, 0) <= 110 * 1024, "fonts <= 110 KB");
+        await Promise.all(pending);
+        const files = [...byFile.keys()].sort();
+        const total = [...byFile.values()].reduce((n, b) => n + b, 0);
+        assert.deepEqual(files.filter((f) => /^(nunito|comfortaa)-latin-wght/.test(f)), [], "a visible Latin letter (e.g. SMS) pulls the full Latin face");
+        assert.ok(files.length <= 4, `${files.length} font files: ${files.join(", ")}`);
+        assert.ok(total <= 110 * 1024, `fonts <= 110 KB (got ${total} B: ${files.join(", ")})`);
       } finally {
         await env.context.close();
       }
