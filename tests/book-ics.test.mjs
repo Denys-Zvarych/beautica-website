@@ -110,7 +110,10 @@ describe("calendar link in the browser", () => {
     const flat = ics.replace(/\r\n /g, "");
     assert.equal(p.VEVENT.URL, `${new URL(BASE).origin}/book/cancel/${TOKEN(CANCEL_URL)}`);
     assert.ok(p.text.DESCRIPTION.endsWith(`${CANCEL_LABEL}: ${p.VEVENT.URL}`), p.text.DESCRIPTION);
-    assert.equal(/Календар|\+?380|50\d{7}/.test(noOrigin(flat)), false, flat);
+    // The UID is a random UUID (its digit runs can look like a phone), so it is cut out; the guest name + the fixture phone are matched literally, any other UA phone shape by a digit-bounded pattern.
+    const body = noOrigin(flat).replace(/^UID:.*$/m, "");
+    assert.equal(/Календар|501234567/.test(body), false, flat);
+    assert.equal(/(?<!\d)(\+?380\d{9}|0\d{9})(?!\d)/.test(body), false, flat);
   });
 
   test("a foreign cancel host from the API never reaches the file or the link", async () => {
