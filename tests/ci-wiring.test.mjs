@@ -64,7 +64,8 @@ describe("every spec runs on pull requests", () => {
     for (const s of heavy) {
       const t = Number(/timeout-minutes:\s*(\d+)/.exec(s.text)?.[1]);
       // npm test (792 tests) takes ~305 s on a runner, just over 5 min: its step allows 8 (PR #30).
-      const limit = /lhci autorun/.test(s.text) ? 14 : /^\s*run: npm test\s*$/m.test(s.text) ? 8 : 5; // lhci over 10 pages x 3 runs takes ~5.5 min on a runner; its job allows 15; lighthouse-ssr is split in two steps (3 + 2 pages) to stay within 5
+      // check-admin --group sample / large (W041): 205 s / 244 s measured; the steps allow 8 / 8 (>= +50 %).
+      const limit = /lhci autorun/.test(s.text) ? 14 : /^\s*run: npm test\s*$/m.test(s.text) || /node scripts\/check-admin\.mjs --group sample/.test(s.text) ? 8 : /node scripts\/check-admin\.mjs --group large/.test(s.text) ? 8 : 5; // lhci over 10 pages x 3 runs takes ~5.5 min on a runner; its job allows 15; lighthouse-ssr is split in two steps (3 + 2 pages) to stay within 5
       assert.ok(t >= 1 && t <= limit, `step "${s.text.split("\n")[0]}" has timeout-minutes ${t || "none"}`);
     }
   });
@@ -78,11 +79,32 @@ describe("every route is under Lighthouse", () => {
   const staticRoutes = routes("").filter((r) => !r.includes("[") && !r.startsWith("/book-steps/")).map((r) => (r === "/index" ? "/index" : r));
   // Catch-all 404 routes ([...rest]) are not pages either: they only re-serve the static /404 page through the middleware so that malformed
   // token paths get the token headers (phase 007). Listed by name so a new catch-all cannot slip past Lighthouse unnoticed; /404 is measured.
-  const CATCH_ALL_404 = ["/book/cancel/[...rest]", "/c/[...rest]"];
+  // /admin/[...rest] (phase 039) is the gate's catch-all: the middleware answers its unauthenticated 404 (admin headers); an owner gets a plain 404 too.
+  const CATCH_ALL_404 = ["/admin/[...rest]", "/book/cancel/[...rest]", "/c/[...rest]"];
   const catchAll = routes("").filter((r) => r.includes("[..."));
   const dynamicRoutes = routes("").filter((r) => r.includes("[") && !r.includes("[..."));
   const lhciUrls = lhci.ci.collect.url.map((u) => new URL(u).pathname.replace(/\.html$/, ""));
-  for (const r of staticRoutes)
+  // /admin (phase 039) sits behind Cloudflare Access, so lhci over dist/ cannot reach it: scripts/lighthouserc-admin.json measures it through the test harness.
+  const adminLhci = JSON.parse(read("scripts/lighthouserc-admin.json")).ci;
+  const ADMIN_ROUTES = { "/admin/index": "/admin", "/admin/requests": "/admin/requests", "/admin/catalog": "/admin/catalog" };
+  for (const r of staticRoutes.filter((x) => ADMIN_ROUTES[x]))
+    test(`admin page ${r} is measured by scripts/lighthouserc-admin.json (3 runs, median), and check-admin.mjs runs in CI`, () => {
+      assert.ok(adminLhci.collect.url.some((u) => new URL(u).pathname === ADMIN_ROUTES[r]), `${r} has no admin Lighthouse URL`);
+      assert.equal(adminLhci.collect.numberOfRuns, 3);
+      assert.equal(adminLhci.assert.aggregationMethod, "median");
+      for (const group of ["sample", "large"]) {
+        const gate = steps.find((x) => x.text.includes(`node scripts/check-admin.mjs --group ${group}`))?.text;
+        assert.ok(gate, `no CI step runs scripts/check-admin.mjs --group ${group}`);
+        assert.match(gate, /if: always\(\)/, `the admin gate (${group}) must run even when lhci or the other half is red`);
+        const min = Number(/timeout-minutes:\s*(\d+)/.exec(gate)?.[1]);
+        assert.ok(min * 60 >= { sample: 205, large: 244 }[group] * 1.5, `${group}: timeout ${min} min is below the measured time + 50 %`);
+      }
+      const src = read("scripts/check-admin.mjs");
+      assert.match(src, /lighthouserc-admin\.json/);
+      assert.match(src, /check-responsive\.mjs/);
+      assert.match(src, /check-axe\.mjs/);
+    });
+  for (const r of staticRoutes.filter((x) => !ADMIN_ROUTES[x]))
     test(`static page ${r} is in lighthouserc.json (3 runs, median)`, () => {
       assert.ok(lhciUrls.includes(r), `${r} has no Lighthouse URL`);
       assert.equal(lhci.ci.collect.numberOfRuns, 3);
@@ -105,6 +127,12 @@ describe("every route is under Lighthouse", () => {
   test("the only catch-all routes are the listed 404 re-servers (their page, /404, is under Lighthouse)", () => {
     assert.deepEqual(catchAll.sort(), CATCH_ALL_404);
     assert.ok(lhciUrls.includes("/404"));
+  });
+  test("the /admin catch-all's gated 404 (admin headers, with and without a JWT or actor) is asserted by admin-access.test.mjs", () => {
+    const t = read("tests/admin-access.test.mjs");
+    assert.match(t, /\/admin\/anything/);
+    assert.match(t, /catchAll\(\{ locals: \{\} \}\)\.status, 404/);
+    assert.match(t, /Cf-Access-Jwt-Assertion": "forged\.jwt\.value"/);
   });
   test("the guest-cancel token route is measured through its static shell /l/cancel", () => assert.ok(lhciUrls.includes("/l/cancel")));
 });

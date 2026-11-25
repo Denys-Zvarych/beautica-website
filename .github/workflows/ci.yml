@@ -303,3 +303,18 @@ jobs:
       - name: Lighthouse budget (mobile; every page)
         timeout-minutes: 12
         run: npx --no-install lhci autorun
+
+      # /admin (phase 039) is behind Cloudflare Access, so lhci cannot reach it: the test-only harness (scripts/render-admin.mjs) serves it with a
+      # throwaway JWT; responsive + axe + Lighthouse (scripts/lighthouserc-admin.json).
+      # `if: always()`: runs even when the lhci step above is red (both results are reported; neither hides the other).
+      # Split in two (one script, `--group`): measured locally 205 s (sample data) and 244 s (large variants, incl. the open-category Lighthouse URL), 449 s together, over a 5-minute step. Each step
+      # gets its measured time + >= 50 % (8 and 8 minutes), and both run even when the other, or lhci above, is red.
+      - name: /admin quality gate (harness, sample data)
+        if: always()
+        timeout-minutes: 8
+        run: node scripts/check-admin.mjs --group sample
+
+      - name: /admin quality gate (harness, large variants)
+        if: always()
+        timeout-minutes: 8
+        run: node scripts/check-admin.mjs --group large

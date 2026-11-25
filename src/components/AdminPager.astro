@@ -1,0 +1,34 @@
+---
+// Prev / «n / total» / next for the private /admin lists (W040 requests, W041 catalog). Plain links, no script. `?p=` is 1-based; page 1 has no query.
+import Chip from "./Chip.astro";
+interface Props {
+  base: string;
+  page: number;
+  totalPages: number;
+  label: string;
+  prev: string;
+  next: string;
+}
+const { base, page, totalPages, label, prev, next } = Astro.props;
+const url = (n: number) => `${base}${n > 1 ? `?p=${n}` : ""}`;
+---
+
+{
+  totalPages > 1 && (
+    <nav class="pager" aria-label={label}>
+      {page > 1 ? <Chip href={url(page - 1)}>{prev}</Chip> : <span />}
+      <span class="vt-label" aria-current="page">{page} / {totalPages}</span>
+      {page < totalPages ? <Chip href={url(page + 1)}>{next}</Chip> : <span />}
+    </nav>
+  )
+}
+
+<style>
+  .pager {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--vt-space-md);
+    margin-top: var(--vt-space-lg);
+  }
+</style>

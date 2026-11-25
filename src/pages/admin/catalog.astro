@@ -1,0 +1,227 @@
+---
+// W041: the live catalog (phase 041). GET lists the categories (10 per page) as <details>, each with its service types; every row is a plain <form method="post">
+// back to this same route (no scripts: ADMIN_CSP has none). POST -> backend call -> 303 -> GET with a flash code in the query (src/lib/admin/catalog.ts); a
+// refresh never re-submits. (One route for GET and POST: Astro cannot map catalog.astro and catalog.ts to the same path.)
+export const prerender = false;
+
+import Layout from "../../components/Layout.astro";
+import "../../styles/fonts-legal.css"; // after Layout (its later @font-face wins): the small Latin subset, like the legal pages
+import NeuCard from "../../components/NeuCard.astro";
+import NeuInset from "../../components/NeuInset.astro";
+import Chip from "../../components/Chip.astro";
+import AdminFlash from "../../components/AdminFlash.astro";
+import AdminPager from "../../components/AdminPager.astro";
+import AdminCatalogRow from "../../components/AdminCatalogRow.astro";
+import "../../styles/admin-form.css";
+import { t } from "../../i18n/t";
+import { requireActor } from "../../lib/admin/access.ts";
+import { adminConfig } from "../../lib/admin/runtime.ts";
+import { DONE_CODES, ERR_CODES, FLASH_COOKIE, KEEP_MAX, PAGE_SIZE, countsFromQuery, decide, listCatalog, parsePage } from "../../lib/admin/catalog.ts";
+
+const actor = requireActor(Astro.locals);
+if (actor instanceof Response) return actor;
+const cfg = adminConfig();
+if (!cfg) return new Response("Not Found", { status: 404, headers: { "Cache-Control": "no-store", "X-Robots-Tag": "noindex, nofollow" } });
+
+if (Astro.request.method === "POST") {
+  let form: FormData;
+  try {
+    form = await Astro.request.formData();
+  } catch {
+    return Astro.redirect("/admin/catalog?err=FAILED", 303);
+  }
+  const d = await decide(cfg, actor, form);
+  // The typed names of a failed edit ride in a one-shot cookie (not in the URL: no history / log / Referer copy of them).
+  if (d.typed) Astro.cookies.set(FLASH_COOKIE, d.typed, { httpOnly: true, secure: true, sameSite: "strict", path: "/admin/catalog", maxAge: 60 });
+  return Astro.redirect(d.location, 303); // relative Location: works on prod and staging origins alike
+}
+if (Astro.request.method !== "GET" && Astro.request.method !== "HEAD") return new Response(null, { status: 405, headers: { Allow: "GET, HEAD, POST", "Cache-Control": "no-store" } });
+
+const q = Astro.url.searchParams;
+const done = (DONE_CODES as readonly string[]).includes(q.get("done") ?? "") ? q.get("done") : null;
+const err = (ERR_CODES as readonly string[]).includes(q.get("err") ?? "") ? q.get("err") : null;
+const used = countsFromQuery(q);
+const details = [used.df ? t("admin.catalog.flash.inUseServices", { n: used.df }) : "", used.st ? t("admin.catalog.flash.inUseTypes", { n: used.st }) : "", used.ps ? t("admin.catalog.flash.inUsePending", { n: used.ps }) : ""].filter(Boolean).join(", ");
+const flash = done
+  ? { ok: true, text: t(`admin.catalog.flash.${done}`) }
+  : err === "CATALOG_IN_USE" && details
+    ? { ok: false, text: t("admin.catalog.flash.inUse", { details }) }
+    : err
+      ? { ok: false, text: t(`admin.catalog.flash.${err}`) }
+      : null;
+const openCat = /^[A-Z][A-Z0-9_]{0,99}$/.test(q.get("open") ?? "") ? q.get("open") : null;
+const keepCard = q.get("card") ?? "";
+let keep: [string, string] = ["", ""];
+try {
+  const raw = JSON.parse(Astro.cookies.get(FLASH_COOKIE)?.value ?? "null");
+  if (Array.isArray(raw) && typeof raw[0] === "string" && typeof raw[1] === "string") keep = [raw[0].slice(0, KEEP_MAX), raw[1].slice(0, KEEP_MAX)];
+} catch { /* no / bad cookie */ }
+if (Astro.cookies.has(FLASH_COOKIE)) Astro.cookies.delete(FLASH_COOKIE, { path: "/admin/catalog" }); // read once
+
+const page = parsePage(q.get("p"));
+const list = await listCatalog(cfg, actor, page, openCat);
+// A delete can empty the last page: send the owner to the new last page (flash rides along).
+if (list.ok && list.rows.length === 0 && page > 1 && list.total > 0) {
+  const to = new URLSearchParams(q);
+  if (list.totalPages > 1) to.set("p", String(list.totalPages)); else to.delete("p");
+  return Astro.redirect(`/admin/catalog${to.size ? `?${to}` : ""}`, 303);
+}
+const rows = list.ok ? list.rows : [];
+const from = (page - 1) * PAGE_SIZE + 1;
+const badRow = err === "BAD_INPUT" || err === "TYPE_EXISTS" || err === "CATEGORY_NAME_EXISTS" ? keepCard : "";
+const typed = (row: string, orig: string, i: 0 | 1) => (keepCard === row && (keep[0] !== "" || keep[1] !== "") ? keep[i] : orig);
+---
+
+<Layout title={t("admin.catalog.metaTitle")} description={t("admin.catalog.metaDescription")} canonicalPath="/admin/catalog" noindex noReferrer analytics={false} hideHeader hideFooter basicLatin>
+  <main id="main" class="admin">
+    <NeuCard as="section">
+      <h1 class="vt-heading">{t("admin.catalog.h1")}</h1>
+      <p class="back"><Chip href="/admin">{t("admin.back")}</Chip></p>
+      <p class="vt-body intro">{t("admin.catalog.intro")}</p>
+      {flash && <AdminFlash ok={flash.ok} text={flash.text} />}
+      {!list.ok && <AdminFlash ok={false} text={t("admin.catalog.loadFailed")} />}
+      {list.ok && list.total > rows.length && <p class="vt-label note">{t("admin.catalog.range", { shown: `${from}–${from + rows.length - 1}`, total: list.total })}</p>}
+    </NeuCard>
+
+    {list.ok && rows.length === 0 && <div class="gap"><NeuCard as="section"><p class="vt-body">{t("admin.catalog.empty")}</p></NeuCard></div>}
+
+    {rows.length > 0 && (
+      <ul class="cats">
+        {rows.map(({ category: c, types }) => {
+          const live = c.status === "APPROVED";
+          const hidden = live && !c.active;
+          const cRow = `c:${c.name}`;
+          return (
+            <NeuCard as="li" pad="md">
+              <details class="cat" open={openCat === c.name || keepCard === cRow || undefined}>
+                <summary>
+                  <span class="head">
+                    <span class="vt-card-title">{c.displayName}</span>
+                    <span class="vt-label wire">{t("admin.catalog.wireName")}: {c.name}</span>
+                  </span>
+                  <span class="meta">
+                    {hidden && <Chip>{t("admin.catalog.hidden")}</Chip>}
+                    {c.status === "PENDING" && <Chip>{t("admin.catalog.pending")}</Chip>}
+                    {c.status === "REJECTED" && <Chip>{t("admin.catalog.rejected")}</Chip>}
+                    <span class="vt-label">{t("admin.catalog.usage", { services: c.usageCount, types: c.typeCount })}</span>
+                  </span>
+                </summary>
+                <div class="body">
+                  {c.status === "PENDING" && <p class="vt-label">{t("admin.catalog.pendingHint")}</p>}
+                  {live && <AdminCatalogRow kind="category" id={c.name} page={page} name={typed(cRow, c.displayName, 0)} active={c.active} deletable={c.usageCount === 0 && c.typeCount === 0} invalid={badRow === cRow} />}
+                  {/* W049: the category icon column / «Іконки» strip / upload form goes here, next to the row above. */}
+                  <h2 class="vt-card-title sub">{t("admin.catalog.types")} · {c.typeCount}</h2>
+                  {types === undefined && c.typeCount > 0 && <p class="more"><Chip href={`/admin/catalog${page > 1 ? `?p=${page}&` : "?"}open=${c.name}`}>{t("admin.catalog.showTypes", { n: c.typeCount })}</Chip></p>}
+                  {types === null && <p class="vt-body bad" role="alert">{t("admin.catalog.typesFailed")}</p>}
+                  {((types === undefined && c.typeCount === 0) || (types && types.length === 0)) && <p class="vt-body">{t("admin.catalog.noTypes")}</p>}
+                  {types && types.length > 0 && (
+                    <ul class="types">
+                      {types.map((ty) => {
+                        const tRow = `t:${ty.id}`;
+                        return (
+                          <li>
+                            <NeuInset radius="field">
+                              <div class="type">
+                              <p class="head">
+                                <span class="vt-body">{ty.nameUk}</span>
+                                {!ty.active && <Chip>{t("admin.catalog.hidden")}</Chip>}
+                                <span class="vt-label">{t("admin.catalog.typeUsage", { services: ty.usageCount })}</span>
+                              </p>
+                              <AdminCatalogRow kind="type" id={ty.id} cat={c.name} page={page} name={typed(tRow, ty.nameUk, 0)} nameEn={typed(tRow, ty.nameEn, 1)} active={ty.active} actionable={live} deletable={ty.usageCount === 0} invalid={badRow === tRow} />
+                              </div>
+                            </NeuInset>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  )}
+                </div>
+              </details>
+            </NeuCard>
+          );
+        })}
+      </ul>
+    )}
+    {list.ok && <AdminPager base="/admin/catalog" page={page} totalPages={list.totalPages} label={t("admin.catalog.pager")} prev={t("admin.catalog.prev")} next={t("admin.catalog.next")} />}
+  </main>
+</Layout>
+
+<style>
+  .admin {
+    width: 100%;
+    max-width: var(--vt-max-width);
+    margin: 0 auto;
+    padding: var(--vt-space-md);
+  }
+  .back {
+    margin: var(--vt-space-md) 0 0;
+  }
+  .intro {
+    margin-top: var(--vt-space-md);
+  }
+  .note {
+    margin-top: var(--vt-space-sm);
+  }
+  .gap {
+    margin-top: var(--vt-space-lg);
+  }
+  .bad {
+    color: var(--vt-color-error);
+  }
+  .cats,
+  .types {
+    display: grid;
+    gap: var(--vt-space-md);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  .cats {
+    margin-top: var(--vt-space-lg);
+    gap: var(--vt-space-lg);
+  }
+  .cat summary {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--vt-space-sm) var(--vt-space-md);
+    min-height: var(--vt-touch-min);
+    cursor: pointer;
+  }
+  .head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: var(--vt-space-xs) var(--vt-space-sm);
+    margin: 0;
+    overflow-wrap: anywhere;
+  }
+  .meta {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--vt-space-sm);
+  }
+  .body {
+    display: grid;
+    gap: var(--vt-space-md);
+    margin-top: var(--vt-space-md);
+  }
+  .more {
+    margin: 0;
+  }
+  .sub {
+    margin: var(--vt-space-md) 0 0;
+  }
+  .type {
+    display: grid;
+    gap: var(--vt-space-sm);
+    padding: var(--vt-space-md);
+  }
+  @media (min-width: 600px) {
+    .admin {
+      padding: var(--vt-space-lg);
+    }
+  }
+</style>

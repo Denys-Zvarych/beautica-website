@@ -1,0 +1,26 @@
+---
+// One-line result banner of the private /admin pages (W040, W041): green «done» (role=status) or red «error» (role=alert).
+interface Props {
+  ok: boolean;
+  text: string;
+}
+const { ok, text } = Astro.props;
+---
+
+<p class:list={["flash vt-body", ok ? "ok" : "bad"]} role={ok ? "status" : "alert"}>{text}</p>
+
+<style>
+  .flash {
+    margin: var(--vt-space-md) 0 0;
+    padding: var(--vt-space-sm) var(--vt-space-md);
+    border-radius: var(--vt-radius-field);
+    background: var(--vt-color-base-emphasis);
+    box-shadow: var(--vt-shadow-bordered-card);
+  }
+  .ok {
+    color: var(--vt-color-success);
+  }
+  .bad {
+    color: var(--vt-color-error);
+  }
+</style>

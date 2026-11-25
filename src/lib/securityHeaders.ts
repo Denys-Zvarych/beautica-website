@@ -68,6 +68,29 @@ export function reviewCsp(opts: { apiOrigin: string; imgOrigins: string[]; turns
   ].join("; ");
 }
 
+/** /admin* (phase 039): no script, no connections, no analytics. `style-src 'unsafe-inline'` is needed because Astro inlines every stylesheet (inlineStylesheets: "always"); with no script-src at all there is no script to abuse it. public/_headers carries the same value. */
+export const ADMIN_CSP = "default-src 'none'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'";
+const ADMIN_PATH = /^\/admin(?:\/|$)/;
+/**
+ * Is this request pathname under /admin? Astro routes on the DECODED path, so the raw pathname is not enough: `/%61dmin`, `/%41dmin`, `/admin%2fx`
+ * all reach the admin routes. ASCII percent-escapes are decoded (and lower-cased) before the test; a malformed escape never throws and never
+ * hides a match. `malformed` = the path would match /admin but is not valid percent-encoding: the caller answers 404 itself (fail closed).
+ */
+export function adminPath(pathname: string): { admin: boolean; malformed: boolean } {
+  let malformed = false;
+  let decoded: string;
+  try {
+    decoded = decodeURIComponent(pathname);
+  } catch {
+    malformed = true;
+    decoded = pathname.replace(/%([0-7][0-9a-f])/gi, (_, h: string) => String.fromCharCode(parseInt(h, 16)));
+  }
+  const lower = decoded.toLowerCase();
+  // Malformed: be strict (prefix only), the escape may be hiding the boundary (`/admin%zz`).
+  const admin = malformed ? /^\/admin/.test(lower) : ADMIN_PATH.test(lower);
+  return { admin, malformed: admin && malformed };
+}
+
 export const SECURITY_HEADERS: Record<string, string> = {
   "Content-Security-Policy": CSP,
   "Strict-Transport-Security": "max-age=31536000; includeSubDomains",
@@ -87,6 +110,12 @@ export const REFERRER_NONE_PATH = /^\/api\/ics$/;
 export const TOKEN_PATH = /^\/(?:book\/cancel|c|invite|bookings|l|r)\//;
 
 export function withSecurityHeaders(res: Response, path?: string): Response {
+  if (path !== undefined && adminPath(path).admin) {
+    // Private operator area: always these values, even over a route's own (nothing under /admin may be cached, indexed or leak a referrer).
+    const force = { ...SECURITY_HEADERS, "Content-Security-Policy": ADMIN_CSP, "Referrer-Policy": "no-referrer", "Cache-Control": "no-store", "X-Robots-Tag": "noindex, nofollow" };
+    const set = (r: Response) => { for (const [k, v] of Object.entries(force)) r.headers.set(k, v); };
+    try { set(res); return res; } catch { const out = new Response(res.body, res); set(out); return out; }
+  }
   const token = path !== undefined && TOKEN_PATH.test(path);
   const noReferrer = token || (path !== undefined && REFERRER_NONE_PATH.test(path));
   const defaults: Record<string, string> = token
