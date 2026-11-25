@@ -3,8 +3,8 @@ import { test, describe } from "node:test";
 import { rawRequest, BASE } from "./helpers/env.mjs";
 import assert from "node:assert/strict";
 import { generateKeyPair, exportJWK, SignJWT, createLocalJWKSet } from "jose";
-import { adminConfigFrom } from "../src/lib/admin/config.ts";
-import { requireOwner, verifyOwner, requireActor } from "../src/lib/admin/access.ts";
+import { adminConfigFrom, adminConfigProblem, adminConfigResolve } from "../src/lib/admin/config.ts";
+import { requireOwner, verifyOwner, requireActor, logAdminDenied, resetAdminDenialLog } from "../src/lib/admin/access.ts";
 import { adminFetch, assertCatalogPath, errorMessage } from "../src/lib/admin/api.ts";
 import { readFileSync } from "node:fs";
 import { ALL as catchAll } from "../src/pages/admin/[...rest].ts";
@@ -225,4 +225,142 @@ describe("/admin* routing (wrangler dev)", { skip: !BASE }, () => {
     assert.deepEqual(res.all("content-security-policy"), [ADMIN_CSP]);
   });
   test("a POST to /admin/x is also gated (404)", async () => assert.equal((await rawRequest("/admin/x", { method: "POST" })).status, 404));
+});
+
+// Denial diagnostics: one console.warn JSON line per denied request, fixed reason codes only (never token, email, AUD, key, header values).
+describe("admin denial log", () => {
+  const capture = async (fn) => {
+    const lines = [];
+    resetAdminDenialLog();
+    const orig = console.warn;
+    console.warn = (...a) => lines.push(a.join(" "));
+    try { await fn(); } finally { console.warn = orig; }
+    return lines;
+  };
+  const denied = async (jwt, c = cfg) => capture(() => verifyOwner(req(jwt), c, jwks));
+  const one = (lines) => { assert.equal(lines.length, 1); return JSON.parse(lines[0]); };
+  const SECRETS = ["owner@example.com", "stranger@example.com", "aud-prod", "aud-staging", "k".repeat(40), "Bearer"];
+  const noLeak = (lines, jwt) => { for (const s of [...SECRETS, ...(jwt ? [jwt, jwt.split(".")[1]] : [])]) assert.ok(!lines.join("\n").includes(s), `leaked ${s}`); };
+
+  test("no_assertion_header", async () => {
+    const l = await denied(null);
+    assert.deepEqual(one(l), { event: "admin_denied", reason: "no_assertion_header" });
+  });
+  test("email_not_allowed", async () => {
+    const jwt = await sign({ email: "stranger@example.com" });
+    const l = await denied(jwt);
+    assert.deepEqual(one(l), { event: "admin_denied", reason: "email_not_allowed" });
+    noLeak(l, jwt);
+  });
+  test("jwt_invalid aud: claim name + aud shape only", async () => {
+    const jwt = await sign({}, { aud: "aud-staging" });
+    const l = await denied(jwt);
+    assert.deepEqual(one(l), { event: "admin_denied", reason: "jwt_invalid:ERR_JWT_CLAIM_VALIDATION_FAILED:aud", aud_is_array: false, aud_count: 1 });
+    noLeak(l, jwt);
+  });
+  test("jwt_invalid aud: array token reports array + count", async () => {
+    const jwt = await sign({}, { aud: ["aud-staging", "aud-other"] });
+    const l = await denied(jwt);
+    const j = one(l);
+    assert.equal(j.aud_is_array, true);
+    assert.equal(j.aud_count, 2);
+    noLeak(l, jwt);
+  });
+  test("jwt_invalid iss", async () => {
+    const jwt = await sign({}, { iss: "https://evil.cloudflareaccess.com" });
+    const l = await denied(jwt);
+    assert.equal(one(l).reason, "jwt_invalid:ERR_JWT_CLAIM_VALIDATION_FAILED:iss");
+    noLeak(l, jwt);
+  });
+  test("jwt_invalid exp", async () => {
+    const l = await denied(await sign({}, { exp: Math.floor(Date.now() / 1000) - 60 }));
+    assert.equal(one(l).reason, "jwt_invalid:ERR_JWT_EXPIRED:exp");
+  });
+  test("jwt_invalid signature", async () => {
+    const l = await denied(await sign({}, { key: other.privateKey }));
+    assert.equal(one(l).reason, "jwt_invalid:ERR_JWS_SIGNATURE_VERIFICATION_FAILED");
+  });
+  test("jwt_invalid no matching key", async () => {
+    const noKey = createLocalJWKSet({ keys: [] });
+    const l = await capture(() => verifyOwner(req("x"), cfg, noKey));
+    assert.match(one(l).reason, /^jwt_invalid:ERR_[A-Z_]+$/);
+  });
+  test("jwt_invalid fetch failure / non-jose error -> sanitized code", async () => {
+    const boom = async () => { throw new Error("secret-host-detail aud-prod"); };
+    const jwt = await sign();
+    const l = await capture(() => verifyOwner(req(jwt), cfg, boom));
+    assert.equal(one(l).reason, "jwt_invalid:UNKNOWN");
+    noLeak(l, jwt);
+  });
+  test("denial keeps the exact 404 body and headers", async () => {
+    const [r] = await Promise.all([requireOwner(req(null), cfg, jwks)]);
+    assert.equal(r.status, 404);
+    assert.equal(await r.text(), "Not Found");
+    assert.equal(r.headers.get("x-robots-tag"), "noindex, nofollow");
+  });
+  test("config_missing:<FIELD> names each failing check, in order, never values", () => {
+    const cases = [
+      [{ CF_ACCESS_TEAM_DOMAIN: "evil.example.com" }, "CF_ACCESS_TEAM_DOMAIN"],
+      [{ CF_ACCESS_AUD: "" }, "CF_ACCESS_AUD"],
+      [{ ADMIN_EMAILS: " , " }, "ADMIN_EMAILS"],
+      [{ INTERNAL_CATALOG_KEY: "short" }, "INTERNAL_CATALOG_KEY"],
+      [{ API_ORIGIN: "http://api.example.test" }, "API_ORIGIN"],
+    ];
+    for (const [patch, field] of cases) {
+      const e = { ...ENV, ...patch };
+      assert.equal(adminConfigProblem(e), field);
+      assert.equal(adminConfigFrom(e), null);
+    }
+    assert.equal(adminConfigProblem(ENV), null);
+    assert.ok(adminConfigFrom(ENV));
+  });
+  test("adminConfigResolve parses once and agrees with the two public views", () => {
+    assert.deepEqual(adminConfigResolve({ ...ENV, API_ORIGIN: "" }), { config: null, problem: "API_ORIGIN" });
+    assert.deepEqual(adminConfigResolve(ENV), { config: cfg, problem: null });
+    // The middleware must resolve config once per request: no second parse via a separate issue lookup.
+    const src = readFileSync(new URL("../src/middleware.ts", import.meta.url), "utf8");
+    assert.equal((src.match(/adminConfigState\(\)/g) ?? []).length, 1);
+    assert.ok(!/adminConfigIssue|adminConfig\(\)/.test(src));
+  });
+  test("throttle: same reason twice in the window logs once; after the window it logs again with suppressed", async () => {
+    let t = 1_000_000;
+    const l = await capture(async () => {
+      resetAdminDenialLog(() => t);
+      logAdminDenied("config_missing:API_ORIGIN");
+      logAdminDenied("config_missing:API_ORIGIN");
+      logAdminDenied("no_assertion_header"); // a different reason is its own first occurrence
+      t += 59_999;
+      logAdminDenied("config_missing:API_ORIGIN");
+      t += 1;
+      logAdminDenied("config_missing:API_ORIGIN");
+    });
+    resetAdminDenialLog();
+    assert.deepEqual(l.map((x) => JSON.parse(x)), [
+      { event: "admin_denied", reason: "config_missing:API_ORIGIN" },
+      { event: "admin_denied", reason: "no_assertion_header" },
+      { event: "admin_denied", reason: "config_missing:API_ORIGIN", suppressed: 2 },
+    ]);
+  });
+  test("throttle state is bounded: the 65th distinct reason evicts the oldest, which then logs again at once; a recent one stays throttled", async () => {
+    const l = await capture(async () => {
+      resetAdminDenialLog(() => 5); // frozen clock: nothing ages out, only the 64-entry cap can make a reason log again
+      for (let i = 0; i < 65; i++) logAdminDenied(`r${i}`); // r0..r63 fill the cap, r64 evicts r0
+      logAdminDenied("r63"); // still tracked -> suppressed
+      logAdminDenied("r0"); // evicted -> a first occurrence again (no `suppressed`)
+    });
+    resetAdminDenialLog();
+    const reasons = l.map((x) => JSON.parse(x));
+    assert.equal(reasons.length, 66);
+    assert.deepEqual(reasons[65], { event: "admin_denied", reason: "r0" });
+    assert.equal(reasons.filter((r) => r.reason === "r63").length, 1);
+  });
+  test("middleware logs config_missing once and still answers the same 404", async () => {
+    let res;
+    const l = await capture(async () => { res = await mw("https://beautica.app/admin"); });
+    assert.equal(res.status, 404);
+    assert.equal(await res.text(), "Not Found");
+    assert.deepEqual(l.map((x) => JSON.parse(x)), [
+      { event: "admin_denied", reason: "config_missing:CF_ACCESS_TEAM_DOMAIN" },
+    ]);
+  });
 });

@@ -34,12 +34,36 @@ export function strictApiOrigin(raw: unknown): string | null {
   }
 }
 
-export function adminConfigFrom(e: Record<string, unknown>): AdminConfig | null {
+type Parsed = { cfg: AdminConfig } | { problem: string };
+
+function parse(e: Record<string, unknown>): Parsed {
   const teamDomain = str(e.CF_ACCESS_TEAM_DOMAIN).toLowerCase();
   const aud = str(e.CF_ACCESS_AUD);
   const emails = str(e.ADMIN_EMAILS).toLowerCase().split(",").map((s) => s.trim()).filter(Boolean);
   const catalogKey = str(e.INTERNAL_CATALOG_KEY);
   const apiOrigin = strictApiOrigin(e.API_ORIGIN);
-  if (!TEAM.test(teamDomain) || !aud || emails.length === 0 || catalogKey.length < KEY_MIN || !apiOrigin) return null;
-  return { teamDomain, aud, emails, catalogKey, apiOrigin };
+  // Same checks, same order as before; the first failing one names the problem.
+  if (!TEAM.test(teamDomain)) return { problem: "CF_ACCESS_TEAM_DOMAIN" };
+  if (!aud) return { problem: "CF_ACCESS_AUD" };
+  if (emails.length === 0) return { problem: "ADMIN_EMAILS" };
+  if (catalogKey.length < KEY_MIN) return { problem: "INTERNAL_CATALOG_KEY" };
+  if (!apiOrigin) return { problem: "API_ORIGIN" };
+  return { cfg: { teamDomain, aud, emails, catalogKey, apiOrigin } };
+}
+
+/** One parse: the config, or null plus the NAME of the first failing env field (never a value). */
+export function adminConfigResolve(e: Record<string, unknown>): { config: AdminConfig | null; problem: string | null } {
+  const r = parse(e);
+  return "cfg" in r ? { config: r.cfg, problem: null } : { config: null, problem: r.problem };
+}
+
+export function adminConfigFrom(e: Record<string, unknown>): AdminConfig | null {
+  const r = parse(e);
+  return "cfg" in r ? r.cfg : null;
+}
+
+/** The NAME of the first invalid/missing env field (never a value), or null when the config is valid. For the denial log only. */
+export function adminConfigProblem(e: Record<string, unknown>): string | null {
+  const r = parse(e);
+  return "problem" in r ? r.problem : null;
 }
