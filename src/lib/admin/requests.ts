@@ -3,6 +3,7 @@
 import { adminFetch, CATALOG_PREFIX } from "./api.ts";
 import type { AdminConfig } from "./config.ts";
 import { KEEP_MAX, NAME_CAP, cp, field, parsePage } from "./common.ts";
+import { parseKindFilter, parseQuery } from "./listQuery.ts";
 
 export { KEEP_MAX, NAME_CAP, parsePage }; // moved to ./common.ts (shared with the catalog page); re-exported so existing importers keep working
 
@@ -63,8 +64,25 @@ export async function listPending(cfg: AdminConfig, actor: string, page = 1): Pr
   return { ok: true, items, total, totalPages: typeof tp === "number" && tp >= 0 ? tp : items.length ? 1 : 0, page };
 }
 
-/** Redirect target; the current page `p` (> 1) is kept so a decision never throws the owner back to page 1. */
-const backTo = (q: Record<string, string>, p = 1): string => `/admin/requests?${new URLSearchParams(p > 1 ? { ...q, p: String(p) } : q)}`;
+/** Pending requests for the W052 list: the Worker pages `listPending` until done and filters / searches itself (the backend has no search). Cap: 8 pages of 25. */
+export const REQUEST_CAP = 200;
+export type AllResult = { ok: true; items: CatalogRequest[]; total: number; capped: boolean } | { ok: false; err: (typeof ERR_CODES)[number] };
+export async function listAllPending(cfg: AdminConfig, actor: string): Promise<AllResult> {
+  const first = await listPending(cfg, actor, 1);
+  if (!first.ok) return first;
+  const items = [...first.items];
+  const last = Math.min(first.totalPages, Math.ceil(REQUEST_CAP / PAGE_SIZE)); // pages 2..8 in ONE round trip (same call count as the serial loop)
+  const rest = await Promise.all(Array.from({ length: Math.max(0, last - 1) }, (_, i) => listPending(cfg, actor, i + 2)));
+  for (const next of rest) {
+    if (!next.ok) return next; // the first failing page, in page order
+    items.push(...next.items);
+  }
+  const capped = first.total > REQUEST_CAP || items.length > REQUEST_CAP;
+  return { ok: true, items: items.sort((a, b) => a.createdAt.localeCompare(b.createdAt)).slice(0, REQUEST_CAP), total: first.total, capped };
+}
+
+/** Redirect target; the current page `p` (> 1) is kept so a decision never throws the owner back to page 1, and the list filter (`kind`, `q`) rides along when set. */
+const backTo = (q: Record<string, string>, p = 1, ctx: Record<string, string> = {}): string => `/admin/requests?${new URLSearchParams({ ...q, ...(p > 1 ? { p: String(p) } : {}), ...ctx })}`;
 
 export interface Decision {
   /** Relative redirect target (POST -> 303 -> GET). */
@@ -76,7 +94,9 @@ export interface Decision {
 /** Handle one card's form POST. Never throws on backend failure. */
 export async function decide(cfg: AdminConfig, actor: string, form: FormData): Promise<Decision> {
   const kind = field(form, "kind"), id = field(form, "id"), action = field(form, "action"), pg = parsePage(field(form, "p"));
-  const back = (q: Record<string, string>): string => backTo(q, pg);
+  const fk = parseKindFilter(field(form, "fk")), fq = parseQuery(field(form, "fq")); // the list filter the decision came from (hidden fields), kept across the redirect
+  const ctx: Record<string, string> = { ...(fk !== "ALL" ? { kind: fk } : {}), ...(fq ? { q: fq } : {}) };
+  const back = (q: Record<string, string>): string => backTo(q, pg, ctx);
   if (!(KINDS as readonly string[]).includes(kind) || !ID.test(id) || !["save", "approve", "reject"].includes(action)) return { location: back({ err: "FAILED" }) };
   const card = `${kind}:${id}`;
   const base = `${CATALOG_PREFIX}requests/${kind}/${encodeURIComponent(id)}`;

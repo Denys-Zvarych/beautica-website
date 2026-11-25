@@ -3,6 +3,7 @@
 import { adminFetch, CATALOG_PREFIX, type UsageCounts } from "./api.ts";
 import type { AdminConfig } from "./config.ts";
 import { NAME_CAP, KEEP_MAX, cp, field, parsePage } from "./common.ts";
+import { parseCatalogFilter, parseQuery } from "./listQuery.ts";
 
 export { KEEP_MAX, parsePage };
 export const PAGE_SIZE = 10; // categories per page
@@ -20,7 +21,7 @@ export interface CategoryRow { category: Category; types?: ServiceType[] | null 
 
 /** `?done=` and `?err=` codes; every one has copy in uk.json `admin.catalog.flash.*`. */
 export const DONE_CODES = ["saved", "hidden", "shown", "deleted", "unchanged"] as const;
-export const ERR_CODES = ["TYPE_EXISTS", "CATEGORY_NAME_EXISTS", "CATEGORY_NOT_APPROVED", "CATEGORY_ICON_REQUIRED", "CATALOG_IN_USE", "BAD_INPUT", "NOT_FOUND", "CONFLICT", "UNAVAILABLE", "FAILED"] as const;
+export const ERR_CODES = ["TYPE_EXISTS", "CATEGORY_NAME_EXISTS", "CATEGORY_NOT_APPROVED", "CATEGORY_ICON_REQUIRED", "CATALOG_IN_USE", "NAME_MISMATCH", "BAD_INPUT", "NOT_FOUND", "CONFLICT", "UNAVAILABLE", "FAILED"] as const;
 export type ErrCode = (typeof ERR_CODES)[number];
 const TYPED = new Set<string>(["TYPE_EXISTS", "CATEGORY_NAME_EXISTS", "CATEGORY_NOT_APPROVED", "CATEGORY_ICON_REQUIRED", "CATALOG_IN_USE"]);
 
@@ -56,18 +57,24 @@ export type ListResult = { ok: true; rows: CategoryRow[]; total: number; totalPa
  * A category with 0 types costs no request; a failed type list is `types: null`.
  */
 export async function listCatalog(cfg: AdminConfig, actor: string, page = 1, open: string | null = null): Promise<ListResult> {
+  const all = await loadCategories(cfg, actor);
+  if (!all.ok) return all;
+  const slice = all.cats.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const rows = await Promise.all(slice.map(async (category): Promise<CategoryRow> => (category.name !== open ? { category } : { category, types: await loadTypes(cfg, actor, category) })));
+  return { ok: true, rows, total: all.cats.length, totalPages: Math.ceil(all.cats.length / PAGE_SIZE), page };
+}
+
+/** W052: the whole category list, sorted by display name (`uk`); the page filters, searches and pages it itself. One backend call. */
+export async function loadCategories(cfg: AdminConfig, actor: string): Promise<{ ok: true; cats: Category[] } | { ok: false; err: ErrCode }> {
   const r = await adminFetch(cfg, "GET", `${CATALOG_PREFIX}categories`, actor);
   if (!r.ok) return { ok: false, err: errToFlash(r.status, r.code) };
-  const all = (Array.isArray(r.data) ? r.data : []).map(parseCategory).filter((c): c is Category => c !== null).sort((a, b) => COLLATOR.compare(a.displayName, b.displayName));
-  const slice = all.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
-  const rows = await Promise.all(slice.map(async (category): Promise<CategoryRow> => {
-    if (category.name !== open) return { category };
-    if (category.typeCount === 0) return { category, types: [] };
-    const t = await adminFetch(cfg, "GET", `${CATALOG_PREFIX}categories/${encodeURIComponent(category.name)}/service-types`, actor);
-    if (!t.ok || !Array.isArray(t.data)) return { category, types: null };
-    return { category, types: t.data.map(parseType).filter((x): x is ServiceType => x !== null) };
-  }));
-  return { ok: true, rows, total: all.length, totalPages: Math.ceil(all.length / PAGE_SIZE), page };
+  return { ok: true, cats: (Array.isArray(r.data) ? r.data : []).map(parseCategory).filter((c): c is Category => c !== null).sort((a, b) => COLLATOR.compare(a.displayName, b.displayName)) };
+}
+/** The service types of one category: `[]` costs no request when it has none; `null` = the load failed. */
+export async function loadTypes(cfg: AdminConfig, actor: string, category: Category): Promise<ServiceType[] | null> {
+  if (category.typeCount === 0) return [];
+  const t = await adminFetch(cfg, "GET", `${CATALOG_PREFIX}categories/${encodeURIComponent(category.name)}/service-types`, actor);
+  return !t.ok || !Array.isArray(t.data) ? null : t.data.map(parseType).filter((x): x is ServiceType => x !== null);
 }
 
 /** `[n, ...]` counts of a refused delete -> the query params that carry them to the flash (digits only). */
@@ -95,7 +102,9 @@ export interface Decision {
 export async function decide(cfg: AdminConfig, actor: string, form: FormData): Promise<Decision> {
   const kind = field(form, "kind"), id = field(form, "id"), action = field(form, "action"), pg = parsePage(field(form, "p"));
   const cat = field(form, "cat"); // a type row's category: keeps its <details> open after the redirect
-  const back = (q: Record<string, string>): string => `/admin/catalog?${new URLSearchParams({ ...q, ...(pg > 1 ? { p: String(pg) } : {}) })}`;
+  const ff = parseCatalogFilter(field(form, "f")), fq = parseQuery(field(form, "q")); // the list filter the action came from (hidden fields), kept across the redirect
+  const ctx: Record<string, string> = { ...(ff !== "ALL" ? { f: ff } : {}), ...(fq ? { q: fq } : {}) };
+  const back = (q: Record<string, string>): string => `/admin/catalog?${new URLSearchParams({ ...q, ...(pg > 1 ? { p: String(pg) } : {}), ...ctx })}`;
   const isCat = kind === "category";
   if (!(KINDS as readonly string[]).includes(kind) || !(isCat ? WIRE : UUID).test(id) || !(ACTIONS as readonly string[]).includes(action) || (!isCat && !WIRE.test(cat))) return { location: back({ err: "FAILED" }) };
   const open = isCat ? id : cat;
@@ -104,11 +113,25 @@ export async function decide(cfg: AdminConfig, actor: string, form: FormData): P
   const fail = (err: ErrCode, typed?: string): Decision => ({ location: back({ err, open, card: row }), typed });
 
   if (action === "delete") {
-    if (field(form, "confirm") !== "1") return { location: back({ err: "FAILED", open, card: row }) }; // the confirm step is not UI-only: no DELETE without it
+    // W052 D4: the typed name must equal the AUTHORITATIVE name loaded server-side (never the form's `origName`, which a forged POST controls); case-sensitive; no DELETE without it
+    const typedName = field(form, "confirmName").trim();
+    if (typedName === "") return { location: back({ err: "NAME_MISMATCH", open, card: row }) };
+    const cats = await loadCategories(cfg, actor);
+    if (!cats.ok) return { location: back({ err: cats.err, open, card: row }) };
+    const owner = cats.cats.find((c) => c.name === open);
+    let real: string | undefined;
+    if (isCat) real = owner?.displayName;
+    else if (owner) {
+      const types = await loadTypes(cfg, actor, owner);
+      if (types === null) return { location: back({ err: "UNAVAILABLE", open, card: row }) };
+      real = types.find((x) => x.id.toLowerCase() === id.toLowerCase())?.nameUk;
+    }
+    if (real === undefined) return { location: back({ err: "NOT_FOUND", open, card: row }) };
+    if (typedName !== real.trim()) return { location: back({ err: "NAME_MISMATCH", open, card: row }) };
     const r = await adminFetch(cfg, "DELETE", base, actor);
     if (r.ok) return { location: back({ done: "deleted", ...(isCat ? {} : { open }) }) };
     const err = errToFlash(r.status, r.code);
-    return { location: back({ err, open, ...(err === "CATALOG_IN_USE" ? countParams(r.counts) : {}) }) };
+    return { location: back({ err, open, ...(err === "CATALOG_IN_USE" ? { ...(isCat ? {} : { type: id }), ...countParams(r.counts) } : {}) }) }; // a type row names itself so the page can show its «Видалити не можна» panel
   }
   if (action === "hide" || action === "show") {
     const r = await adminFetch(cfg, "PATCH", base, actor, { active: action === "show" });

@@ -24,7 +24,7 @@ before(async () => {
   child = spawn(process.execPath, ["scripts/render-admin.mjs", "--serve", "0"], { cwd: ROOT, env: { ...process.env, RENDER_ADMIN_ANON: "1", RENDER_ADMIN_LOG: logFile }, stdio: ["ignore", "pipe", "pipe"], detached: true });
   let out = "";
   base = await new Promise((resolve, reject) => {
-    const t = setTimeout(() => reject(new Error(`admin harness did not start in 100 s:\n${out}`)), 100_000);
+    const t = setTimeout(() => reject(new Error(`admin harness did not start in 280 s:\n${out}`)), 280_000);
     const on = (d) => { out += d; const m = /(http:\/\/127\.0\.0\.1:\d+)\/admin/.exec(out); if (m) { clearTimeout(t); resolve(m[1]); } };
     child.stdout.on("data", on);
     child.stderr.on("data", (d) => { out += d; });

@@ -74,7 +74,7 @@ const base = `http://127.0.0.1:${port}`;
 const send = (path, withJwt = true, init = {}) => fetch(base + path, { ...init, headers: { ...(withJwt ? { "Cf-Access-Jwt-Assertion": jwt } : {}), ...init.headers }, redirect: "manual" });
 for (let i = 0; ; i++) {
   try { if ((await fetch(base + "/", { signal: AbortSignal.timeout(2000) })).status === 200) break; } catch { /* not up */ }
-  if (i > 360) { console.error("render-admin: wrangler dev did not start in 90 s"); process.exit(1); }
+  if (i > 960) { console.error("render-admin: wrangler dev did not start in 240 s"); process.exit(1); }
   await new Promise((r) => setTimeout(r, 250));
 }
 

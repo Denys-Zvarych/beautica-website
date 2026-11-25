@@ -1,0 +1,37 @@
+---
+// The secondary neumorphic button of the private /admin pages (W052): a link (`href`) or a <button> (`type`), optionally icon-only (`iconOnly`: 48 px square,
+// the visible text becomes the accessible name). The icon is requested by prop and rendered here (never slotted). The primary gradient button is CtaButton.
+import Icon, { type IconName } from "../Icon.astro";
+interface Props {
+  href?: string;
+  type?: "submit" | "button";
+  name?: string;
+  value?: string;
+  icon?: IconName;
+  /** Accessible name + tooltip. Required for `iconOnly`; on a text button it names the action for the icon-only phone layout (it must contain the visible text). */
+  iconOnly?: boolean;
+  label?: string;
+  small?: boolean;
+  danger?: boolean;
+  disabled?: boolean;
+  /** First focus target of a dialog (the safe Cancel / Close control); default false. */
+  autofocus?: boolean;
+  class?: string;
+}
+const { href, type, name, value, icon, iconOnly = false, label, small = false, danger = false, disabled = false, autofocus = false, class: className } = Astro.props;
+const cls = ["btn", { ibtn: iconOnly, "btn-sm": small && !iconOnly, "btn-danger": danger && !iconOnly, danger: danger && iconOnly }, className];
+---
+
+{
+  type ? (
+    <button class:list={cls} type={type} name={name} value={value} disabled={disabled || undefined} aria-label={label} title={label} autofocus={autofocus || undefined}>
+      {icon && <Icon name={icon} />}
+      {!iconOnly && <slot />}
+    </button>
+  ) : (
+    <a class:list={cls} href={disabled ? undefined : href} aria-disabled={disabled ? "true" : undefined} aria-label={label} title={label} autofocus={autofocus || undefined}>
+      {icon && <Icon name={icon} />}
+      {!iconOnly && <slot />}
+    </a>
+  )
+}

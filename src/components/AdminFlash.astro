@@ -1,26 +1,21 @@
 ---
-// One-line result banner of the private /admin pages (W040, W041): green «done» (role=status) or red «error» (role=alert).
+// Result message of the private /admin pages (W040, W041, W052): green «done» (role=status) or red «error» (role=alert). Toast style (fixed, with a «×» link
+// that drops done/err from the URL: no script, so no auto-dismiss) when `closeHref` is set; otherwise an inline banner (`retryHref` adds «Спробувати ще раз»).
+import Icon from "./Icon.astro";
+import AdminButton from "./admin/AdminButton.astro";
+import { t } from "../i18n/t";
 interface Props {
   ok: boolean;
   text: string;
+  closeHref?: string;
+  retryHref?: string;
 }
-const { ok, text } = Astro.props;
+const { ok, text, closeHref, retryHref } = Astro.props;
 ---
 
-<p class:list={["flash vt-body", ok ? "ok" : "bad"]} role={ok ? "status" : "alert"}>{text}</p>
-
-<style>
-  .flash {
-    margin: var(--vt-space-md) 0 0;
-    padding: var(--vt-space-sm) var(--vt-space-md);
-    border-radius: var(--vt-radius-field);
-    background: var(--vt-color-base-emphasis);
-    box-shadow: var(--vt-shadow-bordered-card);
-  }
-  .ok {
-    color: var(--vt-color-success);
-  }
-  .bad {
-    color: var(--vt-color-error);
-  }
-</style>
+<div class:list={["flash", ok ? "ok" : "bad", { toast: !!closeHref, banner: !closeHref }]} role={ok ? "status" : "alert"}>
+  <Icon name={ok ? "ok" : "error"} />
+  <p>{text}</p>
+  {retryHref && <AdminButton href={retryHref} icon="refresh" small>{t("admin.retry")}</AdminButton>}
+  {closeHref && <a class="x" href={closeHref} aria-label={t("admin.close")}><Icon name="close" /></a>}
+</div>

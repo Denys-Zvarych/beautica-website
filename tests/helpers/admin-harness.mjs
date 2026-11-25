@@ -1,4 +1,5 @@
 // Starts the test-only /admin harness (scripts/render-admin.mjs --serve 0: real middleware + Access JWT, local mock catalog backend) on a free port.
+// Start budget 280 s (render-admin itself waits up to 240 s for wrangler): the CI runner and a loaded dev box start several wranglers at once and a start timeout would cancel the whole file.
 // `env` adds harness variables (CATALOG_MOCK_ROWS, CATALOG_MOCK_CATEGORIES). Every request is checked against the mock's CALL LOG, not only the HTML.
 import { spawn } from "node:child_process";
 import { ROOT } from "./env.mjs";
@@ -7,7 +8,7 @@ export async function startAdminHarness(env = {}) {
   const child = spawn(process.execPath, ["scripts/render-admin.mjs", "--serve", "0"], { cwd: ROOT, env: { ...process.env, ...env }, stdio: ["ignore", "pipe", "pipe"], detached: true });
   let log = "";
   const base = await new Promise((resolve, reject) => {
-    const t = setTimeout(() => reject(new Error(`admin harness did not start in 100 s:\n${log}`)), 100_000);
+    const t = setTimeout(() => reject(new Error(`admin harness did not start in 280 s:\n${log}`)), 280_000);
     const on = (d) => { log += d; const m = /(http:\/\/127\.0\.0\.1:\d+)\/admin/.exec(log); if (m) { clearTimeout(t); resolve(m[1]); } };
     child.stdout.on("data", on); child.stderr.on("data", (d) => { log += d; });
     child.once("exit", (c) => reject(new Error(`admin harness exited (${c}):\n${log}`)));

@@ -42,7 +42,17 @@ const seedCatalog = (extra) => {
 /** `rows` (env CATALOG_MOCK_ROWS) > 3 pads the sample data with generated requests (perf runs: 100 cards). */
 export async function startCatalogMock(total = Number(process.env.CATALOG_MOCK_ROWS) || 0, categories = Number(process.env.CATALOG_MOCK_CATEGORIES) || 0) {
   const rows = seed();
+  // CATALOG_MOCK_AGES="0,2,3,6,7": REPLACES the seed by one pending request per entry, each N whole Kyiv calendar days old (created at 12:00 UTC = 14:00/15:00 Kyiv, so a DST change
+  // or a run near midnight never moves it to another day). Names are «Вік N» (id 500+i / a fixed uuid), so band tests do not depend on today's date.
+  const ages = (process.env.CATALOG_MOCK_AGES ?? "").split(",").filter((x) => x.trim() !== "").map(Number);
+  if (ages.length) {
+    const kyivToday = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Kyiv" }).format(new Date()).split("-").map(Number);
+    rows.length = 0;
+    ages.forEach((n, i) => rows.push({ kind: i % 2 ? "SERVICE_TYPE" : "CATEGORY", id: i % 2 ? `00000000-0000-4000-8000-${String(900 + i).padStart(12, "0")}` : String(500 + i), name: `Вік ${n}`, displayName: i % 2 ? null : `Вік ${n}`, categoryName: i % 2 ? "brows" : null, initialServiceName: i % 2 ? null : "Перша", description: null, requesterLabel: `Автор ${i}`, createdAt: new Date(Date.UTC(kyivToday[0], kyivToday[1] - 1, kyivToday[2] - n, 12)).toISOString(), status: "PENDING" }));
+  }
   const catalog = seedCatalog(Math.max(0, categories - 6));
+  // CATALOG_MOCK_EXTRA_CATS='[{"name":"X","displayName":"Ікс","status":"APPROVED","active":true,"usage":21}]' appends exact categories (no types): plural-form and filter-count tests.
+  for (const c of JSON.parse(process.env.CATALOG_MOCK_EXTRA_CATS || "[]")) { catalog.cats.push(c); catalog.types.set(c.name, []); }
   for (let i = rows.length; i < total; i++) {
     const cat = i % 3 === 0;
     rows.push({ kind: cat ? "CATEGORY" : "SERVICE_TYPE", id: cat ? String(100 + i) : `00000000-0000-4000-8000-${String(i).padStart(12, "0")}`, name: `Заявка ${i}`, displayName: cat ? `Категорія ${i}` : null, categoryName: cat ? null : "brows", initialServiceName: cat ? `Послуга ${i}` : null, description: cat ? null : "Короткий опис заявки для перевірки розмітки.", requesterLabel: `Салон ${i}`, createdAt: new Date(Date.UTC(2026, 10, 1) + i * 3_600_000).toISOString(), status: "PENDING" });

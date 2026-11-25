@@ -1,21 +1,27 @@
 ---
-// W040: pending catalog requests (phase 040). GET lists them; each card is a plain <form method="post"> back to this same route (no scripts: ADMIN_CSP has
-// none). POST -> backend call(s) -> 303 -> GET with a flash code in the query (src/lib/admin/requests.ts); a refresh never re-submits a decision.
+// W040 / W052: pending catalog requests. GET lists them (kind chips + search = GET params the Worker applies to the loaded list); the request detail
+// (`?open=KIND:id`) and the approve / reject dialogs (`?dlg=approve|reject&id=KIND:id`) are server-rendered panels. Every change is a plain <form method="post"> back to
+// this route (no scripts: ADMIN_CSP has none): POST -> backend call(s) -> 303 -> GET with a flash code (src/lib/admin/requests.ts); a refresh never re-submits.
 // (One route for GET and POST: Astro cannot map requests.astro and requests.ts to the same path.)
 export const prerender = false;
 
-import Layout from "../../components/Layout.astro";
-import "../../styles/fonts-legal.css"; // after Layout (its later @font-face wins): the small Latin subset, like the legal pages
-import NeuCard from "../../components/NeuCard.astro";
-import Chip from "../../components/Chip.astro";
-import CtaButton from "../../components/CtaButton.astro";
+import AdminShell from "../../components/admin/AdminShell.astro";
+import AdminDialog from "../../components/admin/AdminDialog.astro";
+import AdminButton from "../../components/admin/AdminButton.astro";
+import AdminAgePill from "../../components/admin/AdminAgePill.astro";
+import AdminSearch from "../../components/admin/AdminSearch.astro";
 import AdminFlash from "../../components/AdminFlash.astro";
 import AdminPager from "../../components/AdminPager.astro";
-import "../../styles/admin-form.css";
+import Chip from "../../components/Chip.astro";
+import CtaButton from "../../components/CtaButton.astro";
+import Icon from "../../components/Icon.astro";
 import { t } from "../../i18n/t";
 import { requireActor } from "../../lib/admin/access.ts";
 import { adminConfig } from "../../lib/admin/runtime.ts";
-import { DONE_CODES, ERR_CODES, FLASH_COOKIE, KEEP_MAX, PAGE_SIZE, REASON_MAX, decide, formatDate, listPending, parsePage, type CatalogRequest } from "../../lib/admin/requests.ts";
+import { DONE_CODES, ERR_CODES, FLASH_COOKIE, KEEP_MAX, PAGE_SIZE, REASON_MAX, decide, formatDate, listAllPending, parsePage, type CatalogRequest } from "../../lib/admin/requests.ts";
+import { filterRequests, paginate, parseKindFilter, parseQuery, requestLabel, withQuery } from "../../lib/admin/listQuery.ts";
+import { ageDays } from "../../lib/admin/requestAge.ts";
+import { navFrom, NAV_UNKNOWN } from "../../lib/admin/navInfo.ts";
 
 const actor = requireActor(Astro.locals);
 if (actor instanceof Response) return actor;
@@ -37,179 +43,211 @@ if (Astro.request.method === "POST") {
 if (Astro.request.method !== "GET" && Astro.request.method !== "HEAD") return new Response(null, { status: 405, headers: { Allow: "GET, HEAD, POST", "Cache-Control": "no-store" } });
 
 const q = Astro.url.searchParams;
+const kind = parseKindFilter(q.get("kind"));
+const text = parseQuery(q.get("q"));
+const reqPage = parsePage(q.get("p"));
+const keyOf = (r: CatalogRequest) => `${r.kind}:${r.id}`;
+const KEY = /^(?:CATEGORY|SERVICE_TYPE):[0-9A-Za-z-]{1,40}$/;
 const done = (DONE_CODES as readonly string[]).includes(q.get("done") ?? "") ? q.get("done") : null;
-const err = (ERR_CODES as readonly string[]).includes(q.get("err") ?? "") ? q.get("err") : null;
-const flash = done ? { ok: true, text: t(`admin.requests.flash.${done}`) } : err ? { ok: false, text: t(`admin.requests.flash.${err}`) } : null;
-const keepCard = q.get("card") ?? "";
+let err = (ERR_CODES as readonly string[]).includes(q.get("err") ?? "") ? q.get("err") : null;
+const card = q.get("card") ?? "";
 const keepName = (Astro.cookies.get(FLASH_COOKIE)?.value ?? "").slice(0, KEEP_MAX);
 if (Astro.cookies.has(FLASH_COOKIE)) Astro.cookies.delete(FLASH_COOKIE, { path: "/admin/requests" }); // read once
 
-const page = parsePage(q.get("p"));
-const list = await listPending(cfg, actor, page);
-// A decision can empty the last page: send the owner to the new last page (flash and card ride along).
-if (list.ok && list.items.length === 0 && page > 1 && list.total > 0) {
-  const to = new URLSearchParams(q);
-  if (list.totalPages > 1) to.set("p", String(list.totalPages)); else to.delete("p");
-  return Astro.redirect(`/admin/requests${to.size ? `?${to}` : ""}`, 303);
-}
-const from = (page - 1) * PAGE_SIZE + 1;
+const list = await listAllPending(cfg, actor);
 const items = list.ok ? list.items : [];
-const groups = [
-  { id: "cat", title: t("admin.requests.categories"), rows: items.filter((r) => r.kind === "CATEGORY") },
-  { id: "svc", title: t("admin.requests.serviceTypes"), rows: items.filter((r) => r.kind === "SERVICE_TYPE") },
-];
-const L = {
-  category: t("admin.requests.category"), requester: t("admin.requests.requester"), sent: t("admin.requests.sent"), description: t("admin.requests.description"),
-  name: t("admin.requests.name"), initialService: t("admin.requests.initialService"), save: t("admin.requests.save"), approve: t("admin.requests.approve"),
-  reject: t("admin.requests.reject"), rejectOpen: t("admin.requests.rejectOpen"), reason: t("admin.requests.reason"), reasonHint: t("admin.requests.reasonHint"),
-  pager: t("admin.requests.pager"), prev: t("admin.requests.prev"), next: t("admin.requests.next"),
-};
-const badCard = err === "BAD_INPUT" ? keepCard : "";
-const nameOf = (r: CatalogRequest) => (r.kind === "CATEGORY" ? r.displayName ?? r.name : r.name);
-const typed = (r: CatalogRequest) => (keepCard === `${r.kind}:${r.id}` && keepName !== "" ? keepName : nameOf(r));
+const shown = filterRequests(items, kind, text);
+const pg = paginate(shown, reqPage, PAGE_SIZE); // filter / search run over the whole loaded list first, then one page of 25 renders
+const nCat = items.filter((r) => r.kind === "CATEGORY").length;
+const nav = list.ok ? navFrom(items, list.total) : NAV_UNKNOWN;
+
+// Where the dialogs point (the list with its filter), and the panels asked for.
+const listUrl = (extra: Record<string, string | undefined> = {}) => withQuery("/admin/requests", { kind: kind !== "ALL" && kind, q: text, p: pg.page > 1 && pg.page, ...extra });
+const rawOpen = q.get("open") ?? "";
+const dlg = q.get("dlg") === "approve" || q.get("dlg") === "reject" ? q.get("dlg") : null;
+const rawId = q.get("id") ?? "";
+const wantDetail = rawOpen !== "" ? rawOpen : err && card ? card : ""; // a failed edit re-opens its own detail with the typed name
+const detailReq = list.ok && KEY.test(wantDetail) ? items.find((r) => keyOf(r) === wantDetail) : undefined;
+const dlgReq = list.ok && dlg && KEY.test(rawId) ? items.find((r) => keyOf(r) === rawId) : undefined;
+// An id that is not (or no longer) pending: the list plus «Заявку вже розглянуто».
+if (list.ok && !err && !done && ((rawOpen !== "" && !detailReq) || (dlg !== null && !dlgReq))) err = "REQUEST_NOT_PENDING";
+const flash = done ? { ok: true, text: t(`admin.requests.flash.${done}`) } : err ? { ok: false, text: t(`admin.requests.flash.${err}`) } : null;
+const closeFlash = withQuery("/admin/requests", { kind: kind !== "ALL" && kind, q: text, p: pg.page > 1 && pg.page, open: detailReq && rawOpen ? rawOpen : undefined });
+const detailClose = listUrl();
+const badName = !!detailReq && err !== null && card === keyOf(detailReq) && (err === "BAD_INPUT" || err === "TYPE_EXISTS" || err === "DUPLICATE_PENDING");
+const typedName = (r: CatalogRequest) => (card === keyOf(r) && keepName !== "" ? keepName : requestLabel(r));
+
+const rows = pg.slice;
+const dateOf = (r: CatalogRequest) => formatDate(r.createdAt).replace(/ р\.?/, "");
+const daysAgo = (r: CatalogRequest) => (ageDays(r.createdAt) <= 0 ? t("admin.requests.today") : t("admin.requests.daysAgo", { n: ageDays(r.createdAt) }));
+const hiddenCtx = (r: CatalogRequest) => ({ kind: r.kind, id: r.id, origName: requestLabel(r), origInitialServiceName: r.kind === "CATEGORY" ? r.initialServiceName ?? "" : undefined, fk: kind !== "ALL" ? kind : undefined, fq: text || undefined, p: pg.page > 1 ? String(pg.page) : undefined });
+const dlgUrl = (name: "approve" | "reject", r: CatalogRequest, withOpen: boolean) => listUrl({ dlg: name, id: keyOf(r), open: withOpen ? keyOf(r) : undefined });
+const chips: [typeof kind, string, number][] = [["ALL", t("admin.requests.all"), items.length], ["CATEGORY", t("admin.requests.categories"), nCat], ["SERVICE_TYPE", t("admin.requests.serviceTypes"), items.length - nCat]];
 ---
 
-<Layout title={t("admin.requests.metaTitle")} description={t("admin.requests.metaDescription")} canonicalPath="/admin/requests" noindex noReferrer analytics={false} hideHeader hideFooter basicLatin>
-  <main id="main" class="admin">
-    <NeuCard as="section">
+<AdminShell title={t("admin.requests.metaTitle")} description={t("admin.requests.metaDescription")} path="/admin/requests" actor={actor} nav={nav} modal={!!(detailReq || dlgReq)} flash={flash ? { ...flash, closeHref: closeFlash } : null}>
+  <Fragment slot="dialog">
+  {detailReq && !dlgReq && (
+    <AdminDialog sheet title={detailReq.kind === "CATEGORY" ? t("admin.requests.detailCat") : t("admin.requests.detailType")} icon={detailReq.kind === "CATEGORY" ? "category" : "inbox"} closeHref={detailClose}>
+      <div class="age-row"><AdminAgePill days={ageDays(detailReq.createdAt)} /></div>
+      <dl class="facts">
+        {detailReq.kind === "SERVICE_TYPE" && detailReq.categoryName && <div><dt>{t("admin.requests.category")}</dt><dd>{detailReq.categoryName}</dd></div>}
+        <div><dt>{t("admin.requests.requester")}</dt><dd>{detailReq.requesterLabel}</dd></div>
+        {detailReq.createdAt && <div><dt>{t("admin.requests.sent")}</dt><dd><time datetime={detailReq.createdAt}>{formatDate(detailReq.createdAt)}</time> · {daysAgo(detailReq)}</dd></div>}
+        {detailReq.description && <div><dt>{t("admin.requests.description")}</dt><dd class="desc">{detailReq.description}</dd></div>}
+      </dl>
+      <hr class="rule" />
+      <form method="post" action="/admin/requests">
+        {Object.entries(hiddenCtx(detailReq)).map(([k, v]) => v !== undefined && <input type="hidden" name={k} value={v} />)}
+        <div class="field">
+          <label for="rn">{t("admin.requests.name")}</label>
+          <input class="in" id="rn" name="name" type="text" required maxlength="400" value={typedName(detailReq)} autocomplete="off" aria-invalid={badName ? "true" : undefined} aria-describedby="rn-h" autofocus />
+          <span class="hint" id="rn-h">{t("admin.requests.nameHint")}</span>
+        </div>
+        {detailReq.kind === "CATEGORY" && (
+          <div class="field">
+            <label for="rs">{t("admin.requests.initialService")}</label>
+            <input class="in" id="rs" name="initialServiceName" type="text" maxlength="400" value={detailReq.initialServiceName ?? ""} autocomplete="off" />
+          </div>
+        )}
+        <div class="sheet-f">
+          <AdminButton type="submit" name="action" value="save">{t("admin.requests.save")}</AdminButton>
+          <span class="grow"></span>
+          <AdminButton href={dlgUrl("reject", detailReq, true)} danger>{t("admin.requests.rejectOpen")}</AdminButton>
+          <CtaButton type="submit" name="action" value="approve" icon="check">{t("admin.requests.approve")}</CtaButton>
+        </div>
+      </form>
+    </AdminDialog>
+  )}
+
+  {dlgReq && dlg === "approve" && (
+    <AdminDialog title={t("admin.requests.approveTitle")} icon="ok" closeHref={rawOpen ? listUrl({ open: rawOpen }) : listUrl()}>
+      <form method="post" action="/admin/requests">
+        {Object.entries(hiddenCtx(dlgReq)).map(([k, v]) => v !== undefined && <input type="hidden" name={k} value={v} />)}
+        <input type="hidden" name="name" value={requestLabel(dlgReq)} />
+        {dlgReq.kind === "CATEGORY" && <input type="hidden" name="initialServiceName" value={dlgReq.initialServiceName ?? ""} />}
+        <p class="t-body">
+          {dlgReq.kind === "CATEGORY" ? t("admin.requests.approveBodyCat", { name: requestLabel(dlgReq) }) : t("admin.requests.approveBodyType", { name: requestLabel(dlgReq), category: dlgReq.categoryName ?? "" })}
+        </p>
+        <div class="dlg-f">
+          <AdminButton autofocus href={rawOpen ? listUrl({ open: rawOpen }) : listUrl()}>{t("admin.cancel")}</AdminButton>
+          <CtaButton type="submit" name="action" value="approve">{t("admin.requests.approveConfirm")}</CtaButton>
+        </div>
+      </form>
+    </AdminDialog>
+  )}
+
+  {dlgReq && dlg === "reject" && (
+    <AdminDialog title={t("admin.requests.rejectTitle")} icon="close" bad closeHref={rawOpen ? listUrl({ open: rawOpen }) : listUrl()}>
+      <form method="post" action="/admin/requests">
+        {Object.entries(hiddenCtx(dlgReq)).map(([k, v]) => v !== undefined && <input type="hidden" name={k} value={v} />)}
+        <p class="t-body">{t("admin.requests.rejectBody", { name: requestLabel(dlgReq) })}</p>
+        <div class="field">
+          <label for="rr">{t("admin.requests.reason")}</label>
+          <textarea class="in" id="rr" name="reason" rows="4" maxlength={REASON_MAX} aria-describedby="rr-h" autofocus></textarea>
+          <div class="row-split"><span class="hint" id="rr-h">{t("admin.requests.reasonHint")}</span><span class="hint">{t("admin.requests.reasonMax")}</span></div>
+        </div>
+        <div class="dlg-f">
+          <AdminButton href={rawOpen ? listUrl({ open: rawOpen }) : listUrl()}>{t("admin.cancel")}</AdminButton>
+          <CtaButton type="submit" name="action" value="reject">{t("admin.requests.rejectConfirm")}</CtaButton>
+        </div>
+      </form>
+    </AdminDialog>
+  )}
+  </Fragment>
+
+  <div class="page-h">
+    <div>
+      <span class="eyebrow vt-label">{t("admin.requests.eyebrow")}</span>
       <h1 class="vt-heading">{t("admin.requests.h1")}</h1>
-      <p class="back"><Chip href="/admin">{t("admin.back")}</Chip></p>
-      {flash && <AdminFlash ok={flash.ok} text={flash.text} />}
-      {!list.ok && <AdminFlash ok={false} text={t("admin.requests.loadFailed")} />}
-      {list.ok && list.total > items.length && <p class="vt-label note">{t("admin.requests.range", { shown: `${from}–${from + items.length - 1}`, total: list.total })}</p>}
-    </NeuCard>
+      <p class="t-body">{t("admin.requests.lead")}</p>
+    </div>
+  </div>
 
-    {list.ok && items.length === 0 && (
-      <div class="gap"><NeuCard as="section"><p class="vt-body">{t("admin.requests.empty")}</p></NeuCard></div>
-    )}
+  {!list.ok && <AdminFlash ok={false} text={t("admin.requests.loadFailed")} retryHref={listUrl()} />}
 
-    {groups.filter((g) => g.rows.length > 0).map((g) => (
-      <section class="group" aria-labelledby={`h-${g.id}`}>
-        <h2 id={`h-${g.id}`} class="vt-card-title">{g.title} · {g.rows.length}</h2>
-        <ul class="cards">
-          {g.rows.map((r) => {
-            const k = r.id;
-            return (
-              <NeuCard as="li" pad="md">
-                <form method="post" action="/admin/requests" class="req">
-                  <input type="hidden" name="kind" value={r.kind} />
-                  <input type="hidden" name="id" value={r.id} />
-                  {page > 1 && <input type="hidden" name="p" value={page} />}
-                  <input type="hidden" name="origName" value={nameOf(r)} />
-                  {r.kind === "CATEGORY" && <input type="hidden" name="origInitialServiceName" value={r.initialServiceName ?? ""} />}
-                  <dl class="facts vt-body">
-                    {r.kind === "SERVICE_TYPE" && r.categoryName && <div><dt class="vt-label">{L.category}</dt><dd>{r.categoryName}</dd></div>}
-                    <div><dt class="vt-label">{L.requester}</dt><dd>{r.requesterLabel}</dd></div>
-                    {r.createdAt && <div><dt class="vt-label">{L.sent}</dt><dd><time datetime={r.createdAt}>{formatDate(r.createdAt)}</time></dd></div>}
-                    {r.description && <div><dt class="vt-label">{L.description}</dt><dd class="desc">{r.description}</dd></div>}
-                  </dl>
-                  <label class="vt-label" for={`n-${k}`}>{L.name}</label>
-                  <input class="adm-field" id={`n-${k}`} name="name" type="text" required maxlength="400" value={typed(r)} autocomplete="off" aria-invalid={badCard === `${r.kind}:${r.id}` ? "true" : undefined} />
-                  {r.kind === "CATEGORY" && (
-                    <>
-                      <label class="vt-label" for={`s-${k}`}>{L.initialService}</label>
-                      <input class="adm-field" id={`s-${k}`} name="initialServiceName" type="text" maxlength="400" value={r.initialServiceName ?? ""} autocomplete="off" />
-                    </>
-                  )}
-                  <div class="actions">
-                    <CtaButton type="submit" name="action" value="save">{L.save}</CtaButton>
-                    <CtaButton type="submit" name="action" value="approve">{L.approve}</CtaButton>
-                  </div>
-                  <details class="rej">
-                    <summary class="vt-label"><span class="vt-u">{L.rejectOpen}</span></summary>
-                    <label class="vt-label" for={`r-${k}`}>{L.reason}</label>
-                    <textarea class="adm-field" id={`r-${k}`} name="reason" rows="3" maxlength={REASON_MAX} aria-describedby={`rh-${k}`}></textarea>
-                    <p class="vt-label" id={`rh-${k}`}>{L.reasonHint}</p>
-                    <CtaButton type="submit" name="action" value="reject">{L.reject}</CtaButton>
-                  </details>
-                </form>
-              </NeuCard>
-            );
-          })}
+  {list.ok && (
+    <section class="card">
+      <div class="toolbar">
+        <ul class="seg" aria-label={t("admin.requests.filterLabel")}>
+          {chips.map(([k, label, n]) => (
+            <li><Chip href={withQuery("/admin/requests", { kind: k !== "ALL" && k, q: text })} selected={kind === k}>{label}<span class="n">{n}</span></Chip></li>
+          ))}
         </ul>
-      </section>
-    ))}
-    {list.ok && <AdminPager base="/admin/requests" page={page} totalPages={list.totalPages} label={L.pager} prev={L.prev} next={L.next} />}
-  </main>
-</Layout>
+        <span class="sp"></span>
+        <AdminSearch action="/admin/requests" value={text} label={t("admin.requests.searchLabel")} placeholder={t("admin.requests.search")} submit={t("admin.requests.searchBtn")} keep={kind !== "ALL" ? { kind } : {}} />
+      </div>
 
-<style>
-  .admin {
-    width: 100%;
-    max-width: var(--vt-max-width);
-    margin: 0 auto;
-    padding: var(--vt-space-md);
-  }
-  .back {
-    margin: var(--vt-space-md) 0 0;
-  }
-  .note {
-    margin-top: var(--vt-space-sm);
-  }
-  .gap,
-  .group {
-    margin-top: var(--vt-space-lg);
-  }
-  .group h2 {
-    margin: 0 0 var(--vt-space-md);
-  }
-  .cards {
-    display: grid;
-    gap: var(--vt-space-lg);
-    margin: 0;
-    padding: 0;
-    list-style: none;
-  }
-  .req {
-    display: grid;
-    gap: var(--vt-space-sm);
-  }
-  .facts {
-    display: grid;
-    gap: var(--vt-space-sm);
-    margin: 0 0 var(--vt-space-sm);
-  }
-  .facts dd {
-    margin: 0;
-    overflow-wrap: anywhere;
-  }
-  .desc {
-    white-space: pre-line;
-  }
-  .actions {
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--vt-space-md);
-    margin-top: var(--vt-space-sm);
-  }
-  .rej {
-    margin-top: var(--vt-space-sm);
-  }
-  .rej[open] {
-    display: grid;
-    gap: var(--vt-space-sm);
-  }
-  .rej summary {
-    display: flex;
-    align-items: center;
-    min-height: var(--vt-touch-min);
-    cursor: pointer;
-  }
-  .rej[open] summary {
-    margin-bottom: var(--vt-space-xs);
-  }
-  .rej :global(.cta) {
-    justify-self: start;
-  }
-  @media (min-width: 600px) {
-    .admin {
-      padding: var(--vt-space-lg);
-    }
-  }
-  @media (min-width: 1024px) {
-    .cards {
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-      align-items: start;
-    }
-  }
-</style>
+      {items.length === 0 && (
+        <div class="empty">
+          <span class="big"><Icon name="ok" /></span>
+          <h2 class="vt-heading">{t("admin.requests.empty")}</h2>
+          <p class="t-body">{t("admin.requests.emptyBody")}</p>
+          <AdminButton href="/admin/catalog">{t("admin.requests.openCatalog")}</AdminButton>
+        </div>
+      )}
+      {items.length > 0 && rows.length === 0 && (
+        <div class="empty">
+          <span class="big"><Icon name="search" /></span>
+          <h2 class="vt-heading">{t("admin.requests.noneFound")}</h2>
+          <p class="t-body">{t("admin.requests.noneFoundBody")}</p>
+          <AdminButton href="/admin/requests">{t("admin.requests.resetFilters")}</AdminButton>
+        </div>
+      )}
+      {rows.length > 0 && (
+        <>
+          <div class="tbl-wrap">
+            <table class="tbl">
+              <thead>
+                <tr>
+                  <th scope="col">{t("admin.requests.colType")}</th>
+                  <th scope="col">{t("admin.requests.colName")}</th>
+                  <th scope="col" class="hide-md">{t("admin.requests.colRequester")}</th>
+                  <th scope="col">{t("admin.requests.colSent")}</th>
+                  <th scope="col" class="act"><span class="sr">{t("admin.requests.colActions")}</span></th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((r) => {
+                  const label = requestLabel(r);
+                  return (
+                    <tr id={`req-${r.id}`}>
+                      <td><span class:list={["pill", { mute: r.kind !== "CATEGORY" }]}>{r.kind === "CATEGORY" ? t("admin.requests.kindCategory") : t("admin.requests.kindType")}</span></td>
+                      <td>
+                        <span class="name">
+                          <b><a class="nm vt-u" href={listUrl({ open: keyOf(r) })}>{label}</a></b>
+                          <small>{r.kind === "SERVICE_TYPE" ? t("admin.requests.inCategory", { name: r.categoryName ?? "" }) : r.initialServiceName ? t("admin.requests.firstService", { name: r.initialServiceName }) : t("admin.requests.noFirstService")}</small>
+                          <span class="only-sm"><AdminAgePill days={ageDays(r.createdAt)} /></span>
+                        </span>
+                      </td>
+                      <td class="hide-md">{r.requesterLabel}</td>
+                      <td>
+                        <span class="name">
+                          <b class="when">{dateOf(r)}</b>
+                          <small>{daysAgo(r)}</small>
+                          <span class="from-sm"><AdminAgePill days={ageDays(r.createdAt)} /></span>
+                        </span>
+                      </td>
+                      <td class="act">
+                        <span class="acts">
+                          <AdminButton href={dlgUrl("approve", r, false)} icon="check" iconOnly label={t("admin.requests.approveRow", { name: label })} />
+                          <AdminButton href={dlgUrl("reject", r, false)} icon="close" iconOnly danger label={t("admin.requests.rejectRow", { name: label })} />
+                          <AdminButton href={listUrl({ open: keyOf(r) })} icon="chevron-right" iconOnly label={t("admin.requests.openRow", { name: label })} />
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+          <div class="tfoot">
+            <span class="vt-label">{t("admin.requests.range", { shown: `${pg.from}–${pg.to}`, total: kind !== "ALL" || text ? pg.total : list.total })}</span>
+            {list.capped && <span class="vt-label" role="status">{t("admin.requests.capNotice")}</span>}
+          </div>
+          <AdminPager base="/admin/requests" page={pg.page} totalPages={pg.pages} label={t("admin.requests.pager")} prev={t("admin.requests.prev")} next={t("admin.requests.next")} query={{ ...(kind !== "ALL" ? { kind } : {}), ...(text ? { q: text } : {}) }} />
+        </>
+      )}
+    </section>
+  )}
+</AdminShell>
