@@ -2,19 +2,15 @@
 // Plain HTML form POSTs (CSP has no script): POST -> 303 -> GET. The flash is a query code from FLASH only; backend message text is never echoed.
 import { adminFetch, CATALOG_PREFIX } from "./api.ts";
 import type { AdminConfig } from "./config.ts";
+import { KEEP_MAX, NAME_CAP, cp, field, parsePage } from "./common.ts";
+
+export { KEEP_MAX, NAME_CAP, parsePage }; // moved to ./common.ts (shared with the catalog page); re-exported so existing importers keep working
 
 export const KINDS = ["CATEGORY", "SERVICE_TYPE"] as const;
 export type Kind = (typeof KINDS)[number];
 export const REASON_MAX = 300; // code points (backend DecisionReason)
-export const NAME_CAP = 300; // server-side cap on name / initialServiceName (code points); the backend (100 / 255) stays the authority below it
 export const FLASH_COOKIE = "adm_req_name"; // HttpOnly flash cookie holding the typed name for ONE re-render (set by the POST, cleared by the next GET)
-export const KEEP_MAX = 120; // typed name kept for the re-render (code points)
 export const PAGE_SIZE = 25; // requests per page (backend `page` is 0-based, the URL's `?p=` is 1-based)
-/** `?p=` / hidden `p` -> a page number >= 1 (garbage = 1). */
-export const parsePage = (raw: unknown): number => {
-  const n = typeof raw === "string" && /^\d{1,4}$/.test(raw) ? Number(raw) : 1;
-  return n >= 1 ? n : 1;
-};
 const ID = /^(?:\d{1,19}|[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})$/;
 
 export interface CatalogRequest {
@@ -67,8 +63,6 @@ export async function listPending(cfg: AdminConfig, actor: string, page = 1): Pr
   return { ok: true, items, total, totalPages: typeof tp === "number" && tp >= 0 ? tp : items.length ? 1 : 0, page };
 }
 
-const cp = (s: string): number => [...s].length;
-const field = (f: FormData, k: string): string => (typeof f.get(k) === "string" ? (f.get(k) as string) : "");
 /** Redirect target; the current page `p` (> 1) is kept so a decision never throws the owner back to page 1. */
 const backTo = (q: Record<string, string>, p = 1): string => `/admin/requests?${new URLSearchParams(p > 1 ? { ...q, p: String(p) } : q)}`;
 

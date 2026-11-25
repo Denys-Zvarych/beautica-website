@@ -10,7 +10,7 @@
 //   --method POST --body 'kind=CATEGORY&id=1&action=approve&...' --calls /tmp/calls.json   # one form POST (same-origin), prints the redirect Location;
 //                                                                                          # --cookie 'k=v' sends a Cookie; Set-Cookie is printed; --calls dumps the requests the mock catalog backend received
 //   --serve also answers GET /__mock/calls (the mock backend's call log) and lets a POST override its Origin with `x-test-origin` (a cross-site post); Cookie is forwarded.
-// CATALOG_MOCK_ROWS=100 pads the mock list to 100 requests (perf runs).
+// CATALOG_MOCK_ROWS=100 pads the mock list to 100 requests; CATALOG_MOCK_CATEGORIES=200 pads the live catalog to 200 categories x 12 types (perf runs).
 // The backend is a local mock of the catalog endpoints (scripts/lib/catalog-mock.mjs, test-only, sample data); nothing in src/ knows about it.
 import { spawn } from "node:child_process";
 import { cpSync, existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";

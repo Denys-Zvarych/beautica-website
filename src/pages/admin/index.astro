@@ -19,10 +19,9 @@ if (actor instanceof Response) return actor;
     <NeuCard as="section">
       <h1 class="vt-heading">{t("admin.h1")}</h1>
       <p class="who">{t("admin.actor", { email: actor })}</p>
-      <!-- «Заявки» is live (W040); «Каталог» stays a plain label until W041 adds its route, never a dead link. -->
       <ul class="nav" aria-label={t("admin.navLabel")}>
         <li><Chip href="/admin/requests">{t("admin.requests.label")}</Chip></li>
-        <li><Chip>{t("admin.catalog")} · {t("admin.soon")}</Chip></li>
+        <li><Chip href="/admin/catalog">{t("admin.catalog.label")}</Chip></li>
       </ul>
     </NeuCard>
   </main>
