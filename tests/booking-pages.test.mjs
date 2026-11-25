@@ -637,6 +637,7 @@ describe("parity with the app (backend 383-385)", () => {
       await page.locator("[data-sortmenu] summary").click();
       await page.locator("[data-sort-option=HIGHEST]").click();
       await page.waitForFunction(() => document.querySelectorAll("[data-review-list] article").length === 5);
+      await page.locator("[data-sort-label]").filter({ hasText: /^\s*Найвищий рейтинг\s*$/ }).waitFor({ timeout: 10000 });
       assert.equal(await text(page.locator("[data-sort-label]")), "Найвищий рейтинг");
       const first = await page.locator("[data-review-list] article").first().evaluate((a) => ({ name: a.querySelector(".t-sub12").textContent, on: a.querySelectorAll(".stars .on").length, svc: a.querySelector(".svc .t-fb").textContent }));
       assert.equal(first.on, 5);
@@ -647,13 +648,14 @@ describe("parity with the app (backend 383-385)", () => {
       await page.waitForFunction(() => document.querySelectorAll("[data-review-list] article").length === 10);
       await page.click("[data-more]");
       await page.waitForFunction(() => document.querySelectorAll("[data-review-list] article").length === 12);
+      await page.locator("[data-more]").waitFor({ state: "hidden", timeout: 10000 });
       assert.equal(await page.locator("[data-more]").isVisible(), false, "no more pages");
       const ratings = await page.locator("[data-review-list] article").evaluateAll((as) => as.map((a) => a.querySelectorAll(".stars .on").length));
       assert.deepEqual(ratings, [...ratings].sort((a, b) => b - a), "highest first across pages");
       await page.context().route(`${MOCK_API}/api/v1/book/oksana-ab12/reviews*`, (r) => r.fulfill({ status: 500, headers: { "access-control-allow-origin": "*" }, body: "" }));
       await page.locator("[data-sortmenu] summary").click();
       await page.locator("[data-sort-option=OLDEST]").click();
-      await page.waitForSelector("[data-rev-status]:not([hidden])");
+      await page.locator("[data-rev-status]").filter({ hasText: "Не вдалося завантажити відгуки" }).waitFor({ timeout: 10000 });
       assert.ok((await text(page.locator("[data-rev-status]"))).includes("Не вдалося завантажити відгуки"));
     } finally {
       await env.context.close();
