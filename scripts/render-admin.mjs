@@ -65,18 +65,42 @@ let wr;
 const stop = () => { try { if (wr) process.kill(-wr.pid, "SIGKILL"); } catch { /* gone */ } jwksServer.close(); mock.close(); rmSync(work, { recursive: true, force: true }); };
 process.on("exit", stop);
 for (const s of ["SIGINT", "SIGTERM"]) process.on(s, () => process.exit(130));
-const port = await freePort();
-wr = spawn("npx", ["--no-install", "wrangler", "dev", "-c", join(work, "dist/server/wrangler.json"), "--port", String(port), "--ip", "127.0.0.1", "--show-interactive-dev-session=false", "--persist-to", join(work, "state"),
-  "--var", `CF_ACCESS_TEAM_DOMAIN:${TEAM}`, "--var", `CF_ACCESS_AUD:${AUD}`, "--var", `ADMIN_EMAILS:${EMAIL}`, "--var", "INTERNAL_CATALOG_KEY:test-catalog-key-0000000000000000000", "--var", `API_ORIGIN:${mock.origin}`],
-  { stdio: process.env.RENDER_ADMIN_DEBUG ? "inherit" : process.env.RENDER_ADMIN_LOG ? ["ignore", openSync(process.env.RENDER_ADMIN_LOG, "a"), openSync(process.env.RENDER_ADMIN_LOG, "a")] : "ignore", detached: true, env: { ...process.env, WRANGLER_SEND_METRICS: "false", CI: "1" } });
-
-const base = `http://127.0.0.1:${port}`;
-const send = (path, withJwt = true, init = {}) => fetch(base + path, { ...init, headers: { ...(withJwt ? { "Cf-Access-Jwt-Assertion": jwt } : {}), ...init.headers }, redirect: "manual" });
-for (let i = 0; ; i++) {
-  try { if ((await fetch(base + "/", { signal: AbortSignal.timeout(2000) })).status === 200) break; } catch { /* not up */ }
-  if (i > 960) { console.error("render-admin: wrangler dev did not start in 240 s"); process.exit(1); }
-  await new Promise((r) => setTimeout(r, 250));
+// A start is bounded per attempt (a healthy one takes 10-15 s), not once for 240 s: a wrangler that never comes up (exited, or alive but stuck while
+// its siblings were booting: CI PR #68 sat the whole 240 s on one) is killed and replaced on fresh ports. The inspector port is explicit too:
+// wrangler's own default is one fixed port that concurrent test files would fight over. The log goes to a file in the temp dir, shown on failure.
+const ATTEMPTS = 4, ATTEMPT_MS = 60_000;
+const logFile = process.env.RENDER_ADMIN_LOG ?? join(work, "wrangler.log");
+let port, base;
+const startWrangler = async () => {
+  port = await freePort();
+  const inspector = await freePort();
+  base = `http://127.0.0.1:${port}`;
+  const fd = openSync(logFile, "a");
+  const child = spawn("npx", ["--no-install", "wrangler", "dev", "-c", join(work, "dist/server/wrangler.json"), "--port", String(port), "--inspector-port", String(inspector), "--ip", "127.0.0.1", "--show-interactive-dev-session=false", "--persist-to", join(work, "state"),
+    "--var", `CF_ACCESS_TEAM_DOMAIN:${TEAM}`, "--var", `CF_ACCESS_AUD:${AUD}`, "--var", `ADMIN_EMAILS:${EMAIL}`, "--var", "INTERNAL_CATALOG_KEY:test-catalog-key-0000000000000000000", "--var", `API_ORIGIN:${mock.origin}`],
+    { stdio: process.env.RENDER_ADMIN_DEBUG ? "inherit" : ["ignore", fd, fd], detached: true, env: { ...process.env, WRANGLER_SEND_METRICS: "false", CI: "1" } });
+  child.exited = false;
+  child.on("exit", () => { child.exited = true; });
+  return child;
+};
+const killWrangler = (c) => { try { if (c) process.kill(-c.pid, "SIGKILL"); } catch { /* gone */ } };
+for (let attempt = 1; ; attempt++) {
+  killWrangler(wr);
+  wr = await startWrangler();
+  const deadline = Date.now() + ATTEMPT_MS;
+  let up = false;
+  while (!up && !wr.exited && Date.now() < deadline) {
+    try { up = (await fetch(base + "/", { signal: AbortSignal.timeout(2000) })).status === 200; } catch { /* not up */ }
+    if (!up) await new Promise((r) => setTimeout(r, 250));
+  }
+  if (up) break;
+  console.error(`render-admin: wrangler dev attempt ${attempt}/${ATTEMPTS} ${wr.exited ? "exited" : `not ready in ${ATTEMPT_MS / 1000} s`} on port ${port}`);
+  if (attempt >= ATTEMPTS) {
+    console.error("render-admin: wrangler dev did not start; log tail:\n" + (existsSync(logFile) ? readFileSync(logFile, "utf8").slice(-1500) : "(no log)"));
+    process.exit(1);
+  }
 }
+const send = (path, withJwt = true, init = {}) => fetch(base + path, { ...init, headers: { ...(withJwt ? { "Cf-Access-Jwt-Assertion": jwt } : {}), ...init.headers }, redirect: "manual" });
 
 if (arg("--serve") !== undefined) {
   const p = arg("--serve") === "0" ? 0 : Number(arg("--serve")) || 4399; // 0 = a free port (reported below)

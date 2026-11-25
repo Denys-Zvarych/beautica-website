@@ -179,11 +179,25 @@ describe("JS budget: before intent and after a full walk", () => {
       const u = new URL(r.url());
       if (u.origin === new URL(BASE).origin && u.pathname.endsWith(".js") && r.status() === 200 && existsSync(join(ROOT, "dist/client", u.pathname))) seen.set(u.pathname, gzSize(readFileSync(join(ROOT, "dist/client", u.pathname))));
     });
-    await env.page.reload({ waitUntil: "networkidle" }); // listener on, then everything the page loads by itself
+    // In-flight bookkeeping instead of Playwright's "networkidle": that state needs 500 ms of zero connections and never arrives while one slow
+    // request hangs, and then the failure names no request (CI PR #68: waitForLoadState timed out after 60 s). This one lists what is pending.
+    const pending = new Map();
+    env.page.on("request", (r) => pending.set(r, r.url()));
+    for (const ev of ["requestfinished", "requestfailed"]) env.page.on(ev, (r) => pending.delete(r));
+    const settled = async (what) => {
+      const deadline = Date.now() + 60_000;
+      for (let calm = 0; calm < 3; ) {
+        if (Date.now() > deadline) throw new Error(`${what}: ${pending.size} request(s) still in flight after 60 s: ${[...pending.values()].join(", ")}`);
+        await new Promise((r) => setTimeout(r, 200));
+        calm = pending.size === 0 ? calm + 1 : 0;
+      }
+    };
+    await env.page.reload({ waitUntil: "load" }); // listener on, then everything the page loads by itself
+    await settled("after reload");
     const total = () => [...seen.values()].reduce((a, n) => a + n, 0);
     const before = total();
     await walk();
-    await env.page.waitForLoadState("networkidle");
+    await settled("after the walk");
     return { before, full: total(), files: [...seen.keys()].map((p) => p.split("/").pop()) };
   }
   const gate = (route, m) => {

@@ -1,5 +1,5 @@
 // Starts the test-only /admin harness (scripts/render-admin.mjs --serve 0: real middleware + Access JWT, local mock catalog backend) on a free port.
-// Start budget 280 s (render-admin itself waits up to 240 s for wrangler): the CI runner and a loaded dev box start several wranglers at once and a start timeout would cancel the whole file.
+// Start budget 280 s (render-admin itself retries a stuck wrangler start, 4 x 60 s at most): the CI runner and a loaded dev box start several wranglers at once and a start timeout would cancel the whole file.
 // `env` adds harness variables (CATALOG_MOCK_ROWS, CATALOG_MOCK_CATEGORIES). Every request is checked against the mock's CALL LOG, not only the HTML.
 import { spawn } from "node:child_process";
 import { ROOT } from "./env.mjs";
