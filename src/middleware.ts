@@ -52,8 +52,10 @@ async function guard(ctx: Parameters<Parameters<typeof defineMiddleware>[0]>[0],
   if (adminHit.admin) {
     // Private /admin* (phase 039): the Access JWT is verified for EVERY method and path under it before any route runs; anything else is a plain 404.
     // Lazy import: only this branch needs the Worker env (cloudflare:workers).
-    const [{ requireOwner }, { adminConfig }] = await Promise.all([import("./lib/admin/access.ts"), import("./lib/admin/runtime.ts")]);
-    const owner = await requireOwner(request, adminConfig());
+    const [{ requireOwner, logAdminDenied }, { adminConfigState }] = await Promise.all([import("./lib/admin/access.ts"), import("./lib/admin/runtime.ts")]);
+    const { config, problem } = adminConfigState();
+    if (!config) logAdminDenied(`config_missing:${problem ?? "UNKNOWN"}`);
+    const owner = await requireOwner(request, config);
     if (owner instanceof Response) return withSecurityHeaders(owner, "/admin");
     (ctx.locals as { adminActor?: string }).adminActor = owner.email;
     return withSecurityHeaders(await next(), "/admin");

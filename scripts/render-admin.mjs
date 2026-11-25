@@ -10,10 +10,12 @@
 //   --method POST --body 'kind=CATEGORY&id=1&action=approve&...' --calls /tmp/calls.json   # one form POST (same-origin), prints the redirect Location;
 //                                                                                          # --cookie 'k=v' sends a Cookie; Set-Cookie is printed; --calls dumps the requests the mock catalog backend received
 //   --serve also answers GET /__mock/calls (the mock backend's call log) and lets a POST override its Origin with `x-test-origin` (a cross-site post); Cookie is forwarded.
+// RENDER_ADMIN_ANON=1 makes the --serve proxy send NO Access JWT (a denied request, for the denial-log test); RENDER_ADMIN_LOG=<file> appends the
+// Worker's stdout/stderr (its console.warn lines) to that file instead of dropping it.
 // CATALOG_MOCK_ROWS=100 pads the mock list to 100 requests; CATALOG_MOCK_CATEGORIES=200 pads the live catalog to 200 categories x 12 types (perf runs).
 // The backend is a local mock of the catalog endpoints (scripts/lib/catalog-mock.mjs, test-only, sample data); nothing in src/ knows about it.
 import { spawn } from "node:child_process";
-import { cpSync, existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdtempSync, openSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
 import { createServer as netServer } from "node:net";
 import { tmpdir } from "node:os";
@@ -66,7 +68,7 @@ for (const s of ["SIGINT", "SIGTERM"]) process.on(s, () => process.exit(130));
 const port = await freePort();
 wr = spawn("npx", ["--no-install", "wrangler", "dev", "-c", join(work, "dist/server/wrangler.json"), "--port", String(port), "--ip", "127.0.0.1", "--show-interactive-dev-session=false", "--persist-to", join(work, "state"),
   "--var", `CF_ACCESS_TEAM_DOMAIN:${TEAM}`, "--var", `CF_ACCESS_AUD:${AUD}`, "--var", `ADMIN_EMAILS:${EMAIL}`, "--var", "INTERNAL_CATALOG_KEY:test-catalog-key-0000000000000000000", "--var", `API_ORIGIN:${mock.origin}`],
-  { stdio: process.env.RENDER_ADMIN_DEBUG ? "inherit" : "ignore", detached: true, env: { ...process.env, WRANGLER_SEND_METRICS: "false", CI: "1" } });
+  { stdio: process.env.RENDER_ADMIN_DEBUG ? "inherit" : process.env.RENDER_ADMIN_LOG ? ["ignore", openSync(process.env.RENDER_ADMIN_LOG, "a"), openSync(process.env.RENDER_ADMIN_LOG, "a")] : "ignore", detached: true, env: { ...process.env, WRANGLER_SEND_METRICS: "false", CI: "1" } });
 
 const base = `http://127.0.0.1:${port}`;
 const send = (path, withJwt = true, init = {}) => fetch(base + path, { ...init, headers: { ...(withJwt ? { "Cf-Access-Jwt-Assertion": jwt } : {}), ...init.headers }, redirect: "manual" });
@@ -84,7 +86,7 @@ if (arg("--serve") !== undefined) {
     const chunks = []; for await (const c of rq) chunks.push(c);
     const post = rq.method !== "GET" && rq.method !== "HEAD";
     // A browser form post carries Origin = the proxy; the Worker compares it to its own origin, so present it as same-origin.
-    const r = await send(rq.url, true, post ? { method: rq.method, body: Buffer.concat(chunks), headers: { "Content-Type": rq.headers["content-type"] ?? "application/x-www-form-urlencoded", Origin: rq.headers["x-test-origin"] ?? base, ...(rq.headers.cookie ? { Cookie: rq.headers.cookie } : {}) } } : rq.headers.cookie ? { headers: { Cookie: rq.headers.cookie } } : {});
+    const r = await send(rq.url, !process.env.RENDER_ADMIN_ANON, post ? { method: rq.method, body: Buffer.concat(chunks), headers: { "Content-Type": rq.headers["content-type"] ?? "application/x-www-form-urlencoded", Origin: rq.headers["x-test-origin"] ?? base, ...(rq.headers.cookie ? { Cookie: rq.headers.cookie } : {}) } } : rq.headers.cookie ? { headers: { Cookie: rq.headers.cookie } } : {});
     const h = Object.fromEntries(r.headers); delete h["content-encoding"]; delete h["content-length"];
     let body = Buffer.from(await r.arrayBuffer());
     // Mirror the Cloudflare edge: compressed text responses (Lighthouse and the budgets measure what the browser downloads).
