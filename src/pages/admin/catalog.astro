@@ -347,7 +347,6 @@ const rowActs = (kind: "cat" | "type", c: Category, ty?: ServiceType) => {
                         )}
                         <td>
                           {c.status === "PENDING" && <span class="pill dot">{t("admin.catalog.statusPending")}</span>}
-                          {c.status === "REJECTED" && <span class="pill bad dot">{t("admin.catalog.statusRejected")}</span>}
                           {live && (c.active ? <span class="pill ok dot">{t("admin.catalog.statusLive")}</span> : <span class="pill mute dot">{t("admin.catalog.statusHidden")}</span>)}
                         </td>
                         <td class="num">

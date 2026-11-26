@@ -280,7 +280,6 @@
       "colActions": "Дії",
       "colType": "Тип",
       "statusPending": "Очікує",
-      "statusRejected": "Відхилено",
       "statusLive": "Активна",
       "statusHidden": "Вимкнено",
       "usageOne": "у {n} послузі",

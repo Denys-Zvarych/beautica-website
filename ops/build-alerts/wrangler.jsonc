@@ -1,0 +1,15 @@
+{
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  // Phase 053: emails the operator when a Workers Build of beautica-site fails or is cancelled.
+  // Deployed by hand (npx wrangler deploy -c ops/build-alerts/wrangler.jsonc), never by Workers Builds. Owner steps: ./README.md.
+  "name": "beautica-build-alerts",
+  "main": "src/index.mjs",
+  "compatibility_date": "2026-10-01",
+  "workers_dev": false,
+  "queues": {
+    "consumers": [{ "queue": "beautica-build-events", "max_batch_size": 10, "max_batch_timeout": 5, "max_retries": 3 }]
+  },
+  // Same verified Email Routing destination as the site's DELETION_MAIL.
+  "send_email": [{ "name": "ALERT_MAIL", "destination_address": "beautica.ua@gmail.com" }],
+  "observability": { "enabled": true }
+}

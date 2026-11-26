@@ -34,6 +34,7 @@ const seedCatalog = (extra) => {
     { name: "BEZ_ICONKY", displayName: "Без іконки", status: "APPROVED", active: false, usage: 0 },
     { name: "NEW_CAT", displayName: "Нова категорія", status: "PENDING", active: true, usage: 0 },
     { name: "STRAY", displayName: "Зайва", status: "APPROVED", active: true, usage: 0 },
+    { name: "YRO", displayName: "Відхилена заявка", status: "REJECTED", active: true, usage: 0 }, // a rejected request: the admin list never shows it
   ];
   const types = new Map(cats.map((c) => [c.name, []]));
   const add = (cat, n, nameUk, nameEn, active, usage) => types.get(cat).push({ id: tid(cats.findIndex((c) => c.name === cat) + 1, n), slug: `t-${n}`, nameUk, nameEn, active, usage });
