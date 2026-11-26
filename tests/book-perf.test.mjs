@@ -4,7 +4,7 @@ import { test, describe, before, after } from "node:test";
 import assert from "node:assert/strict";
 import { launch, open } from "./helpers/browser.mjs";
 import { gzSize } from "../scripts/lib/gzSize.mjs";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { salonPage, pickServices, toggleMaster, clickAndLoadDays, scheduleMaster } from "./helpers/salon.mjs";
 import { driveTo } from "./helpers/book.mjs";
@@ -241,5 +241,19 @@ describe("JS budget: before intent and after a full walk", () => {
     } finally {
       await env.context.close();
     }
+  });
+});
+
+// W050: the server-icon feature must not grow the page-load entry. main.js (every link page, before intent) was 3822 B gz on the dev baseline when measured with
+// gzSize (the phase notes record 3807 B from another measurement); the feature moved its code into the lazy icon-probe / icons-remote chunks, so main.js
+// may not exceed the dev figure. Lower it when main.js shrinks; do not raise it: put new code in a chunk.
+const MAIN_JS_DEV_GZ = 3822;
+describe("main.js gz size vs the dev baseline", () => {
+  test(`dist main.js <= ${MAIN_JS_DEV_GZ} B gz`, () => {
+    const dir = join(ROOT, "dist/client/_astro");
+    const files = readdirSync(dir).filter((f) => /^main\.[\w-]+\.js$/.test(f));
+    assert.equal(files.length, 1, `exactly one main.*.js expected, got ${files.join(", ")}`);
+    const size = gzSize(readFileSync(join(dir, files[0])));
+    assert.ok(size <= MAIN_JS_DEV_GZ, `${files[0]} is ${size} B gz, over the dev baseline ${MAIN_JS_DEV_GZ} B: move the new code into a lazy chunk`);
   });
 });

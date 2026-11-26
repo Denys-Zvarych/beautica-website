@@ -8,7 +8,7 @@ const EMAIL = /^[^\s@]{1,64}@[^\s@]{1,189}$/;
 
 export type AdminResult =
   | { ok: true; status: number; data: unknown }
-  | { ok: false; status: number; code: string; message: string; counts?: UsageCounts };
+  | { ok: false; status: number; code: string; message: string; counts?: UsageCounts; reason?: string };
 
 /** Usage counts a 409 CATALOG_IN_USE carries next to its code (B505, flattened into `data`). Present only when the backend sent them. */
 export interface UsageCounts {
@@ -24,6 +24,7 @@ const MESSAGES: Record<string, string> = {
   CATEGORY_NAME_EXISTS: "Категорія з такою назвою вже існує.",
   CATEGORY_NOT_APPROVED: "Категорію ще не схвалено. Спершу розгляньте заявку.",
   CATEGORY_ICON_REQUIRED: "Спершу додайте іконку категорії.",
+  ICON_INVALID: "Іконка не підходить.",
   CATALOG_IN_USE: "Неможливо видалити: елемент каталогу використовується. Вимкніть його.",
 };
 
@@ -68,14 +69,20 @@ export async function adminFetch(cfg: AdminConfig, method: "GET" | "POST" | "PUT
     /* empty or non-JSON body */
   }
   if (res.ok) return { ok: true, status: res.status, data: (json as { data?: unknown } | null)?.data ?? json };
-  const code = errorCode(json), counts = usageCounts(json);
-  return { ok: false, status: res.status, code, message: errorMessage(res.status, code), ...(counts ? { counts } : {}) };
+  const code = errorCode(json), counts = usageCounts(json), reason = errorReason(json);
+  return { ok: false, status: res.status, code, message: errorMessage(res.status, code), ...(counts ? { counts } : {}), ...(reason ? { reason } : {}) };
 }
 
 /** Typed code of an error envelope: ONLY `data.code` (`{"success":false,"data":{"code":X},"message":...}`, services spec SVC-55/SVC-06). `message` is never read. */
 function errorCode(json: unknown): string {
   const code = (json as { data?: { code?: unknown } | null } | null)?.data?.code;
   return typeof code === "string" && /^[A-Z][A-Z0-9_]{2,60}$/.test(code) ? code : "";
+}
+
+/** `data.reason` of a 400 ICON_INVALID (B539: TOO_LARGE, NOT_SVG, BAD_VIEWBOX, ...): a code only, never free text. */
+function errorReason(json: unknown): string {
+  const d = (json as { data?: { code?: unknown; reason?: unknown } | null } | null)?.data;
+  return d?.code === "ICON_INVALID" && typeof d.reason === "string" && /^[A-Z][A-Z0-9_]{2,40}$/.test(d.reason) ? d.reason : "";
 }
 
 /** Non-negative integer counts of `data` (CATALOG_IN_USE only); anything else is dropped. */

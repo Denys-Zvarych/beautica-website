@@ -5,7 +5,7 @@ import type { CatalogRequest } from "./requests.ts";
 
 export const REQUEST_KINDS = ["ALL", "CATEGORY", "SERVICE_TYPE"] as const;
 export type RequestKindFilter = (typeof REQUEST_KINDS)[number];
-export const CATALOG_FILTERS = ["ALL", "LIVE", "HIDDEN", "PENDING", "UNUSED"] as const;
+export const CATALOG_FILTERS = ["ALL", "LIVE", "HIDDEN", "PENDING", "UNUSED", "NOICON"] as const;
 export type CatalogFilter = (typeof CATALOG_FILTERS)[number];
 export const Q_MAX = 100; // code points
 
@@ -24,7 +24,7 @@ export const requestLabel = (r: CatalogRequest): string => (r.kind === "CATEGORY
 export const filterRequests = (items: CatalogRequest[], kind: RequestKindFilter, q: string): CatalogRequest[] =>
   items.filter((r) => (kind === "ALL" || r.kind === kind) && matchesQuery([requestLabel(r), r.categoryName, r.requesterLabel], q));
 
-/** LIVE = approved and active; HIDDEN = approved and not active; PENDING; UNUSED = approved, no usage, no types. REJECTED shows only under ALL. */
+/** LIVE = approved and active; HIDDEN = approved and not active; PENDING; UNUSED = approved, no usage, no types; NOICON (W049) = approved and the backend says it has no icon (`iconUrl: null`; absent = not exposed yet = never matches). REJECTED shows only under ALL. */
 export const catalogMatches = (c: Category, f: CatalogFilter): boolean => {
   switch (f) {
     case "ALL": return true;
@@ -32,6 +32,7 @@ export const catalogMatches = (c: Category, f: CatalogFilter): boolean => {
     case "HIDDEN": return c.status === "APPROVED" && !c.active;
     case "PENDING": return c.status === "PENDING";
     case "UNUSED": return c.status === "APPROVED" && c.usageCount === 0 && c.typeCount === 0;
+    case "NOICON": return c.status === "APPROVED" && c.iconUrl === null;
   }
 };
 export const filterCatalog = (cats: Category[], f: CatalogFilter, q: string): Category[] => cats.filter((c) => catalogMatches(c, f) && matchesQuery([c.displayName, c.name], q));

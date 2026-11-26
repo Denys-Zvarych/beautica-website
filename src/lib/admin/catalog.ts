@@ -2,7 +2,9 @@
 // config, tests pass a fake fetch. Plain HTML form POSTs (CSP has no script): POST -> 303 -> GET with a flash code in the query. Backend message text is never echoed.
 import { adminFetch, CATALOG_PREFIX, type UsageCounts } from "./api.ts";
 import type { AdminConfig } from "./config.ts";
-import { NAME_CAP, KEEP_MAX, cp, field, parsePage } from "./common.ts";
+import { NAME_CAP, KEEP_MAX, WIRE, cp, field, parsePage } from "./common.ts";
+import { adminImgOrigin } from "../securityHeaders.ts";
+import { imgOriginsFor } from "../mediaOrigin.ts";
 import { parseCatalogFilter, parseQuery } from "./listQuery.ts";
 
 export { KEEP_MAX, parsePage };
@@ -11,11 +13,11 @@ export const FLASH_COOKIE = "adm_cat_name"; // HttpOnly one-shot cookie: the typ
 export const KINDS = ["category", "type"] as const;
 export type Kind = (typeof KINDS)[number];
 export const ACTIONS = ["save", "hide", "show", "delete"] as const;
-const WIRE = /^[A-Z][A-Z0-9_]{0,99}$/; // platform_categories.name (chk_platform_categories_name)
 const UUID = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
 
 export type Status = "APPROVED" | "PENDING" | "REJECTED";
-export interface Category { name: string; displayName: string; status: Status; active: boolean; usageCount: number; typeCount: number }
+/** `iconUrl`: string = has an icon, null = none, undefined = the backend does not expose icons (pre-B539): the icon UI and its gate stay off. */
+export interface Category { name: string; displayName: string; status: Status; active: boolean; usageCount: number; typeCount: number; iconUrl?: string | null }
 export interface ServiceType { id: string; slug: string; nameUk: string; nameEn: string; active: boolean; usageCount: number }
 export interface CategoryRow { category: Category; types?: ServiceType[] | null } // undefined = not loaded (only the `open` category loads its types), null = the load failed
 
@@ -37,10 +39,12 @@ export function errToFlash(status: number, code: string): ErrCode {
 
 const str = (v: unknown): string | null => (typeof v === "string" ? v : null);
 const num = (v: unknown): number => (typeof v === "number" && Number.isFinite(v) && v >= 0 ? v : 0);
-const parseCategory = (r: unknown): Category | null => {
+/** `iconUrl` key absent -> {} (not exposed); present -> a URL on an allowed image origin, else null (never rendered, never in the CSP). */
+export const parseIcon = (o: Record<string, unknown>, allow: readonly string[]): { iconUrl?: string | null } => (!("iconUrl" in o) ? {} : { iconUrl: adminImgOrigin(o.iconUrl, allow) ? (o.iconUrl as string) : null });
+const parseCategory = (allow: readonly string[]) => (r: unknown): Category | null => {
   const o = r as Record<string, unknown> | null, name = str(o?.name), status = str(o?.status);
   if (!o || !name || !WIRE.test(name) || !(status === "APPROVED" || status === "PENDING" || status === "REJECTED")) return null;
-  return { name, displayName: str(o.displayName) ?? name, status, active: o.active !== false, usageCount: num(o.usageCount), typeCount: num(o.typeCount) };
+  return { name, displayName: str(o.displayName) ?? name, status, active: o.active !== false, usageCount: num(o.usageCount), typeCount: num(o.typeCount), ...parseIcon(o, allow) };
 };
 const parseType = (r: unknown): ServiceType | null => {
   const o = r as Record<string, unknown> | null, id = str(o?.id), nameUk = str(o?.nameUk);
@@ -68,7 +72,7 @@ export async function listCatalog(cfg: AdminConfig, actor: string, page = 1, ope
 export async function loadCategories(cfg: AdminConfig, actor: string): Promise<{ ok: true; cats: Category[] } | { ok: false; err: ErrCode }> {
   const r = await adminFetch(cfg, "GET", `${CATALOG_PREFIX}categories`, actor);
   if (!r.ok) return { ok: false, err: errToFlash(r.status, r.code) };
-  return { ok: true, cats: (Array.isArray(r.data) ? r.data : []).map(parseCategory).filter((c): c is Category => c !== null).sort((a, b) => COLLATOR.compare(a.displayName, b.displayName)) };
+  return { ok: true, cats: (Array.isArray(r.data) ? r.data : []).map(parseCategory(imgOriginsFor(cfg))).filter((c): c is Category => c !== null).sort((a, b) => COLLATOR.compare(a.displayName, b.displayName)) };
 }
 /** The service types of one category: `[]` costs no request when it has none; `null` = the load failed. */
 export async function loadTypes(cfg: AdminConfig, actor: string, category: Category): Promise<ServiceType[] | null> {
@@ -135,7 +139,10 @@ export async function decide(cfg: AdminConfig, actor: string, form: FormData): P
   }
   if (action === "hide" || action === "show") {
     const r = await adminFetch(cfg, "PATCH", base, actor, { active: action === "show" });
-    return { location: r.ok ? back({ done: action === "hide" ? "hidden" : "shown", open }) : back({ err: errToFlash(r.status, r.code), open }) };
+    if (r.ok) return { location: back({ done: action === "hide" ? "hidden" : "shown", open }) };
+    const err = errToFlash(r.status, r.code);
+    // B541 refused the un-hide for lack of an icon: back to the enable panel, which carries the inline upload (W049)
+    return { location: back({ err, open, ...(err === "CATEGORY_ICON_REQUIRED" && isCat ? { dlg: "enable", cat: id } : {}) }) };
   }
 
   // save: only the changed names go out; nothing changed = no backend call

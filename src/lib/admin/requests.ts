@@ -2,7 +2,9 @@
 // Plain HTML form POSTs (CSP has no script): POST -> 303 -> GET. The flash is a query code from FLASH only; backend message text is never echoed.
 import { adminFetch, CATALOG_PREFIX } from "./api.ts";
 import type { AdminConfig } from "./config.ts";
-import { KEEP_MAX, NAME_CAP, cp, field, parsePage } from "./common.ts";
+import { KEEP_MAX, NAME_CAP, WIRE, cp, field, parsePage } from "./common.ts";
+import { parseIcon } from "./catalog.ts";
+import { imgOriginsFor } from "../mediaOrigin.ts";
 import { parseKindFilter, parseQuery } from "./listQuery.ts";
 
 export { KEEP_MAX, NAME_CAP, parsePage }; // moved to ./common.ts (shared with the catalog page); re-exported so existing importers keep working
@@ -24,6 +26,8 @@ export interface CatalogRequest {
   description: string | null;
   requesterLabel: string;
   createdAt: string;
+  /** CATEGORY requests only (W049): string = has an icon, null = none, undefined = not exposed (pre-B539) or a type suggestion. */
+  iconUrl?: string | null;
 }
 
 /** Success codes (`?done=`) and error codes (`?err=`); every one has copy in uk.json `admin.requests.flash.*`. */
@@ -43,11 +47,11 @@ export function errToFlash(status: number, code: string): (typeof ERR_CODES)[num
 }
 
 const str = (v: unknown): string | null => (typeof v === "string" ? v : null);
-const parseItem = (r: unknown): CatalogRequest | null => {
+const parseItem = (allow: readonly string[]) => (r: unknown): CatalogRequest | null => {
   const o = r as Record<string, unknown> | null;
   const kind = str(o?.kind), id = str(o?.id), name = str(o?.name);
   if (!o || !(KINDS as readonly string[]).includes(kind ?? "") || !id || !ID.test(id) || name === null) return null;
-  return { kind: kind as Kind, id, name, displayName: str(o.displayName), categoryName: str(o.categoryName), initialServiceName: str(o.initialServiceName), description: str(o.description), requesterLabel: str(o.requesterLabel) ?? "—", createdAt: str(o.createdAt) ?? "" };
+  return { kind: kind as Kind, id, name, displayName: str(o.displayName), categoryName: str(o.categoryName), initialServiceName: str(o.initialServiceName), description: str(o.description), requesterLabel: str(o.requesterLabel) ?? "—", createdAt: str(o.createdAt) ?? "", ...(kind === "CATEGORY" ? parseIcon(o, allow) : {}) };
 };
 
 export type ListResult = { ok: true; items: CatalogRequest[]; total: number; totalPages: number; page: number } | { ok: false; err: (typeof ERR_CODES)[number] };
@@ -58,7 +62,7 @@ export async function listPending(cfg: AdminConfig, actor: string, page = 1): Pr
   if (!r.ok) return { ok: false, err: errToFlash(r.status, r.code) };
   const pg = r.data as { data?: unknown; totalElements?: unknown; totalPages?: unknown } | unknown[] | null;
   const rows = Array.isArray(pg) ? pg : Array.isArray((pg as { data?: unknown } | null)?.data) ? (pg as { data: unknown[] }).data : [];
-  const items = rows.map(parseItem).filter((x): x is CatalogRequest => x !== null).sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+  const items = rows.map(parseItem(imgOriginsFor(cfg))).filter((x): x is CatalogRequest => x !== null).sort((a, b) => a.createdAt.localeCompare(b.createdAt));
   const total = typeof (pg as { totalElements?: unknown } | null)?.totalElements === "number" ? (pg as { totalElements: number }).totalElements : items.length;
   const tp = (pg as { totalPages?: unknown } | null)?.totalPages;
   return { ok: true, items, total, totalPages: typeof tp === "number" && tp >= 0 ? tp : items.length ? 1 : 0, page };
@@ -123,8 +127,14 @@ export async function decide(cfg: AdminConfig, actor: string, form: FormData): P
   }
   if (action === "save") return { location: back({ done: "saved" }) };
   const r = await adminFetch(cfg, "POST", `${base}/approve`, actor);
-  return { location: r.ok ? back({ done: "approved" }) : back({ err: errToFlash(r.status, r.code) }) };
+  if (r.ok) return { location: back({ done: "approved" }) };
+  const err = errToFlash(r.status, r.code);
+  // B541 refused the approve for lack of an icon: back to the approve panel, which carries the inline upload (W049)
+  return { location: back({ err, ...(err === "CATEGORY_ICON_REQUIRED" && kind === "CATEGORY" ? { dlg: "approve", id: card } : {}) }) };
 }
+
+/** The wire name an icon upload for a CATEGORY request is keyed by (`name` is the immutable wire name; the display name is separate). null for a type or an odd name. */
+export const requestIconTarget = (r: CatalogRequest): string | null => (r.kind === "CATEGORY" && WIRE.test(r.name) ? r.name : null);
 
 const DATE = new Intl.DateTimeFormat("uk-UA", { timeZone: "Europe/Kyiv", day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit" }); // one per isolate: building it per card costs ~65 µs
 

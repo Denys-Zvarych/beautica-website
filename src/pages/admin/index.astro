@@ -35,10 +35,12 @@ const approved = cats ? cats.filter((c) => c.status === "APPROVED") : [];
 const hidden = approved.filter((c) => !c.active).length;
 const unused = approved.filter((c) => c.usageCount === 0 && c.typeCount === 0).length;
 const types = approved.reduce((sum, c) => sum + c.typeCount, 0);
+const noIcon = approved.filter((c) => c.iconUrl === null).length; // W049: only when the backend exposes icons (undefined = not exposed)
 const notApproved = cats ? cats.filter((c) => c.status === "PENDING") : [];
 const attention: { icon: "warning" | "eye-off" | "delete"; title: string; sub: string; href: string }[] = [
   ...notApproved.map((c) => ({ icon: "warning" as const, title: t("admin.overview.pendingCat", { name: c.displayName }), sub: t("admin.overview.pendingCatSub"), href: "/admin/requests" })),
   ...(hidden ? [{ icon: "eye-off" as const, title: pluralUk(hidden, [t("admin.overview.hiddenOne", { n: hidden }), t("admin.overview.hiddenFew", { n: hidden }), t("admin.overview.hiddenMany", { n: hidden })]), sub: t("admin.overview.hiddenSub"), href: "/admin/catalog?f=HIDDEN" }] : []),
+  ...(noIcon ? [{ icon: "warning" as const, title: pluralUk(noIcon, [t("admin.icons.ovOne", { n: noIcon }), t("admin.icons.ovFew", { n: noIcon }), t("admin.icons.ovMany", { n: noIcon })]), sub: t("admin.icons.ovSub"), href: "/admin/catalog?f=NOICON" }] : []),
   ...(unused ? [{ icon: "delete" as const, title: pluralUk(unused, [t("admin.overview.unusedOne", { n: unused }), t("admin.overview.unusedFew", { n: unused }), t("admin.overview.unusedMany", { n: unused })]), sub: t("admin.overview.unusedSub"), href: "/admin/catalog?f=UNUSED" }] : []),
 ];
 const oldText = old === 1 ? t("admin.overview.oldOne", { n: old }) : t("admin.overview.oldMany", { n: old });

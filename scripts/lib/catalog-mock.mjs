@@ -6,11 +6,21 @@
 // TYPE_EXISTS | CATEGORY_NAME_EXISTS | CATEGORY_NOT_APPROVED | CATALOG_IN_USE (counts flattened next to the code); a name with a non-letter symbol -> 400; an empty body -> 400;
 // un-hiding the category «Без іконки» -> 409 CATEGORY_ICON_REQUIRED (B541). A category is deletable only when it has 0 types and 0 usage; a type only when usage is 0.
 // `categories` (env CATALOG_MOCK_CATEGORIES) > 6 pads the seed with generated categories of 12 types each (perf runs: a large catalog).
+// W049 / B539 category icons (opt-in, so pre-B539 runs are unchanged): CATALOG_MOCK_ICONS=1 exposes `iconUrl` (string | null) on the category list and on CATEGORY requests, seeds an icon on
+// every approved category except BEZ_ICONKY / MASAZH_NIH / STRAY, and serves the SVGs from the mock's own origin under /media/catalog/category-icons/. `PUT categories/{name}/icon {svg}` follows
+// the B539 contract: 400 ICON_INVALID + data.reason (TOO_LARGE, NOT_SVG, BAD_VIEWBOX, FORBIDDEN_ELEMENT, FORBIDDEN_ATTRIBUTE, FORBIDDEN_COLOUR, EXTERNAL_REF), 404, 409 CATEGORY_REJECTED; the same
+// bytes again are a 200 no-op. CATALOG_MOCK_GATE=1 additionally switches B541 on: approve / un-hide of a category without an icon -> 409 CATEGORY_ICON_REQUIRED.
 import { createServer } from "node:http";
+import { createHash } from "node:crypto";
 
 const KEY = "test-catalog-key-0000000000000000000";
+const GATE = process.env.CATALOG_MOCK_GATE === "1";
+const ICONS = GATE || process.env.CATALOG_MOCK_ICONS === "1";
+const SEED_SVG = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 3a9 9 0 1 0 0 18a9 9 0 0 0 0-18z" fill="none" stroke="currentColor" stroke-width="1.5"/></svg>';
+const sha16 = (svg) => createHash("sha256").update(svg).digest("hex").slice(0, 16);
+const NO_SEED_ICON = new Set(["BEZ_ICONKY", "MASAZH_NIH", "STRAY", "NEW_CAT"]);
 const seed = () => [
-  { kind: "CATEGORY", id: "41", name: "Brow-bar", displayName: "Brow bar", categoryName: null, initialServiceName: "Ламінування брів", description: null, requesterLabel: "Салон «Лотос»", createdAt: "2026-11-10T09:15:00Z", status: "PENDING" },
+  { kind: "CATEGORY", id: "41", name: "BROW_BAR", displayName: "Brow bar", categoryName: null, initialServiceName: "Ламінування брів", description: null, requesterLabel: "Салон «Лотос»", createdAt: "2026-11-10T09:15:00Z", status: "PENDING" },
   { kind: "SERVICE_TYPE", id: "5b0f3c1e-2d4a-4c1b-9a77-0a1b2c3d4e5f", name: "Корекція брів воском", displayName: null, categoryName: "brows", initialServiceName: null, description: "Часто просять клієнти.\nПотрібен окремий тип.", requesterLabel: "Олена Коваленко", createdAt: "2026-11-12T14:40:00Z", status: "PENDING" },
   { kind: "SERVICE_TYPE", id: "9c1d2e3f-4a5b-4c6d-8e7f-001122334455", name: "Нігті", displayName: null, categoryName: "nails", initialServiceName: null, description: null, requesterLabel: "—", createdAt: "2026-11-11T08:00:00Z", status: "PENDING" },
 ];
@@ -48,32 +58,39 @@ export async function startCatalogMock(total = Number(process.env.CATALOG_MOCK_R
   if (ages.length) {
     const kyivToday = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Kyiv" }).format(new Date()).split("-").map(Number);
     rows.length = 0;
-    ages.forEach((n, i) => rows.push({ kind: i % 2 ? "SERVICE_TYPE" : "CATEGORY", id: i % 2 ? `00000000-0000-4000-8000-${String(900 + i).padStart(12, "0")}` : String(500 + i), name: `Вік ${n}`, displayName: i % 2 ? null : `Вік ${n}`, categoryName: i % 2 ? "brows" : null, initialServiceName: i % 2 ? null : "Перша", description: null, requesterLabel: `Автор ${i}`, createdAt: new Date(Date.UTC(kyivToday[0], kyivToday[1] - 1, kyivToday[2] - n, 12)).toISOString(), status: "PENDING" }));
+    ages.forEach((n, i) => rows.push({ kind: i % 2 ? "SERVICE_TYPE" : "CATEGORY", id: i % 2 ? `00000000-0000-4000-8000-${String(900 + i).padStart(12, "0")}` : String(500 + i), name: i % 2 ? `Вік ${n}` : `AGE_${n}_${i}`, displayName: i % 2 ? null : `Вік ${n}`, categoryName: i % 2 ? "brows" : null, initialServiceName: i % 2 ? null : "Перша", description: null, requesterLabel: `Автор ${i}`, createdAt: new Date(Date.UTC(kyivToday[0], kyivToday[1] - 1, kyivToday[2] - n, 12)).toISOString(), status: "PENDING" }));
   }
   const catalog = seedCatalog(Math.max(0, categories - 6));
   // CATALOG_MOCK_EXTRA_CATS='[{"name":"X","displayName":"Ікс","status":"APPROVED","active":true,"usage":21}]' appends exact categories (no types): plural-form and filter-count tests.
   for (const c of JSON.parse(process.env.CATALOG_MOCK_EXTRA_CATS || "[]")) { catalog.cats.push(c); catalog.types.set(c.name, []); }
   for (let i = rows.length; i < total; i++) {
     const cat = i % 3 === 0;
-    rows.push({ kind: cat ? "CATEGORY" : "SERVICE_TYPE", id: cat ? String(100 + i) : `00000000-0000-4000-8000-${String(i).padStart(12, "0")}`, name: `Заявка ${i}`, displayName: cat ? `Категорія ${i}` : null, categoryName: cat ? null : "brows", initialServiceName: cat ? `Послуга ${i}` : null, description: cat ? null : "Короткий опис заявки для перевірки розмітки.", requesterLabel: `Салон ${i}`, createdAt: new Date(Date.UTC(2026, 10, 1) + i * 3_600_000).toISOString(), status: "PENDING" });
+    rows.push({ kind: cat ? "CATEGORY" : "SERVICE_TYPE", id: cat ? String(100 + i) : `00000000-0000-4000-8000-${String(i).padStart(12, "0")}`, name: cat ? `CAT_REQ_${i}` : `Заявка ${i}`, displayName: cat ? `Категорія ${i}` : null, categoryName: cat ? null : "brows", initialServiceName: cat ? `Послуга ${i}` : null, description: cat ? null : "Короткий опис заявки для перевірки розмітки.", requesterLabel: `Салон ${i}`, createdAt: new Date(Date.UTC(2026, 10, 1) + i * 3_600_000).toISOString(), status: "PENDING" });
   }
   const calls = [];
+  const icons = new Map(); // wire name -> { svg, sha }
+  if (ICONS) for (const c of catalog.cats) if (c.status === "APPROVED" && !NO_SEED_ICON.has(c.name) && !/^GEN_\d*[07]$/.test(c.name)) icons.set(c.name, { svg: SEED_SVG, sha: sha16(SEED_SVG) });
+  let origin = "";
+  const iconUrlOf = (name) => (icons.has(name) ? `${origin}/media/catalog/category-icons/${name}/${icons.get(name).sha}.svg` : null);
+  const ctx = { icons, iconUrlOf, rows, sha16 };
   const send = (res, status, body) => { res.writeHead(status, { "Content-Type": "application/json" }); res.end(JSON.stringify(body)); };
   const err = (res, status, code) => send(res, status, { success: false, data: code ? { code } : null, message: "CANARY-BACKEND-MESSAGE" });
   const server = createServer(async (rq, rs) => {
+    const url = new URL(rq.url, "http://mock");
+    const media = /^\/media\/catalog\/category-icons\/([A-Z0-9_]+)\/[0-9a-f]{16}\.svg$/.exec(url.pathname); // public like R2: no key, not logged
+    if (media) { const ic = icons.get(media[1]); rs.writeHead(ic ? 200 : 404, { "Content-Type": "image/svg+xml" }); return rs.end(ic?.svg ?? ""); }
     const chunks = []; for await (const c of rq) chunks.push(c);
     const raw = Buffer.concat(chunks).toString("utf8");
-    const url = new URL(rq.url, "http://mock");
     const actor = rq.headers["x-admin-actor"];
     calls.push({ method: rq.method, path: url.pathname + url.search, actor, key: rq.headers["x-internal-key"], body: raw ? JSON.parse(raw) : null });
     if (rq.headers["x-internal-key"] !== KEY) return err(rs, 401);
     if (!actor) return err(rs, 400);
-    const live = handleCatalog(catalog, rq.method, url.pathname, raw, send, err, rs);
+    const live = handleCatalog(catalog, rq.method, url.pathname, raw, send, err, rs, ctx);
     if (live) return;
     if (rq.method === "GET" && url.pathname === "/api/v1/internal/catalog/requests") {
       const all = rows.filter((r) => r.status === (url.searchParams.get("status") ?? "PENDING"));
       const size = Math.max(1, Number(url.searchParams.get("size")) || 20), page = Math.max(0, Number(url.searchParams.get("page")) || 0);
-      const data = all.slice(page * size, page * size + size);
+      const data = all.slice(page * size, page * size + size).map((r) => (ICONS && r.kind === "CATEGORY" ? { ...r, iconUrl: iconUrlOf(r.name) } : r));
       return send(rs, 200, { success: true, data: { success: true, data, message: null, page, size, totalElements: all.length, totalPages: Math.ceil(all.length / size) }, message: null });
     }
     const m = /^\/api\/v1\/internal\/catalog\/requests\/(CATEGORY|SERVICE_TYPE)\/([^/]+)(?:\/(approve|reject))?$/.exec(url.pathname);
@@ -91,31 +108,57 @@ export async function startCatalogMock(total = Number(process.env.CATALOG_MOCK_R
     }
     if (rq.method === "POST" && m[3]) {
       if (m[3] === "approve" && (row.displayName ?? row.name) === "noicon") return err(rs, 409, "CATEGORY_ICON_REQUIRED");
+      if (m[3] === "approve" && GATE && row.kind === "CATEGORY" && !icons.has(row.name)) return err(rs, 409, "CATEGORY_ICON_REQUIRED");
       row.status = m[3] === "approve" ? "APPROVED" : "REJECTED";
       return send(rs, 200, { success: true, data: null, message: null });
     }
     return err(rs, 404);
   });
   await new Promise((r) => server.listen(0, "127.0.0.1", r));
-  return { origin: `http://127.0.0.1:${server.address().port}`, calls, close: () => server.close() };
+  origin = `http://127.0.0.1:${server.address().port}`;
+  return { origin, calls, close: () => server.close() };
 }
 
 const NAME_BAD = /[^\p{L}\p{N} '’\-.,()]/u;
-const catDto = (catalog, c) => ({ name: c.name, displayName: c.displayName, status: c.status, active: c.active, usageCount: c.usage, typeCount: catalog.types.get(c.name).length });
+const catDto = (catalog, c, ctx) => ({ name: c.name, displayName: c.displayName, status: c.status, active: c.active, usageCount: c.usage, typeCount: catalog.types.get(c.name).length, ...(ICONS ? { iconUrl: ctx.iconUrlOf(c.name) } : {}) });
+/** B539 sanitiser stand-in: the first violated rule's reason, or null when the SVG is acceptable. */
+function iconReason(svg) {
+  if (Buffer.byteLength(svg, "utf8") > 16 * 1024) return "TOO_LARGE";
+  if (!/^\s*(?:<\?xml[^>]*>\s*)?<svg[\s>]/.test(svg) || !/<\/svg>\s*$/.test(svg)) return "NOT_SVG";
+  if (/<!DOCTYPE|<!ENTITY|xlink:href|\bhref\s*=|url\(|data:|https?:\/\/(?!www\.w3\.org\/2000\/svg)/i.test(svg)) return "EXTERNAL_REF";
+  if (/<\s*(?!\/|svg\b|g\b|path\b|circle\b|ellipse\b|rect\b|line\b|polyline\b|polygon\b|\?xml)[a-zA-Z]/.test(svg)) return "FORBIDDEN_ELEMENT";
+  if (/\son[a-z]+\s*=|\sstyle\s*=|\sclass\s*=/i.test(svg)) return "FORBIDDEN_ATTRIBUTE";
+  if (!/viewBox\s*=\s*"0 0 24 24"/.test(svg)) return "BAD_VIEWBOX";
+  if (/\b(?:fill|stroke)\s*=\s*"(?!currentColor"|none")/.test(svg)) return "FORBIDDEN_COLOUR";
+  return null;
+}
 /** The B504/B505 endpoints; returns true when it answered. */
-function handleCatalog(catalog, method, path, raw, send, err, rs) {
+function handleCatalog(catalog, method, path, raw, send, err, rs, ctx) {
   const P = "/api/v1/internal/catalog/";
   if (!path.startsWith(P)) return false;
   const rest = path.slice(P.length);
   const ok = (data = null) => send(rs, 200, { success: true, data, message: null });
   let m;
-  if (method === "GET" && rest === "categories") { ok(catalog.cats.map((c) => catDto(catalog, c))); return true; }
+  if (method === "GET" && rest === "categories") { ok(catalog.cats.map((c) => catDto(catalog, c, ctx))); return true; }
   if ((m = /^categories\/([^/]+)\/service-types$/.exec(rest)) && method === "GET") {
     const list = catalog.types.get(decodeURIComponent(m[1]));
     if (!list) err(rs, 404); else ok(list.map((x) => ({ id: x.id, slug: x.slug, nameUk: x.nameUk, nameEn: x.nameEn, active: x.active, usageCount: x.usage })));
     return true;
   }
   const body = raw ? JSON.parse(raw) : {};
+  if ((m = /^categories\/([^/]+)\/icon$/.exec(rest)) && method === "PUT") {
+    const name = decodeURIComponent(m[1]);
+    if (!/^[A-Z][A-Z0-9_]{0,99}$/.test(name)) { err(rs, 400); return true; }
+    const c = catalog.cats.find((x) => x.name === name) ?? ctx.rows.find((r) => r.kind === "CATEGORY" && r.name === name && r.status === "PENDING");
+    if (!c) { err(rs, 404); return true; }
+    if (c.status === "REJECTED") { err(rs, 409, "CATEGORY_REJECTED"); return true; }
+    if (typeof body.svg !== "string") { err(rs, 400); return true; }
+    const reason = iconReason(body.svg);
+    if (reason) { send(rs, 400, { success: false, data: { code: "ICON_INVALID", reason }, message: "CANARY-BACKEND-MESSAGE" }); return true; }
+    const sha = ctx.sha16(body.svg);
+    if (ctx.icons.get(name)?.sha !== sha) ctx.icons.set(name, { svg: body.svg, sha });
+    ok(); return true;
+  }
   if ((m = /^categories\/([^/]+)$/.exec(rest))) {
     const c = catalog.cats.find((x) => x.name === decodeURIComponent(m[1]));
     if (!/^[A-Z][A-Z0-9_]{0,99}$/.test(decodeURIComponent(m[1]))) { err(rs, 400); return true; }
@@ -127,7 +170,7 @@ function handleCatalog(catalog, method, path, raw, send, err, rs) {
         if (!body.displayName.trim() || body.displayName.length > 100 || NAME_BAD.test(body.displayName)) { err(rs, 400); return true; }
         if (catalog.cats.some((x) => x !== c && x.displayName.toLowerCase() === body.displayName.toLowerCase())) { err(rs, 409, "CATEGORY_NAME_EXISTS"); return true; }
       }
-      if (body.active === true && c.displayName === "Без іконки") { err(rs, 409, "CATEGORY_ICON_REQUIRED"); return true; }
+      if (body.active === true && (c.displayName === "Без іконки" || (GATE && !ctx.icons.has(c.name)))) { err(rs, 409, "CATEGORY_ICON_REQUIRED"); return true; }
       if (body.displayName !== undefined) c.displayName = body.displayName;
       if (body.active !== undefined) c.active = body.active;
       ok(); return true;

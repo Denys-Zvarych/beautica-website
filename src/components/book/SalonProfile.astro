@@ -5,6 +5,7 @@
 // A tap on a service in the «Послуги» tab filters the «Майстри» tab (phase 017, like the app).
 import NeuCard from "../NeuCard.astro";
 import CategoryGroup from "./CategoryGroup.astro";
+import type { CategoryIcons } from "../../lib/categoryIcon";
 import ReviewsSection from "./ReviewsSection.astro";
 import ServiceTile from "./ServiceTile.astro";
 import CtaButton from "../CtaButton.astro";
@@ -16,11 +17,13 @@ import { serviceNameHints } from "../../lib/booking/serviceHint.ts";
 
 interface Props {
   info: SalonInfo;
+  /** Server category icons (W050); absent = bundled icons only. */
+  icons?: CategoryIcons;
   apiOrigin: string;
   sort: ReviewSort;
   reviews: ReviewItem[];
 }
-const { info, apiOrigin, sort, reviews } = Astro.props;
+const { info, icons, apiOrigin, sort, reviews } = Astro.props;
 const FIRST = 6;
 const first = info.masters.slice(0, FIRST);
 const rest = info.masters.slice(FIRST);
@@ -165,7 +168,7 @@ const canBook = info.masters.length > 0 && info.serviceCategories.length > 0 && 
       {info.serviceCategories.length === 0 && <p class="t-fb muted muted-note">{t("book.salon.noServices")}</p>}
       {
         info.serviceCategories.map((g, i) => (
-          <CategoryGroup name={g.displayName} categoryKey={g.category} count={g.count} open={i === 0}>
+          <CategoryGroup name={g.displayName} categoryKey={g.category} icons={icons} count={g.count} open={i === 0}>
             {g.services.map((sv) => <ServiceTile name={sv.name} price={sv.priceLabel} duration={formatDuration(sv.durationMinutes)} hint={hints.get(sv.id)} filterId={filterable ? sv.id : undefined} />)}
           </CategoryGroup>
         ))

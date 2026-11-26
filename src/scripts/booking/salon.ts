@@ -4,7 +4,7 @@
 // The island (app.ts) keeps the generic steps; this module owns the assignment, the per-master schedule and the per-master submit.
 import { serviceNameHints } from "../../lib/booking/serviceHint";
 import { formatDuration, formatRating, pluralRecords } from "../../lib/booking/format";
-import { categoryIconFor } from "../../lib/categoryIcon";
+import { categoryIconFor, remoteIconFor, type CategoryIcons } from "../../lib/categoryIcon";
 import type { SalonInfo } from "../../lib/booking/types";
 import { hydrateIcons } from "./icons";
 import { cleanComment } from "../../lib/booking/text.ts";
@@ -100,13 +100,19 @@ export function buildCatalogue(root: HTMLElement, info: SalonInfo): void {
   const svc = (root.querySelector<HTMLTemplateElement>("#tpl-svc")!).content.firstElementChild as HTMLElement;
   list.replaceChildren();
   const hints = serviceNameHints(info.serviceCategories.flatMap((g) => g.services));
+  let icons: CategoryIcons | undefined; // server iconUrls (W050), embedded by the page only when there are any
+  try { icons = root.dataset.icons ? (JSON.parse(root.dataset.icons) as CategoryIcons) : undefined; } catch { /* bundled icons only */ }
   info.serviceCategories.forEach((g, i) => {
     const group = cat.cloneNode(true) as HTMLDetailsElement;
     group.open = i === 0; // the first category starts open, as the app
     group.querySelector("noscript")?.remove();
     group.querySelector<HTMLElement>(".lbl")!.textContent = g.displayName;
     group.querySelector<HTMLElement>(".badge:not(.sel) .t-fb")!.textContent = String(g.services.length);
-    group.querySelector<HTMLElement>(".ai")!.dataset.src = categoryIconFor(g.displayName, g.category);
+    const ai = group.querySelector<HTMLElement>(".ai")!;
+    const remote = remoteIconFor(g.displayName, g.category, icons);
+    const bundled = categoryIconFor(g.displayName, g.category);
+    if (remote) Object.assign(ai.dataset, { remote, fallback: bundled }); // no data-src: hydrateIcons skips it, the lazy probe owns it
+    else ai.dataset.src = bundled;
     const body = group.querySelector<HTMLElement>(".acc-body")!;
     for (const sv of g.services) {
       const tile = svc.cloneNode(true) as HTMLElement;
@@ -124,6 +130,7 @@ export function buildCatalogue(root: HTMLElement, info: SalonInfo): void {
     list.append(group);
   });
   hydrateIcons(list);
+  if (list.querySelector(".ai[data-remote]")) void import("./icon-probe").then((m) => m.probeRemote(list));
 }
 interface Sched {
   sig: string;

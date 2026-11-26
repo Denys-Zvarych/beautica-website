@@ -54,6 +54,15 @@ function reviewsPage(all, sort, page, size) {
 export const FOREIGN_CANCEL_URL = "https://api.evil-backend.example:8443/book/cancel/aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee?utm=x#frag";
 export const CANCEL_URL = "https://beautica.app/book/cancel/123e4567-e89b-42d3-a456-426614174000";
 export const MEDIA = "https://media.beautica.test";
+// GET /api/v1/service-categories/approved (W050): BROWS has a server icon on the pinned media origin, PODOLOGY one on a foreign host (the pin must drop it);
+// NAIL_SERVICE has none (bundled icon). Other tests only look at NAIL_SERVICE icons.
+export const ICON_REMOTE = `${MEDIA}/category-icons/brows-1700.svg`;
+export const ICON_EVIL = "https://evil.example/category-icons/podology.svg";
+const APPROVED_CATEGORIES = [
+  { name: "NAIL_SERVICE", displayName: "Нігтьовий сервіс", iconUrl: null },
+  { name: "BROWS", displayName: "Оформлення брів", iconUrl: ICON_REMOTE },
+  { name: "PODOLOGY", displayName: "Подологія", iconUrl: ICON_EVIL },
+];
 export const GUEST_TOKEN = "guest-token-ok";
 
 const review = (n, author, rating, comment, service, days) => ({
@@ -114,6 +123,7 @@ const wizBooked = new Set();
 const reviewSpent = new Set();
 const MASTERS = {
   "oksana-ab12": () => masterInfo(),
+  "icononly-0501": () => masterInfo({ avatarUrl: null, portfolio: [], latestReviews: [] }), // W050: no photo anywhere, so a media origin in the CSP can only come from an icon
   "dupcopy-0361": () => masterInfo({ services: DUP_SVC }), // phase 036: two same-name services (60 + 90 min) + a unique one
   "sparse-0001": () => masterInfo({ masterName: "Нова Майстриня", avatarUrl: null, bio: null, professionalTitle: null, city: null, region: null, avgRating: null, reviewCount: 0, categories: [], ratingDistribution: DIST.map((b) => ({ ...b, count: 0 })), street: null, buildingNo: null, locationNote: null, portfolio: [], latestReviews: [] }),
   "closed-aaaa": () => masterInfo({ bookable: false }),
@@ -315,6 +325,7 @@ export async function startMockApi() {
     if (path === "/__mock/reset") return log.length = 0, json(res, 200, {});
     log.push({ method: req.method, path: path + url.search, headers: { ...req.headers }, body });
 
+    if (path === "/api/v1/service-categories/approved") return json(res, 200, { success: true, data: APPROVED_CATEGORIES, message: null });
     let m;
     if ((m = /^\/api\/v1\/book\/s\/([a-z0-9-]+)\/info$/.exec(path))) {
       if (m[1].startsWith("retiredsalon")) return gone(res);

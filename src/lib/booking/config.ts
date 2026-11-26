@@ -6,9 +6,10 @@
 //   BOOKING_INFO_WORKER_KEY secret shared with the backend: per-visitor rate limit on /book/**/info. Server-side only, never rendered.
 import { env } from "cloudflare:workers";
 import { PRIVACY_POLICY_VERSION } from "../../config/legal.mjs";
+import { normalizeMediaOrigin } from "../mediaOrigin";
+export { normalizeMediaOrigin };
 
 const PROD_API = "https://api.beautica.app";
-const PROD_MEDIA = "https://media.beautica.app";
 
 export interface BookingConfig {
   apiOrigin: string;
@@ -29,18 +30,6 @@ export function normalizeApiOrigin(raw: unknown): string {
     /* fall through */
   }
   return PROD_API;
-}
-
-/** Origin only, https only; anything else falls back to the prod media host. */
-export function normalizeMediaOrigin(raw: unknown): string {
-  if (typeof raw !== "string" || raw.trim() === "") return PROD_MEDIA;
-  try {
-    const u = new URL(raw.trim());
-    if (u.protocol === "https:") return u.origin;
-  } catch {
-    /* fall through */
-  }
-  return PROD_MEDIA;
 }
 
 export function bookingConfig(): BookingConfig {

@@ -1,0 +1,18 @@
+---
+// A category icon on its VelvetTouch tile (W049, WEB-71). ONLY ever an <img src="{iconUrl}"> (an <img> SVG cannot run script): never inline SVG, never <object>/<embed>/<iframe>,
+// never a `data:` URI built from user input. `size` "sm" = 24 px (list size), "lg" = 48 px (card size) = the two sizes the app shows. No `src` = a dashed empty tile.
+interface Props {
+  src?: string | null;
+  size?: "sm" | "lg";
+}
+const { src, size = "sm" } = Astro.props;
+const px = size === "lg" ? 48 : 24;
+---
+
+{
+  src ? (
+    <span class:list={["tile", { lg: size === "lg" }]}><img src={src} width={px} height={px} alt="" loading="lazy" decoding="async" /></span>
+  ) : (
+    <span class:list={["tile", "none", { lg: size === "lg" }]} aria-hidden="true"></span>
+  )
+}

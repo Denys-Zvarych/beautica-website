@@ -3,6 +3,9 @@
 import { parseMasterInfo, parseReviewsPage, parseSalonInfo, type MasterInfo, type ReviewItem, type SalonInfo } from "./types";
 import type { BookingConfig } from "./config";
 import { upstreamTtl } from "./cache";
+import { cachedCategoryIcons, parseCategoryIcons } from "./icons";
+import type { CategoryIcons } from "../categoryIcon";
+import { imgOriginsFor } from "../mediaOrigin";
 
 export type InfoResult<T> =
   | { kind: "ok"; data: T; ttl: number }
@@ -13,15 +16,15 @@ export type InfoResult<T> =
 
 const TIMEOUT_MS = 5000;
 
-async function get<T>(cfg: BookingConfig, path: string, ip: string | undefined, parse: (raw: unknown) => T | null): Promise<InfoResult<T>> {
+async function get<T>(cfg: BookingConfig, path: string, ip: string | undefined, parse: (raw: unknown) => T | null, timeoutMs = TIMEOUT_MS, anonymous = false): Promise<InfoResult<T>> {
   const headers: Record<string, string> = { Accept: "application/json" };
-  if (cfg.workerKey) {
+  if (cfg.workerKey && !anonymous) {
     headers["X-Beautica-Worker-Key"] = cfg.workerKey;
     if (ip) headers["X-Beautica-Client-IP"] = ip; // CF-Connecting-IP is dropped on a Workers subrequest; the backend reads this one on worker-key requests only
   }
   let res: Response;
   try {
-    res = await fetch(`${cfg.apiOrigin}${path}`, { headers, signal: AbortSignal.timeout(TIMEOUT_MS) });
+    res = await fetch(`${cfg.apiOrigin}${path}`, { headers, signal: AbortSignal.timeout(timeoutMs) });
   } catch {
     return { kind: "unavailable", retryAfter: 30 };
   }
@@ -51,3 +54,19 @@ export async function fetchReviewsFirstPage(cfg: BookingConfig, kind: "master" |
   const r = await get(cfg, `/api/v1/book/${kind === "salon" ? "s/" : ""}${encodeURIComponent(slug)}/reviews?sort=${encodeURIComponent(sort)}&page=0&size=5`, ip, parseReviewsPage);
   return r.kind === "ok" ? r.data.items : null;
 }
+
+/**
+ * GET /service-categories/approved -> icon lookup (W050), stale-while-revalidate: never awaited on the render path (see cachedCategoryIcons). The call is
+ * anonymous and shared (no worker key, no visitor IP: one cached answer serves everyone), keeps its 700 ms cap and pins icon URLs to the media origin.
+ */
+export const fetchCategoryIcons = (cfg: BookingConfig, ctx: { self: string; waitUntil?: (p: Promise<unknown>) => void }): Promise<CategoryIcons> => {
+  const allowed = imgOriginsFor(cfg);
+  return cachedCategoryIcons(
+    cfg.apiOrigin,
+    async (ms) => {
+      const r = await get(cfg, "/api/v1/service-categories/approved", undefined, (raw) => parseCategoryIcons(raw, allowed), ms, true);
+      return r.kind === "ok" ? r.data : null;
+    },
+    { self: ctx.self, allowed, waitUntil: ctx.waitUntil },
+  );
+};

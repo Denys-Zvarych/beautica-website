@@ -57,6 +57,21 @@ export const CATEGORY_ICON_TARGETS: readonly string[] = Object.freeze([
   ...new Set([...Object.values(exact), ...rules.map(([, key]) => key), FALLBACK_KEY]),
 ]);
 
+/** Server icon URLs (W050) by lowercased category key / display name. Absent or empty = today's behaviour. */
+export type CategoryIcons = Readonly<Record<string, string>>;
+
+/** The category's own `iconUrl` (lookup by key, then display name), or null. Order: iconUrl -> bundled by key/name -> generic. */
+export function remoteIconFor(name: string, key?: string | null, icons?: CategoryIcons | null): string | null {
+  if (!icons) return null;
+  for (const k of [key?.trim().toLowerCase(), name.trim().toLowerCase()]) if (k && Object.hasOwn(icons, k)) return icons[k]!;
+  return null;
+}
+
+/** `iconUrl` when the server has one, else the bundled icon (key, then name, then generic). */
+export function categoryIconSrc(name: string, key?: string | null, icons?: CategoryIcons | null): string {
+  return remoteIconFor(name, key, icons) ?? categoryIconFor(name, key);
+}
+
 /** Prefer the category key (the app's slug stage), then the display name. */
 export function categoryIconFor(name: string, key?: string | null): string {
   const k = key?.toLowerCase();

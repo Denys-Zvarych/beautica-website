@@ -14,11 +14,13 @@ interface Props {
   small?: boolean;
   danger?: boolean;
   disabled?: boolean;
+  /** W049: looks disabled (`aria-disabled`) but stays a working link (a row's «Схвалити» that opens the detail instead). Default false. */
+  ariaDisabled?: boolean;
   /** First focus target of a dialog (the safe Cancel / Close control); default false. */
   autofocus?: boolean;
   class?: string;
 }
-const { href, type, name, value, icon, iconOnly = false, label, small = false, danger = false, disabled = false, autofocus = false, class: className } = Astro.props;
+const { href, type, name, value, icon, iconOnly = false, label, small = false, danger = false, disabled = false, ariaDisabled = false, autofocus = false, class: className } = Astro.props;
 const cls = ["btn", { ibtn: iconOnly, "btn-sm": small && !iconOnly, "btn-danger": danger && !iconOnly, danger: danger && iconOnly }, className];
 ---
 
@@ -29,7 +31,7 @@ const cls = ["btn", { ibtn: iconOnly, "btn-sm": small && !iconOnly, "btn-danger"
       {!iconOnly && <slot />}
     </button>
   ) : (
-    <a class:list={cls} href={disabled ? undefined : href} aria-disabled={disabled ? "true" : undefined} aria-label={label} title={label} autofocus={autofocus || undefined}>
+    <a class:list={cls} href={disabled ? undefined : href} aria-disabled={disabled || ariaDisabled ? "true" : undefined} aria-label={label} title={label} autofocus={autofocus || undefined}>
       {icon && <Icon name={icon} />}
       {!iconOnly && <slot />}
     </a>
