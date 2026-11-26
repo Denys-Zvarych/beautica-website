@@ -42,7 +42,7 @@ describe("/admin/requests without an Access assertion (built Worker)", () => {
     assert.equal(res.headers.get("content-type"), ref.headers.get("content-type"));
     assert.equal(res.headers.get("cache-control"), "no-store");
     assert.equal(res.headers.get("x-robots-tag"), "noindex, nofollow");
-    assert.equal(res.headers.get("referrer-policy"), "no-referrer");
+    assert.equal(res.headers.get("referrer-policy"), "same-origin");
     assert.equal(res.headers.get("content-security-policy"), ADMIN_CSP);
   });
 

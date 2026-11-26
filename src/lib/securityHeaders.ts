@@ -111,8 +111,10 @@ export const TOKEN_PATH = /^\/(?:book\/cancel|c|invite|bookings|l|r)\//;
 
 export function withSecurityHeaders(res: Response, path?: string): Response {
   if (path !== undefined && adminPath(path).admin) {
-    // Private operator area: always these values, even over a route's own (nothing under /admin may be cached, indexed or leak a referrer).
-    const force = { ...SECURITY_HEADERS, "Content-Security-Policy": ADMIN_CSP, "Referrer-Policy": "no-referrer", "Cache-Control": "no-store", "X-Robots-Tag": "noindex, nofollow" };
+    // Private operator area: always these values, even over a route's own (nothing under /admin may be cached or indexed).
+    // Referrer-Policy is same-origin, NOT no-referrer: under no-referrer a browser sends `Origin: null` on every POST (Fetch spec), which the CSRF check in middleware.ts rejects;
+    // same-origin keeps the real Origin on same-origin form posts and still sends no referrer to any other site.
+    const force = { ...SECURITY_HEADERS, "Content-Security-Policy": ADMIN_CSP, "Referrer-Policy": "same-origin", "Cache-Control": "no-store", "X-Robots-Tag": "noindex, nofollow" };
     const set = (r: Response) => { for (const [k, v] of Object.entries(force)) r.headers.set(k, v); };
     try { set(res); return res; } catch { const out = new Response(res.body, res); set(out); return out; }
   }

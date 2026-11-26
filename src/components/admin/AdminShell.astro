@@ -34,7 +34,7 @@ const countAria = (n: number) => t("admin.nav.countAria", { n, noun: noun(n) }) 
 const initial = [...actor][0]?.toUpperCase() ?? "";
 ---
 
-<Layout title={title} description={description} canonicalPath={path} noindex noReferrer analytics={false} hideHeader hideFooter basicLatin modal={modal}>
+<Layout title={title} description={description} canonicalPath={path} noindex noReferrer referrerPolicy="same-origin" analytics={false} hideHeader hideFooter basicLatin modal={modal}>
   <div class="app" inert={modal}>
     <aside class="side" aria-label={t("admin.navLabel")}>
       <a class="brand" href="/admin">
