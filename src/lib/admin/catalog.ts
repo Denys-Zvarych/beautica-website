@@ -15,7 +15,8 @@ export type Kind = (typeof KINDS)[number];
 export const ACTIONS = ["save", "hide", "show", "delete"] as const;
 const UUID = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
 
-export type Status = "APPROVED" | "PENDING" | "REJECTED";
+/** Rejected requests are never listed (WEB-73): `parseCategory` drops them, so no tab, count, search, page or `?open=` can reach one. */
+export type Status = "APPROVED" | "PENDING";
 /** `iconUrl`: string = has an icon, null = none, undefined = the backend does not expose icons (pre-B539): the icon UI and its gate stay off. */
 export interface Category { name: string; displayName: string; status: Status; active: boolean; usageCount: number; typeCount: number; iconUrl?: string | null }
 export interface ServiceType { id: string; slug: string; nameUk: string; nameEn: string; active: boolean; usageCount: number }
@@ -43,7 +44,7 @@ const num = (v: unknown): number => (typeof v === "number" && Number.isFinite(v)
 export const parseIcon = (o: Record<string, unknown>, allow: readonly string[]): { iconUrl?: string | null } => (!("iconUrl" in o) ? {} : { iconUrl: adminImgOrigin(o.iconUrl, allow) ? (o.iconUrl as string) : null });
 const parseCategory = (allow: readonly string[]) => (r: unknown): Category | null => {
   const o = r as Record<string, unknown> | null, name = str(o?.name), status = str(o?.status);
-  if (!o || !name || !WIRE.test(name) || !(status === "APPROVED" || status === "PENDING" || status === "REJECTED")) return null;
+  if (!o || !name || !WIRE.test(name) || !(status === "APPROVED" || status === "PENDING")) return null;
   return { name, displayName: str(o.displayName) ?? name, status, active: o.active !== false, usageCount: num(o.usageCount), typeCount: num(o.typeCount), ...parseIcon(o, allow) };
 };
 const parseType = (r: unknown): ServiceType | null => {

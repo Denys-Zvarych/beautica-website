@@ -24,7 +24,7 @@ export const requestLabel = (r: CatalogRequest): string => (r.kind === "CATEGORY
 export const filterRequests = (items: CatalogRequest[], kind: RequestKindFilter, q: string): CatalogRequest[] =>
   items.filter((r) => (kind === "ALL" || r.kind === kind) && matchesQuery([requestLabel(r), r.categoryName, r.requesterLabel], q));
 
-/** LIVE = approved and active; HIDDEN = approved and not active; PENDING; UNUSED = approved, no usage, no types; NOICON (W049) = approved and the backend says it has no icon (`iconUrl: null`; absent = not exposed yet = never matches). REJECTED shows only under ALL. */
+/** LIVE = approved and active; HIDDEN = approved and not active; PENDING; UNUSED = approved, no usage, no types; NOICON (W049) = approved and the backend says it has no icon (`iconUrl: null`; absent = not exposed yet = never matches). Rejected categories never reach this list (dropped on parse). */
 export const catalogMatches = (c: Category, f: CatalogFilter): boolean => {
   switch (f) {
     case "ALL": return true;

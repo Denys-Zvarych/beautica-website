@@ -164,6 +164,46 @@ describe("adminFetch: counts of a CATALOG_IN_USE 409", () => {
   });
 });
 
+describe("rejected categories are never listed (WEB-73)", () => {
+  const data = [{ name: "YRO", displayName: "Відхилена", status: "REJECTED", active: true, usageCount: 0, typeCount: 0 }, { name: "OK", displayName: "Гарна", status: "APPROVED", active: true, usageCount: 0, typeCount: 0 }, { name: "PEND", displayName: "Очікує", status: "PENDING", active: true, usageCount: 0, typeCount: 0 }];
+  test("loadCategories / listCatalog drop REJECTED: total, rows and the open category", async () => {
+    const a = await withBackend([[200, { success: true, data }]], () => loadCategories(cfg, ACTOR));
+    assert.deepEqual(a.out.cats.map((c) => c.name), ["OK", "PEND"]);
+    const b = await withBackend([[200, { success: true, data }]], () => listCatalog(cfg, ACTOR, 1, "YRO"));
+    assert.equal(b.out.total, 2); assert.equal(b.calls.length, 1, "?open=YRO loads no types");
+    assert.ok(b.out.rows.every((r) => r.types === undefined && r.category.name !== "YRO"));
+  });
+});
+
+describe("built Worker: a REJECTED category (mock YRO)", () => {
+  let w;
+  before(async () => { w = await startAdminHarness(); });
+  after(() => w?.stop());
+  const main = (h) => h.match(/<main[\s\S]*?<\/main>/)?.[0] ?? "";
+  test("absent from every tab, the counts, the search and the ?open= view", async () => {
+    for (const f of ["ALL", "LIVE", "HIDDEN", "PENDING", "UNUSED", "NOICON"]) assert.ok(!main((await w.get(`/admin/catalog?f=${f}`)).html).includes("YRO"), f);
+    const all = main((await w.get("/admin/catalog")).html);
+    assert.match(all, /Усі<span class="n">6<\/span>/, "«Усі» counts 6, not 7");
+    assert.ok(!all.includes("cat-YRO"));
+    for (const q of ["YRO", "Відхилена"]) { const h = main((await w.get(`/admin/catalog?q=${encodeURIComponent(q)}`)).html); assert.ok(!h.includes('id="cat-YRO"') && h.includes(uk.admin.catalog.noneFound), q); }
+    const o = await w.get("/admin/catalog?open=YRO");
+    assert.equal(o.status, 200);
+    assert.ok(!main(o.html).includes("YRO"));
+  });
+  test("a PENDING category still lists, with its pill and the «Заявки» hint, and no actions", async () => {
+    const h = main((await w.get("/admin/catalog?f=PENDING")).html);
+    assert.ok(h.includes('id="cat-NEW_CAT"') && h.includes(uk.admin.catalog.statusPending) && h.includes(uk.admin.catalog.reviewInRequests));
+    assert.ok(!h.includes("dlg=") && !h.includes("YRO"));
+  });
+  test("/admin overview: the KPI counts approved only; a PENDING category is flagged, the rejected one is not; the sidebar badge ignores categories", async () => {
+    const h = (await w.get("/admin")).html, m = main(h);
+    assert.ok(!h.includes("YRO") && !h.includes("Відхилена заявка"));
+    assert.ok(m.includes(uk.admin.overview.pendingCat.replace("{name}", "Нова категорія")), "pending category flagged");
+    assert.ok(m.includes(uk.admin.overview.pendingCatSub));
+    assert.equal(+/kpi-v">(\d+)</.exec(m.split(uk.admin.overview.kpiCats)[1])[1], 5, "catalog KPI = the 5 APPROVED mock rows (not 7: no REJECTED, no PENDING)");
+  });
+});
+
 describe("listCatalog(): paging and subrequest budget", () => {
   const catList = (n) => ({ success: true, data: Array.from({ length: n }, (_, i) => ({ name: `C_${String(i).padStart(3, "0")}`, displayName: `Кат ${String(i).padStart(3, "0")}`, status: "APPROVED", active: true, usageCount: 0, typeCount: i % 2 })) });
   test("one list call + ONE type call, for the open category only; the others carry no types (a light page, 2 calls whatever the catalog size)", async () => {
@@ -220,10 +260,8 @@ describe("W052 list helpers: filter predicates, query parsing, paging", () => {
     assert.deepEqual(names("PENDING"), ["PEND"]);
     assert.deepEqual(names("UNUSED"), ["FREE", "HID_FREE"]);
   });
-  test("REJECTED shows only under «Усі»", () => {
-    assert.ok(names("ALL").includes("REJ"));
+  test("REJECTED matches no filter except the (now unreachable) «Усі» predicate; the parse step drops it", () => {
     for (const f of ["LIVE", "HIDDEN", "PENDING", "UNUSED"]) assert.ok(!names(f).includes("REJ"), f);
-    assert.equal(catalogMatches(set[3], "ALL"), true);
   });
   test("q matches the display name and the wire code, case-insensitively (Ukrainian letters too)", () => {
     assert.deepEqual(names("ALL", "hid_"), ["HID_USED", "HID_FREE"]);

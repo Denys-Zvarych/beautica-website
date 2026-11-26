@@ -195,6 +195,13 @@ describe("phase 021 (privacy 1.4, Telegram section) is guarded on every PR", () 
   });
 });
 
+describe("phase 053: the build-alerts Worker is guarded on every PR", () => {
+  test("build-alerts.test.mjs is in test:static and the site job runs `npm run test:static`", () => {
+    assert.match(pkg.scripts["test:static"], /tests\/build-alerts\.test\.mjs/);
+    assert.ok(steps.some((s) => s.job === "site" && /run: npm run test:static\b/.test(s.text)), "no site-job step runs test:static");
+  });
+});
+
 describe("the shared mock backend", () => {
   test("no test clears its request log (POST /__mock/reset): files run concurrently against one mock, a reset deletes the other files' requests (use logMark() + mockLog(filter, mark))", () => {
     const offenders = readdirSync(join(ROOT, "tests")).filter((f) => f.endsWith(".test.mjs") && f !== "ci-wiring.test.mjs" && /__mock\/reset/.test(readFileSync(join(ROOT, "tests", f), "utf8")));
