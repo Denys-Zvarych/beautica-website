@@ -3,6 +3,7 @@
 // so the rejection would carry no security / no-store / noindex headers.
 import { defineMiddleware } from "astro:middleware";
 import { withSecurityHeaders, adminPath } from "./lib/securityHeaders";
+import { imgOriginsFor } from "./lib/mediaOrigin";
 
 /** SSR link pages: /book/{slug} and /book/s/{slug} (never /book/cancel/{token}: two segments, static shell). */
 const LINK_PAGE = /^\/book\/(?:s\/)?[^/]+$/;
@@ -56,9 +57,10 @@ async function guard(ctx: Parameters<Parameters<typeof defineMiddleware>[0]>[0],
     const { config, problem } = adminConfigState();
     if (!config) logAdminDenied(`config_missing:${problem ?? "UNKNOWN"}`);
     const owner = await requireOwner(request, config);
-    if (owner instanceof Response) return withSecurityHeaders(owner, "/admin");
+    const imgAllow = config ? imgOriginsFor(config) : [];
+    if (owner instanceof Response) return withSecurityHeaders(owner, "/admin", imgAllow);
     (ctx.locals as { adminActor?: string }).adminActor = owner.email;
-    return withSecurityHeaders(await next(), "/admin");
+    return withSecurityHeaders(await next(), "/admin", imgAllow);
   }
   if (request.method === "GET" && LINK_PAGE.test(new URL(request.url).pathname)) return cachedLinkPage(ctx, next);
   return withSecurityHeaders(await next(), new URL(request.url).pathname);

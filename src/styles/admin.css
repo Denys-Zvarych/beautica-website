@@ -17,6 +17,8 @@
   --a-pill-h: 24px; /* reason: status pill height */
   --a-tbl: 560px; /* reason: table min width before it scrolls inside its own wrapper */
   --a-tbl-wide: 640px; /* reason: catalog table min width */
+  --a-ico-sm: 24px; /* reason: category icon at list size = the app's category glyph (W049) */
+  --a-ico-lg: 48px; /* reason: category icon at card size = the app's category glyph (W049) */
 }
 
 .app { display: grid; min-width: 0; width: 100%; grid-template-columns: minmax(0, 1fr); flex: 1 0 auto; padding-bottom: var(--vt-space-xxl); }
@@ -287,3 +289,23 @@ table.tbl.wide { min-width: var(--a-tbl-wide); }
 .only-sm { display: block; justify-self: start; margin-top: var(--vt-space-xs); }
 .from-sm { display: none; }
 @media (min-width: 600px) { .only-sm { display: none; } .from-sm { display: block; } }
+
+/* ---------- category icons (W049): <img> on a VelvetTouch tile ---------- */
+.tile { width: var(--vt-touch-min); height: var(--vt-touch-min); flex: none; display: grid; place-items: center; border-radius: var(--vt-radius-field); background: var(--vt-color-base-emphasis); box-shadow: var(--vt-shadow-bordered-card); color: var(--vt-color-muted); }
+.tile img { display: block; width: var(--a-ico-sm); height: var(--a-ico-sm); }
+.tile.lg { width: calc(var(--a-ico-lg) + var(--vt-space-md)); height: calc(var(--a-ico-lg) + var(--vt-space-md)); }
+.tile.lg img { width: var(--a-ico-lg); height: var(--a-ico-lg); }
+.tile.none { box-shadow: none; outline: medium dashed var(--vt-color-accent); outline-offset: calc(var(--a-px) * -2); background: none; }
+.icell { display: flex; flex-wrap: wrap; align-items: center; gap: var(--vt-space-sm); }
+.icell a, .icon-field a { display: inline-flex; align-items: center; min-height: var(--vt-touch-min); }
+.strip-card { margin-bottom: var(--vt-space-lg); }
+.strip-card .hint { display: block; margin-bottom: var(--vt-space-md); }
+.strip { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: var(--vt-space-md); }
+.strip li { display: grid; justify-items: center; gap: var(--vt-space-xs); max-width: calc(var(--vt-space-xxl) * 2); text-align: center; overflow-wrap: anywhere; }
+.ico-pair { display: inline-flex; align-items: center; gap: var(--vt-space-sm); }
+.icon-cur { display: grid; gap: var(--vt-space-xs); }
+.icon-have, .icon-field { display: flex; flex-wrap: wrap; align-items: center; gap: var(--vt-space-md); margin: 0; }
+.icon-form { display: grid; gap: var(--vt-space-md); }
+.icon-field { padding: var(--vt-space-md); }
+.icon-field .grow { flex: 1; display: grid; gap: var(--vt-space-xs); min-width: 0; }
+a.pill.bad { text-decoration: none; min-height: var(--vt-touch-min); }

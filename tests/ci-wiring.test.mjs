@@ -76,7 +76,10 @@ describe("every route is under Lighthouse", () => {
     e.isDirectory() ? (e.name === "api" ? [] : routes(join(dir, e.name), `${base}/${e.name}`)) : [`${base}/${e.name.replace(/\.(astro|ts)$/, "")}`]);
   // The one deliberate exclusion: /book-steps/* are noindex HTML fragments the booking island fetches (phase 016), not pages; Lighthouse
   // measures the pages that load them. static-build.test.mjs checks the fragment itself (CSP-safe, no <html>/<title>).
-  const staticRoutes = routes("").filter((r) => !r.includes("[") && !r.startsWith("/book-steps/")).map((r) => (r === "/index" ? "/index" : r));
+  // Non-page endpoints (no HTML, nothing for Lighthouse to measure). Listed by name with a reason so a new page cannot slip past unnoticed.
+  // /admin/icon: POST-only category-icon upload form handler (405 for any other method, 303 back to /admin/catalog); its page is /admin/catalog.
+  const NON_PAGE_ENDPOINTS = ["/admin/icon"];
+  const staticRoutes = routes("").filter((r) => !r.includes("[") && !r.startsWith("/book-steps/") && !NON_PAGE_ENDPOINTS.includes(r)).map((r) => (r === "/index" ? "/index" : r));
   // Catch-all 404 routes ([...rest]) are not pages either: they only re-serve the static /404 page through the middleware so that malformed
   // token paths get the token headers (phase 007). Listed by name so a new catch-all cannot slip past Lighthouse unnoticed; /404 is measured.
   // /admin/[...rest] (phase 039) is the gate's catch-all: the middleware answers its unauthenticated 404 (admin headers); an owner gets a plain 404 too.
@@ -204,6 +207,14 @@ describe("phase 030: no bearer token in Cloudflare logs", () => {
     const cfg = JSON.parse(read("wrangler.jsonc").replace(/^\s*\/\/.*$/gm, ""));
     assert.equal(cfg.observability.enabled, true);
     assert.strictEqual(cfg.observability.logs?.invocation_logs, false);
+  });
+});
+
+describe("media origin per environment", () => {
+  test("previews.vars pins MEDIA_ORIGIN to the staging media host; prod vars leave it unset (code default media.beautica.app)", () => {
+    const cfg = JSON.parse(read("wrangler.jsonc").replace(/("(?:\\.|[^"\\])*")|\/\/[^\n]*/g, (m, s) => s ?? ""));
+    assert.equal(cfg.previews.vars.MEDIA_ORIGIN, "https://media-staging.beautica.app");
+    assert.ok(!("MEDIA_ORIGIN" in cfg.vars));
   });
 });
 

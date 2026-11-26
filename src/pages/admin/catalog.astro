@@ -9,16 +9,21 @@ import AdminShell from "../../components/admin/AdminShell.astro";
 import AdminDialog from "../../components/admin/AdminDialog.astro";
 import AdminButton from "../../components/admin/AdminButton.astro";
 import AdminSearch from "../../components/admin/AdminSearch.astro";
+import AdminIconTile from "../../components/admin/AdminIconTile.astro";
+import AdminIconUpload from "../../components/admin/AdminIconUpload.astro";
 import AdminFlash from "../../components/AdminFlash.astro";
 import AdminPager from "../../components/AdminPager.astro";
 import Chip from "../../components/Chip.astro";
 import CtaButton from "../../components/CtaButton.astro";
 import Icon from "../../components/Icon.astro";
 import { t } from "../../i18n/t";
+import { WIRE as WIRE_NAME, ICON_DONE_CODES, ICON_ERR_CODES, isIconCode } from "../../lib/admin/common.ts";
 import { requireActor } from "../../lib/admin/access.ts";
 import { adminConfig } from "../../lib/admin/runtime.ts";
 import { DONE_CODES, ERR_CODES, FLASH_COOKIE, KEEP_MAX, PAGE_SIZE, countsFromQuery, decide, loadCategories, loadTypes, parsePage, type Category, type ServiceType } from "../../lib/admin/catalog.ts";
 import { CATALOG_FILTERS, catalogMatches, filterCatalog, paginate, parseCatalogFilter, parseQuery, pluralUk, withQuery } from "../../lib/admin/listQuery.ts";
+import { adminCsp } from "../../lib/securityHeaders.ts";
+import { imgOriginsFor } from "../../lib/mediaOrigin.ts";
 import { loadNav, type NavInfo } from "../../lib/admin/navInfo.ts";
 
 const actor = requireActor(Astro.locals);
@@ -40,14 +45,14 @@ if (Astro.request.method === "POST") {
 }
 if (Astro.request.method !== "GET" && Astro.request.method !== "HEAD") return new Response(null, { status: 405, headers: { Allow: "GET, HEAD, POST", "Cache-Control": "no-store" } });
 
-const WIRE = /^[A-Z][A-Z0-9_]{0,99}$/;
+const WIRE = WIRE_NAME;
 const UUID = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
 const q = Astro.url.searchParams;
 const f = parseCatalogFilter(q.get("f"));
 const text = parseQuery(q.get("q"));
 const page = parsePage(q.get("p"));
-const done = (DONE_CODES as readonly string[]).includes(q.get("done") ?? "") ? q.get("done") : null;
-let err = (ERR_CODES as readonly string[]).includes(q.get("err") ?? "") ? q.get("err") : null;
+const done = ([...DONE_CODES, ...ICON_DONE_CODES] as readonly string[]).includes(q.get("done") ?? "") ? q.get("done") : null;
+let err = ([...ERR_CODES, ...ICON_ERR_CODES] as readonly string[]).includes(q.get("err") ?? "") ? q.get("err") : null;
 const used = countsFromQuery(q);
 const card = q.get("card") ?? "";
 let keep: [string, string] = ["", ""];
@@ -77,8 +82,8 @@ const openTypes: ServiceType[] | null | undefined = openCat ? await typesOf(open
 const catUrl = (extra: Record<string, string | number | undefined | false> = {}) => withQuery("/admin/catalog", { f: f !== "ALL" && f, q: text, p: pg.page > 1 && pg.page, open: openCat?.name, ...extra });
 
 // Which panel is asked for: `?dlg=` + target, or derived from a failed POST (its `card` row / the refused delete).
-type Dlg = "rename" | "disable" | "enable" | "delete";
-const DLGS = ["rename", "disable", "enable", "delete"];
+type Dlg = "rename" | "disable" | "enable" | "delete" | "icon";
+const DLGS = ["rename", "disable", "enable", "delete", "icon"];
 let dlg: Dlg | null = DLGS.includes(q.get("dlg") ?? "") ? (q.get("dlg") as Dlg) : null;
 let tCat = WIRE.test(q.get("cat") ?? "") ? (q.get("cat") as string) : "";
 let tType = UUID.test(q.get("type") ?? "") ? (q.get("type") as string) : "";
@@ -103,17 +108,26 @@ const typed = (i: 0 | 1, orig: string) => (tgt && card === rowKey && (keep[0] !=
 
 const details = [used.df ? t("admin.catalog.flash.inUseServices", { n: used.df }) : "", used.st ? t("admin.catalog.flash.inUseTypes", { n: used.st }) : "", used.ps ? t("admin.catalog.flash.inUsePending", { n: used.ps }) : ""].filter(Boolean).join(", ");
 const flash = done
-  ? { ok: true, text: t(`admin.catalog.flash.${done}`) }
+  ? { ok: true, text: t(isIconCode(done) ? `admin.icons.done.${done}` : `admin.catalog.flash.${done}`) }
   : err === "CATALOG_IN_USE" && details
     ? { ok: false, text: t("admin.catalog.flash.inUse", { details }) }
     : err
-      ? { ok: false, text: t(`admin.catalog.flash.${err}`) }
+      ? { ok: false, text: t(isIconCode(err) ? `admin.icons.err.${err}` : `admin.catalog.flash.${err}`) }
       : null;
 const closeFlash = catUrl();
 
 const ctxFields = (extra: Record<string, string>): [string, string][] => Object.entries({ ...extra, ...(pg.page > 1 ? { p: String(pg.page) } : {}), ...(f !== "ALL" ? { f } : {}), ...(text ? { q: text } : {}) });
 const usageIn = (n: number) => (n % 10 === 1 && n % 100 !== 11 ? t("admin.catalog.usageOne", { n }) : t("admin.catalog.usageMany", { n }));
-const chips = CATALOG_FILTERS.map((k) => [k, { ALL: t("admin.catalog.fAll"), LIVE: t("admin.catalog.fLive"), HIDDEN: t("admin.catalog.fHidden"), PENDING: t("admin.catalog.fPending"), UNUSED: t("admin.catalog.fUnused") }[k], cats.filter((c) => catalogMatches(c, k)).length] as const);
+// W049: the icon column, strip and «Без іконки» chip exist only when the backend exposes `iconUrl` (B539); until then the page is exactly the W052 one and nothing is gated.
+const iconsOn = cats.some((c) => c.iconUrl !== undefined);
+const iconed = cats.filter((c) => c.status === "APPROVED" && typeof c.iconUrl === "string");
+const noIconN = cats.filter((c) => catalogMatches(c, "NOICON")).length;
+const chips = CATALOG_FILTERS.filter((k) => k !== "NOICON" || iconsOn).map((k) => [k, { ALL: t("admin.catalog.fAll"), LIVE: t("admin.catalog.fLive"), HIDDEN: t("admin.catalog.fHidden"), PENDING: t("admin.catalog.fPending"), UNUSED: t("admin.catalog.fUnused"), NOICON: t("admin.icons.fNone") }[k], cats.filter((c) => catalogMatches(c, k)).length] as const);
+Astro.response.headers.set("Content-Security-Policy", adminCsp({ imgOrigins: cats.flatMap((c) => (typeof c.iconUrl === "string" ? [c.iconUrl] : [])), allow: imgOriginsFor(cfg) })); // WEB-71: img-src gains only the media origins present in the data (the middleware re-validates them)
+const iconUrl = (c: Category) => catUrl({ dlg: "icon", cat: c.name });
+const tableCols = iconsOn ? 7 : 6;
+// The enable panel of a category with no icon (B541): the inline upload first, «Увімкнути» off until the icon is there. A 409 CATEGORY_ICON_REQUIRED shows the same panel.
+const enableNeedsIcon = !!tgtCat && !isType && dlg === "enable" && (tgtCat.iconUrl === null || err === "CATEGORY_ICON_REQUIRED");
 // Blocked-delete numbers: what the backend refused with (st = types, df = services, ps = pending suggestions), else what this page loaded.
 const blocked = (() => {
   if (!tgt) return { services: 0, types: 0, pending: 0, is: false };
@@ -158,6 +172,15 @@ const rowActs = (kind: "cat" | "type", c: Category, ty?: ServiceType) => {
 
   {tgt && (dlg === "disable" || dlg === "enable") && (
     <AdminDialog title={t(dlg === "disable" ? "admin.catalog.disableTitle" : "admin.catalog.enableTitle", { name: tgt.name })} icon={dlg === "disable" ? "eye-off" : "eye"} closeHref={dlgClose}>
+      {enableNeedsIcon && dlg === "enable" && (
+        <>
+          {err === "CATEGORY_ICON_REQUIRED" && <p class="hint bad" role="alert">{t("admin.icons.enableRequired")}</p>}
+          <AdminIconUpload id="en" category={tgtCat!.name} returnTo={catUrl({ dlg: "enable", cat: tgtCat!.name })} invalid={isIconCode(err)} />
+        </>
+      )}
+      {tgtCat && !isType && dlg === "enable" && !enableNeedsIcon && tgtCat.iconUrl && (
+        <p class="icon-have"><AdminIconTile src={tgtCat.iconUrl} /><span class="pill ok dot">{t("admin.icons.enableHas")}</span></p>
+      )}
       <form method="post" action="/admin/catalog">
         {ctxFields({ kind: tgt.kind, id: tgt.id, origName: tgt.name, ...(isType ? { cat: tgtCat!.name, origNameEn: tgt.nameEn } : {}) }).map(([k, v]) => <input type="hidden" name={k} value={v} />)}
         <input type="hidden" name="name" value={tgt.name} />
@@ -167,11 +190,25 @@ const rowActs = (kind: "cat" | "type", c: Category, ty?: ServiceType) => {
             ? t(isType ? "admin.catalog.disableBodyType" : "admin.catalog.disableBodyCat", { usage: tgt.usage > 0 ? t("admin.catalog.disableUsage", { in: usageIn(tgt.usage) }) : "" })
             : t("admin.catalog.enableBody")}
         </p>
+        {enableNeedsIcon && dlg === "enable" && <p class="hint bad">{t("admin.icons.enableBlocked")}</p>}
         <div class="dlg-f">
           <AdminButton autofocus href={dlgClose}>{t("admin.cancel")}</AdminButton>
-          <CtaButton type="submit" name="action" value={dlg === "disable" ? "hide" : "show"}>{dlg === "disable" ? t("admin.catalog.disableConfirm") : t("admin.catalog.enableConfirm")}</CtaButton>
+          <CtaButton type="submit" name="action" value={dlg === "disable" ? "hide" : "show"} disabled={enableNeedsIcon && dlg === "enable"}>{dlg === "disable" ? t("admin.catalog.disableConfirm") : t("admin.catalog.enableConfirm")}</CtaButton>
         </div>
       </form>
+    </AdminDialog>
+  )}
+
+  {tgt && dlg === "icon" && !isType && (
+    <AdminDialog title={t(tgtCat!.iconUrl ? "admin.icons.replaceTitle" : "admin.icons.addTitle")} icon="category" closeHref={dlgClose}>
+      <p class="t-body">{t("admin.icons.forCat", { name: tgt.name })}</p>
+      {tgtCat!.iconUrl && (
+        <div class="icon-cur">
+          <span class="lbl">{t("admin.icons.current")}</span>
+          <span class="ico-pair"><AdminIconTile src={tgtCat!.iconUrl} size="lg" /><AdminIconTile src={tgtCat!.iconUrl} /></span>
+        </div>
+      )}
+      <AdminIconUpload id="ic" category={tgtCat!.name} returnTo={catUrl({ dlg: "icon", cat: tgtCat!.name })} replace={!!tgtCat!.iconUrl} invalid={isIconCode(err)} cancelHref={dlgClose} />
     </AdminDialog>
   )}
 
@@ -219,6 +256,25 @@ const rowActs = (kind: "cat" | "type", c: Category, ty?: ServiceType) => {
 
   {!all.ok && <AdminFlash ok={false} text={t("admin.catalog.loadFailed")} retryHref={catUrl()} />}
 
+  {all.ok && iconsOn && (
+    <section class="card card-pad strip-card" aria-labelledby="strip-t">
+      <div class="card-h">
+        <h2 class="vt-card-title" id="strip-t">{t("admin.icons.stripTitle")}</h2>
+        {noIconN > 0 && <a class="pill bad" href={withQuery("/admin/catalog", { f: "NOICON" })}>{t("admin.icons.stripNone", { n: noIconN })}</a>}
+      </div>
+      <p class="hint">{t("admin.icons.stripHint")}</p>
+      {iconed.length > 0 ? (
+        <ul class="strip">
+          {iconed.map((c) => (
+            <li><span class="ico-pair"><AdminIconTile src={c.iconUrl} size="lg" /><AdminIconTile src={c.iconUrl} /></span><span class="vt-label">{c.displayName}</span></li>
+          ))}
+        </ul>
+      ) : (
+        <p class="vt-body">{t("admin.icons.stripEmpty")}</p>
+      )}
+    </section>
+  )}
+
   {all.ok && (
     <section class="card">
       <div class="toolbar">
@@ -255,6 +311,7 @@ const rowActs = (kind: "cat" | "type", c: Category, ty?: ServiceType) => {
                 <tr>
                   <th scope="col">{t("admin.catalog.colCategory")}</th>
                   <th scope="col" class="hide-md">{t("admin.catalog.colCode")}</th>
+                  {iconsOn && <th scope="col">{t("admin.icons.colIcon")}</th>}
                   <th scope="col">{t("admin.catalog.colStatus")}</th>
                   <th scope="col" class="num" title={t("admin.catalog.colUsageTip")}>{t("admin.catalog.colUsage")}</th>
                   <th scope="col" class="num">{t("admin.catalog.colTypes")}</th>
@@ -276,6 +333,18 @@ const rowActs = (kind: "cat" | "type", c: Category, ty?: ServiceType) => {
                           </a>
                         </td>
                         <td class="hide-md mono"><code>{c.name}</code></td>
+                        {iconsOn && (
+                          <td>
+                            {live && c.iconUrl !== undefined ? (
+                              <span class="icell">
+                                {c.iconUrl ? <AdminIconTile src={c.iconUrl} /> : <span class="pill bad">{t("admin.icons.none")}</span>}
+                                <a class="vt-label vt-u" href={iconUrl(c)} aria-label={t(c.iconUrl ? "admin.icons.replaceRow" : "admin.icons.uploadRow", { name: c.displayName })}>{t(c.iconUrl ? "admin.icons.replace" : "admin.icons.upload")}</a>
+                              </span>
+                            ) : (
+                              <span class="usage muted">—</span>
+                            )}
+                          </td>
+                        )}
                         <td>
                           {c.status === "PENDING" && <span class="pill dot">{t("admin.catalog.statusPending")}</span>}
                           {c.status === "REJECTED" && <span class="pill bad dot">{t("admin.catalog.statusRejected")}</span>}
@@ -299,7 +368,7 @@ const rowActs = (kind: "cat" | "type", c: Category, ty?: ServiceType) => {
                       </tr>
                       {isOpen && (
                         <tr class="sub">
-                          <td colspan="6">
+                          <td colspan={tableCols}>
                             <div class="well types-box">
                               {openTypes === null && <p class="t-body bad" role="alert">{t("admin.catalog.typesFailed")}</p>}
                               {openTypes && openTypes.length === 0 && <p class="t-body">{t("admin.catalog.noTypes")}</p>}

@@ -13,7 +13,11 @@ export interface AdminConfig {
   emails: string[];
   catalogKey: string;
   apiOrigin: string;
+  /** Pinned image origin of category icons (MEDIA_ORIGIN, default prod media host). */
+  mediaOrigin?: string;
 }
+
+import { normalizeMediaOrigin } from "../mediaOrigin.ts";
 
 const TEAM = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.cloudflareaccess\.com$/;
 
@@ -48,7 +52,7 @@ function parse(e: Record<string, unknown>): Parsed {
   if (emails.length === 0) return { problem: "ADMIN_EMAILS" };
   if (catalogKey.length < KEY_MIN) return { problem: "INTERNAL_CATALOG_KEY" };
   if (!apiOrigin) return { problem: "API_ORIGIN" };
-  return { cfg: { teamDomain, aud, emails, catalogKey, apiOrigin } };
+  return { cfg: { teamDomain, aud, emails, catalogKey, apiOrigin, mediaOrigin: normalizeMediaOrigin(e.MEDIA_ORIGIN) } };
 }
 
 /** One parse: the config, or null plus the NAME of the first failing env field (never a value). */

@@ -68,8 +68,33 @@ export function reviewCsp(opts: { apiOrigin: string; imgOrigins: string[]; turns
   ].join("; ");
 }
 
-/** /admin* (phase 039): no script, no connections, no analytics. `style-src 'unsafe-inline'` is needed because Astro inlines every stylesheet (inlineStylesheets: "always"); with no script-src at all there is no script to abuse it. public/_headers carries the same value. */
-export const ADMIN_CSP = "default-src 'none'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'";
+/**
+ * Origin of an admin icon URL (W049, WEB-71), pinned: it must be one of `allowed` (the configured media origin, plus the API origin when that is
+ * loopback: see imgOriginsFor). Any other origin, a credentialed URL, a non-https non-allowed scheme or a non-URL gives null: the icon is then
+ * not rendered and its origin never reaches the CSP.
+ */
+export function adminImgOrigin(raw: unknown, allowed: readonly string[] = []): string | null {
+  if (typeof raw !== "string") return null;
+  try {
+    const u = new URL(raw);
+    if (u.username || u.password) return null;
+    return (u.protocol === "https:" || u.protocol === "http:") && allowed.includes(u.origin) ? u.origin : null;
+  } catch {
+    return null;
+  }
+}
+
+/** /admin* (phase 039, W049): no script, no connections, no analytics. `img-src` is `'self'` plus only the media origins present in the backend data AND in `allow` (`adminImgOrigin`). `style-src 'unsafe-inline'` is needed because Astro inlines every stylesheet (inlineStylesheets: "always"); with no script-src at all there is no script to abuse it. public/_headers carries the static `img-src 'self'` value. */
+export function adminCsp(opts: { imgOrigins: string[]; allow?: readonly string[] } = { imgOrigins: [] }): string {
+  const img = ["'self'", ...new Set(opts.imgOrigins.map((o) => adminImgOrigin(o, opts.allow)).filter((o): o is string => o !== null))].join(" ");
+  return `default-src 'none'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src ${img}; form-action 'self'; frame-ancestors 'none'; base-uri 'none'`;
+}
+export const ADMIN_CSP = adminCsp();
+/** The CSP a page asked for, rebuilt: only its `img-src` origins survive (re-validated against `allow`), every other directive is ours. A missing or odd header gives ADMIN_CSP. */
+function adminCspFrom(own: string | null, allow: readonly string[] | undefined): string {
+  const m = own?.startsWith("default-src 'none';") ? /(?:^|;\s*)img-src ([^;]*)/.exec(own) : null; // an asset-layer answer carries the PUBLIC policy: never read origins from that
+  return m ? adminCsp({ imgOrigins: m[1].split(/\s+/).filter((x) => x !== "'self'"), allow }) : ADMIN_CSP;
+}
 const ADMIN_PATH = /^\/admin(?:\/|$)/;
 /**
  * Is this request pathname under /admin? Astro routes on the DECODED path, so the raw pathname is not enough: `/%61dmin`, `/%41dmin`, `/admin%2fx`
@@ -109,12 +134,12 @@ export const SECURITY_HEADERS: Record<string, string> = {
 export const REFERRER_NONE_PATH = /^\/api\/ics$/;
 export const TOKEN_PATH = /^\/(?:book\/cancel|c|invite|bookings|l|r)\//;
 
-export function withSecurityHeaders(res: Response, path?: string): Response {
+export function withSecurityHeaders(res: Response, path?: string, imgAllow?: readonly string[]): Response {
   if (path !== undefined && adminPath(path).admin) {
     // Private operator area: always these values, even over a route's own (nothing under /admin may be cached or indexed).
     // Referrer-Policy is same-origin, NOT no-referrer: under no-referrer a browser sends `Origin: null` on every POST (Fetch spec), which the CSRF check in middleware.ts rejects;
     // same-origin keeps the real Origin on same-origin form posts and still sends no referrer to any other site.
-    const force = { ...SECURITY_HEADERS, "Content-Security-Policy": ADMIN_CSP, "Referrer-Policy": "same-origin", "Cache-Control": "no-store", "X-Robots-Tag": "noindex, nofollow" };
+    const force = { ...SECURITY_HEADERS, "Content-Security-Policy": adminCspFrom(res.headers.get("Content-Security-Policy"), imgAllow), "Referrer-Policy": "same-origin", "Cache-Control": "no-store", "X-Robots-Tag": "noindex, nofollow" };
     const set = (r: Response) => { for (const [k, v] of Object.entries(force)) r.headers.set(k, v); };
     try { set(res); return res; } catch { const out = new Response(res.body, res); set(out); return out; }
   }

@@ -8,6 +8,7 @@ import Icon from "../Icon.astro";
 import BookTopBar from "./BookTopBar.astro";
 import ServiceTile from "./ServiceTile.astro";
 import CategoryGroup from "./CategoryGroup.astro";
+import type { CategoryIcons } from "../../lib/categoryIcon";
 import ReviewsSection from "./ReviewsSection.astro";
 import { t } from "../../i18n/t";
 import { formatDuration, formatPriceFrom, formatRating, groupByCategory, streetLine, type ReviewSort } from "../../lib/booking/format";
@@ -16,12 +17,14 @@ import { serviceNameHints } from "../../lib/booking/serviceHint.ts";
 
 interface Props {
   info: MasterInfo;
+  /** Server category icons (W050); absent = bundled icons only. */
+  icons?: CategoryIcons;
   apiOrigin: string;
   sort: ReviewSort;
   /** The reviews of the first view (latestReviews, or page 0 of the chosen sort). */
   reviews: ReviewItem[];
 }
-const { info, apiOrigin, sort, reviews } = Astro.props;
+const { info, icons, apiOrigin, sort, reviews } = Astro.props;
 // Independent masters have a street (the app's rule): "Київ, вул. Хрещатик, 22", else the city only.
 const location = [info.city ?? info.region, streetLine(info.street, info.buildingNo)].filter(Boolean).join(", ") || null;
 const groups = groupByCategory(info.services, info.categories, t("book.master.otherServices"));
@@ -133,7 +136,7 @@ const canBook = info.bookable && info.services.length > 0;
           <h2 class="sr-only">{t("book.master.servicesLabel")}</h2>
           {
             groups.map((g) => (
-              <CategoryGroup name={g.name} categoryKey={g.key || null} count={g.items.length} open={false}>
+              <CategoryGroup name={g.name} categoryKey={g.key || null} icons={icons} count={g.items.length} open={false}>
                 {g.items.map((sv) => <ServiceTile name={sv.name} price={formatPriceFrom(sv.priceFrom)} duration={formatDuration(sv.durationMinutes)} hint={hints.get(sv.id)} />)}
               </CategoryGroup>
             ))

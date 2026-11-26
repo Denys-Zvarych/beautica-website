@@ -107,7 +107,10 @@ describe("jose stays out of the public build", () => {
     const name = base(access[0]).replace(/\.mjs$/, "");
     const staticImport = new RegExp(`^\\s*(?:import|export)\\b[^\\n;]*?["'][^"'\\n]*${name}`, "m");
     const importers = server.filter((f) => f !== access[0] && staticImport.test(readFileSync(f, "utf8")));
-    assert.equal(importers.length, 4, "the /admin page, /admin/requests (W040), /admin/catalog (W041) and the catch-all route: " + importers.map(base)); // a fifth importer = a public route (or an unlisted admin route) now loads jose
+    // Explicit allow-list by chunk stem (hash stripped); the _.. stem is the catch-all route. Anything else importing jose code fails.
+    const stem = (f) => base(f).replace(/_[A-Za-z0-9_-]{8}(?:_\d+)?\.mjs$/, "");
+    const stems = importers.map(stem).sort();
+    assert.deepEqual(stems, ["_..", "catalog", "icon", "index", "requests"].sort(), "the /admin page, /admin/requests (W040), /admin/catalog (W041), /admin/icon (W049) and the catch-all route: " + importers.map(base)); // any other importer = a public route (or an unlisted admin route) now loads jose
     for (const f of importers) assert.match(readFileSync(f, "utf8"), /requireActor\(/, `${base(f)} imports jose code but is not an admin route`);
     const lazy = server.filter((f) => new RegExp(`\\bimport\\(\\s*["'][^"']*${name}`).test(readFileSync(f, "utf8"))).map(base);
     assert.deepEqual(lazy, ["virtual_astro_middleware.mjs"]);
