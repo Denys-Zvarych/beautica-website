@@ -36,6 +36,8 @@ interface Props {
   basicLatin?: boolean;
   /** `<meta name="referrer" content="no-referrer">` so sub-resource requests never carry a token URL (token routes). Default false. */
   noReferrer?: boolean;
+  /** Value of that meta tag. Only applies when `noReferrer` is set (no tag is emitted otherwise). Default "no-referrer"; /admin passes "same-origin" (no-referrer makes browsers send `Origin: null` on form POSTs, which the CSRF check rejects). */
+  referrerPolicy?: "no-referrer" | "same-origin";
   /** An origin to open a connection to early (the booking API on the link pages). Default none. */
   preconnect?: string;
   /** Origin of a cross-origin hero image (cover/avatar on R2). Plain preconnect, no `crossorigin`: image fetches are no-cors and would not reuse a CORS connection. Emitted even when it equals `preconnect`: the API hint is a CORS connection and cannot serve no-cors image fetches. Default none. */
@@ -46,7 +48,7 @@ interface Props {
   modal?: boolean;
 }
 
-const { hideHeader = false, hideFooter = false, noReferrer = false, preloadLatin = true, basicLatin = false, preconnect, preconnectImage, analytics = true, modal = false, ...seo } = Astro.props;
+const { hideHeader = false, hideFooter = false, noReferrer = false, referrerPolicy = "no-referrer", preloadLatin = true, basicLatin = false, preconnect, preconnectImage, analytics = true, modal = false, ...seo } = Astro.props;
 const withAnalytics = analytics && !noReferrer; // a token route (noReferrer) must never carry analytics, even if a caller forgets the prop
 ---
 
@@ -55,7 +57,7 @@ const withAnalytics = analytics && !noReferrer; // a token route (noReferrer) mu
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    {noReferrer && <meta name="referrer" content="no-referrer" />}
+    {noReferrer && <meta name="referrer" content={referrerPolicy} />}
     {preconnect && <link rel="preconnect" href={preconnect} crossorigin />}
     {preconnectImage && <link rel="preconnect" href={preconnectImage} />}
     <link rel="icon" href="/favicon.ico" sizes="48x48" />

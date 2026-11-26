@@ -142,14 +142,14 @@ describe("middleware gate (real onRequest, no valid JWT)", () => {
       assert.equal(res.status, 404);
       assert.notEqual(await res.text(), "PUBLIC PAGE");
       assert.equal(res.headers.get("content-security-policy"), ADMIN_CSP);
-      assert.equal(res.headers.get("referrer-policy"), "no-referrer");
+      assert.equal(res.headers.get("referrer-policy"), "same-origin");
       assert.equal(res.headers.get("cache-control"), "no-store");
       assert.match(res.headers.get("x-robots-tag"), /noindex/);
     });
-  test("a cross-origin form POST to /admin/x: 403 with no-referrer + the admin CSP", async () => {
+  test("a cross-origin form POST to /admin/x: 403 with same-origin referrer + the admin CSP", async () => {
     const res = await mw("https://beautica.app/admin/x", { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded", origin: "https://evil.example" }, body: "a=1" });
     assert.equal(res.status, 403);
-    assert.equal(res.headers.get("referrer-policy"), "no-referrer");
+    assert.equal(res.headers.get("referrer-policy"), "same-origin");
     assert.equal(res.headers.get("content-security-policy"), ADMIN_CSP);
   });
   test("a non-admin path still reaches the route", async () => assert.equal(await (await mw("https://beautica.app/privacy")).text(), "PUBLIC PAGE"));
@@ -172,11 +172,11 @@ describe("every admin route re-checks locals.adminActor", () => {
 
 describe("/admin response headers", () => {
   for (const path of ["/admin", "/admin/requests"]) {
-    test(`${path}: no-store, noindex, no-referrer, CSP without script-src`, () => {
+    test(`${path}: no-store, noindex, same-origin referrer, CSP without script-src`, () => {
       const res = withSecurityHeaders(new Response("x", { headers: { "Cache-Control": "public, max-age=60", "Content-Security-Policy": "default-src *" } }), path);
       assert.equal(res.headers.get("cache-control"), "no-store");
       assert.equal(res.headers.get("x-robots-tag"), "noindex, nofollow");
-      assert.equal(res.headers.get("referrer-policy"), "no-referrer");
+      assert.equal(res.headers.get("referrer-policy"), "same-origin");
       assert.equal(res.headers.get("content-security-policy"), ADMIN_CSP);
       assert.ok(!/script-src|umami|cloudflareinsights/.test(res.headers.get("content-security-policy")));
     });
@@ -193,7 +193,7 @@ describe("/admin* routing (wrangler dev)", { skip: !BASE }, () => {
         assert.equal(res.status, 404);
         assert.deepEqual(res.all("cache-control"), ["no-store"]);
         assert.deepEqual(res.all("x-robots-tag"), ["noindex, nofollow"]);
-        assert.deepEqual(res.all("referrer-policy"), ["no-referrer"]);
+        assert.deepEqual(res.all("referrer-policy"), ["same-origin"]);
         assert.deepEqual(res.all("content-security-policy"), [ADMIN_CSP]);
       }
     });
@@ -208,20 +208,20 @@ describe("/admin* routing (wrangler dev)", { skip: !BASE }, () => {
       assert.deepEqual(target.all("cache-control"), ["no-store"]);
     }
   });
-  test("/admin/ is the asset-layer 307 to /admin, with the admin headers (HSTS, no-store, noindex, no-referrer, admin CSP)", async () => {
+  test("/admin/ is the asset-layer 307 to /admin, with the admin headers (HSTS, no-store, noindex, same-origin referrer, admin CSP)", async () => {
     const res = await rawRequest("/admin/");
     assert.equal(res.status, 307);
     assert.equal(res.headers.location, "/admin");
     assert.deepEqual(res.all("cache-control"), ["no-store"]);
     assert.deepEqual(res.all("x-robots-tag"), ["noindex, nofollow"]);
-    assert.deepEqual(res.all("referrer-policy"), ["no-referrer"]);
+    assert.deepEqual(res.all("referrer-policy"), ["same-origin"]);
     assert.deepEqual(res.all("content-security-policy"), [ADMIN_CSP]);
     assert.match(res.headers["strict-transport-security"], /max-age=31536000/);
   });
-  test("a cross-origin form POST to /admin/x is 403 with no-referrer + the admin CSP", async () => {
+  test("a cross-origin form POST to /admin/x is 403 with same-origin referrer + the admin CSP", async () => {
     const res = await rawRequest("/admin/x", { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded", Origin: "https://evil.example" } });
     assert.equal(res.status, 403);
-    assert.deepEqual(res.all("referrer-policy"), ["no-referrer"]);
+    assert.deepEqual(res.all("referrer-policy"), ["same-origin"]);
     assert.deepEqual(res.all("content-security-policy"), [ADMIN_CSP]);
   });
   test("a POST to /admin/x is also gated (404)", async () => assert.equal((await rawRequest("/admin/x", { method: "POST" })).status, 404));

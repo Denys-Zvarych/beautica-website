@@ -23,6 +23,7 @@ import { gzipSync } from "node:zlib";
 import { join } from "node:path";
 import { generateKeyPair, exportJWK, SignJWT } from "jose";
 import { startCatalogMock } from "./lib/catalog-mock.mjs";
+import { ATTEMPTS, ATTEMPT_MS } from "./lib/admin-harness.mjs";
 
 const arg = (name) => { const i = process.argv.indexOf(name); return i < 0 ? undefined : process.argv[i + 1] ?? ""; };
 for (let i = 0; i < 40 && !existsSync("dist/server/wrangler.json"); i++) await new Promise((r) => setTimeout(r, 500)); // a rebuild in flight
@@ -68,7 +69,6 @@ for (const s of ["SIGINT", "SIGTERM"]) process.on(s, () => process.exit(130));
 // A start is bounded per attempt (a healthy one takes 10-15 s), not once for 240 s: a wrangler that never comes up (exited, or alive but stuck while
 // its siblings were booting: CI PR #68 sat the whole 240 s on one) is killed and replaced on fresh ports. The inspector port is explicit too:
 // wrangler's own default is one fixed port that concurrent test files would fight over. The log goes to a file in the temp dir, shown on failure.
-const ATTEMPTS = 4, ATTEMPT_MS = 60_000;
 const logFile = process.env.RENDER_ADMIN_LOG ?? join(work, "wrangler.log");
 let port, base;
 const startWrangler = async () => {
@@ -104,13 +104,19 @@ const send = (path, withJwt = true, init = {}) => fetch(base + path, { ...init, 
 
 if (arg("--serve") !== undefined) {
   const p = arg("--serve") === "0" ? 0 : Number(arg("--serve")) || 4399; // 0 = a free port (reported below)
+  const origins = [];
   const proxy = createServer(async (rq, rs) => {
     // Test hooks (tests/admin-requests-live.test.mjs): the mock catalog backend's call log, as JSON.
+    if (rq.url === "/__mock/origins") { rs.writeHead(200, { "Content-Type": "application/json" }); return rs.end(JSON.stringify(origins)); }
     if (rq.url === "/__mock/calls") { rs.writeHead(200, { "Content-Type": "application/json" }); return rs.end(JSON.stringify(mock.calls)); }
     const chunks = []; for await (const c of rq) chunks.push(c);
     const post = rq.method !== "GET" && rq.method !== "HEAD";
-    // A browser form post carries Origin = the proxy; the Worker compares it to its own origin, so present it as same-origin.
-    const r = await send(rq.url, !process.env.RENDER_ADMIN_ANON, post ? { method: rq.method, body: Buffer.concat(chunks), headers: { "Content-Type": rq.headers["content-type"] ?? "application/x-www-form-urlencoded", Origin: rq.headers["x-test-origin"] ?? base, ...(rq.headers.cookie ? { Cookie: rq.headers.cookie } : {}) } } : rq.headers.cookie ? { headers: { Cookie: rq.headers.cookie } } : {});
+    // A browser form post carries Origin = the proxy; the Worker compares it to its own origin, so present it as same-origin (the proxy's own origin only).
+    // Any other Origin the client sent (a real browser under `Referrer-Policy: no-referrer` sends the string "null") is forwarded UNCHANGED and logged at /__mock/origins.
+    const proxyOrigin = `http://127.0.0.1:${proxy.address().port}`, sentOrigin = rq.headers.origin;
+    if (post) origins.push(sentOrigin ?? null);
+    const workerOrigin = rq.headers["x-test-origin"] ?? (sentOrigin && sentOrigin !== proxyOrigin ? sentOrigin : base);
+    const r = await send(rq.url, !process.env.RENDER_ADMIN_ANON, post ? { method: rq.method, body: Buffer.concat(chunks), headers: { "Content-Type": rq.headers["content-type"] ?? "application/x-www-form-urlencoded", Origin: workerOrigin, ...(rq.headers.cookie ? { Cookie: rq.headers.cookie } : {}) } } : rq.headers.cookie ? { headers: { Cookie: rq.headers.cookie } } : {});
     const h = Object.fromEntries(r.headers); delete h["content-encoding"]; delete h["content-length"];
     let body = Buffer.from(await r.arrayBuffer());
     // Mirror the Cloudflare edge: compressed text responses (Lighthouse and the budgets measure what the browser downloads).
