@@ -24,7 +24,7 @@ const MESSAGES: Record<string, string> = {
   CATEGORY_NAME_EXISTS: "Категорія з такою назвою вже існує.",
   CATEGORY_NOT_APPROVED: "Категорію ще не схвалено. Спершу розгляньте заявку.",
   CATEGORY_ICON_REQUIRED: "Спершу додайте іконку категорії.",
-  CATALOG_IN_USE: "Неможливо видалити: елемент каталогу використовується. Сховайте його.",
+  CATALOG_IN_USE: "Неможливо видалити: елемент каталогу використовується. Вимкніть його.",
 };
 
 /** Ukrainian message for a backend failure. A typed 409 never falls back to the generic server error. */

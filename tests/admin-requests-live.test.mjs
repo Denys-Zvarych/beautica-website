@@ -1,4 +1,4 @@
-// W040 QA (live): /admin/requests end to end through the BUILT Worker (scripts/render-admin.mjs --serve: real middleware + Access JWT, local mock catalog backend).
+// W040 / W052 QA (live): /admin/requests end to end through the BUILT Worker (scripts/render-admin.mjs --serve: real middleware + Access JWT, local mock catalog backend).
 // Complements tests/admin-requests.test.mjs (fake fetch + single-request renders): here several requests share one Worker, and every claim is checked against the
 // mock backend's CALL LOG (method, path, exact JSON body, order), not only the HTML. Nothing leaves localhost.
 import { test, describe, before, after } from "node:test";
@@ -18,7 +18,7 @@ async function startAdmin(rows) {
   const child = spawn(process.execPath, ["scripts/render-admin.mjs", "--serve", "0"], { cwd: ROOT, env: { ...process.env, CATALOG_MOCK_ROWS: String(rows) }, stdio: ["ignore", "pipe", "pipe"], detached: true });
   let log = "";
   const base = await new Promise((resolve, reject) => {
-    const t = setTimeout(() => reject(new Error(`admin harness did not start in 100 s:\n${log}`)), 100_000);
+    const t = setTimeout(() => reject(new Error(`admin harness did not start in 280 s:\n${log}`)), 280_000);
     const on = (d) => { log += d; const m = /(http:\/\/127\.0\.0\.1:\d+)\/admin/.exec(log); if (m) { clearTimeout(t); resolve(m[1]); } };
     child.stdout.on("data", on); child.stderr.on("data", (d) => { log += d; });
     child.once("exit", (c) => reject(new Error(`admin harness exited (${c}):\n${log}`)));
@@ -35,9 +35,10 @@ async function startAdmin(rows) {
 }
 
 const decode = (h) => h.replaceAll("&#39;", "'").replaceAll("&quot;", '"').replaceAll("&lt;", "<").replaceAll("&gt;", ">").replaceAll("&amp;", "&");
-const main = (h) => h.match(/<main[\s\S]*?<\/main>/)?.[0] ?? "";
-const cards = (h) => (main(h).match(/<form\b[^>]*method="post"/g) ?? []).length;
-const flashOf = (h) => decode(/<p class="[^"]*\bflash\b[^"]*"[^>]*role="(status|alert)"[^>]*>([^<]*)<\/p>/.exec(h)?.slice(1).join("|") ?? "");
+const main = (h) => h.match(/<body[\s\S]*<\/body>/)?.[0] ?? ""; // the page: shell + <main> + the dialog slot (outside <main>, W052 inert background)
+const page = (h) => h.match(/<body[\s\S]*<\/body>/)?.[0] ?? ""; // sidebar + <main> + the flash toast (outside <main>)
+const cards = (h) => (main(h).match(/<tr id="req-/g) ?? []).length; // W052: a request is a table row; its forms live in the detail / dialog panels
+const flashOf = (h) => decode(/<div class="flash [^"]*" role="(status|alert)">[\s\S]*?<p>([^<]*)<\/p>/.exec(h)?.slice(1).join("|") ?? ""); // AdminFlash: toast / banner, role=status (done) or role=alert (error)
 const q = (loc) => new URL(loc, "https://x.test").searchParams;
 const card = (kind, id, origName, extra = {}) => ({ kind, id, origName, name: origName, ...extra });
 const hidden = (h, name) => [...main(h).matchAll(new RegExp(`<input[^>]*name="${name}"[^>]*value="([^"]*)"`, "g"))].map((m) => m[1]);
@@ -64,7 +65,7 @@ describe("flow: list -> edit -> approve / reject, asserted on the backend call l
     assert.deepEqual(ws.map((c) => [c.method, c.path, c.body, c.actor]), [["PATCH", `/api/v1/internal/catalog/requests/SERVICE_TYPE/${SVC1}`, { name: "Корекція брів" }, "owner@example.com"]]);
     const g = await w.get(r.location);
     assert.equal(flashOf(g.html), `status|${uk.admin.requests.flash.saved}`);
-    assert.ok(decode(g.html).includes('value="Корекція брів"'));
+    assert.ok(decode(g.html).includes('>Корекція брів</a>'), "the list row shows the saved name");
   });
 
   test("approve with an edited name: PATCH {name} THEN POST /approve (no body), in that order; the row leaves the list", async () => {
@@ -196,10 +197,10 @@ describe("flash cookie: the typed name of a failed edit", () => {
   test("applied only to the one card ?card= names, and only with the cookie: not without ?card, not on the other cards, not without the cookie", async () => {
     const withCard = await w.get(set.location, { Cookie: cookie });
     assert.equal(hidden(withCard.html, "name").filter((v) => v === "Бровки!!").length, 1);
-    assert.ok(withCard.html.includes(`id="n-${gen(4)}"`) && new RegExp(`id="n-${gen(4)}"[^>]*value="Бровки!!"`).test(withCard.html), "on the named card");
+    assert.ok(/id="rn" name="name"[^>]*value="Бровки!!"/.test(withCard.html) && withCard.html.includes("Заявка 4"), "the detail of the named card opens with the typed name");
     assert.ok(withCard.html.includes('aria-invalid="true"'));
     const other = await w.get(`/admin/requests?err=BAD_INPUT&card=${encodeURIComponent(`SERVICE_TYPE:${gen(5)}`)}`, { Cookie: cookie });
-    assert.ok(new RegExp(`id="n-${gen(5)}"[^>]*value="Бровки!!"`).test(other.html) && !new RegExp(`id="n-${gen(4)}"[^>]*value="Бровки!!"`).test(other.html), "follows ?card, never the others");
+    assert.ok(/id="rn" name="name"[^>]*value="Бровки!!"/.test(other.html) && other.html.includes("Заявка 5") && hidden(other.html, "name").length === 1, "follows ?card, never another request");
     for (const [path, headers] of [["/admin/requests?err=BAD_INPUT", { Cookie: cookie }], [set.location, {}]]) assert.ok(!(await w.get(path, headers)).html.includes("Бровки"), path);
   });
 
@@ -222,61 +223,154 @@ describe("flash cookie: the typed name of a failed edit", () => {
   });
 });
 
-describe("pagination (51 pending requests = 3 pages of 25)", () => {
+describe("filters, search and the 200-request cap (W052 D2)", () => {
   let w;
   before(async () => { w = await startAdmin(51); });
   after(() => w?.stop());
+  const reqGets = async (mark) => (await w.calls()).slice(mark).filter((c) => c.method === "GET" && c.path.includes("/requests?")).map((c) => c.path.replace(/^.*requests\?/, ""));
+  const ids = (h) => [...main(h).matchAll(/<tr id="req-([^"]+)"/g)].map((m) => m[1]);
+  const chip = (h, label) => Number(new RegExp(`${label}<span class="n">(\\d+)</span>`).exec(main(h))?.[1]);
 
-  test("garbage ?p= (0, -1, abc, 2.5, empty, 5 digits) is page 1 and asks the backend for page index 0", async () => {
-    for (const p of ["0", "-1", "abc", "2.5", "", "99999"]) {
+  test("51 requests: the Worker loads all 3 backend pages, renders 25 per page (?p=); p=2 shows rows 26-50, p=3 the last one; stray p is clamped", async () => {
+    const all = ids((await w.get("/admin/requests?p=1")).html);
+    const loaded = ["status=PENDING&page=0&size=25", "status=PENDING&page=1&size=25", "status=PENDING&page=2&size=25"];
+    for (const [p, from, to, n] of [["", 1, 25, 25], ["?p=2", 26, 50, 25], ["?p=3", 51, 51, 1], ["?p=abc", 1, 25, 25], ["?p=9999", 51, 51, 1]]) {
       const mark = (await w.calls()).length;
-      const r = await w.get(`/admin/requests?p=${p}`);
-      assert.equal(r.status, 200, `p=${p}`);
-      assert.equal(cards(r.html), 25, `p=${p}`);
-      assert.ok(r.html.includes("Показано 1–25 із 51"), `p=${p}`);
-      assert.match((await w.calls()).slice(mark)[0].path, /status=PENDING&page=0&size=25$/, `p=${p}`);
+      const r = await w.get(`/admin/requests${p}`);
+      assert.equal(r.status, 200, p);
+      assert.equal(cards(r.html), n, p);
+      assert.ok(r.html.includes(`Показано ${from}–${to} із 51`), p);
+      assert.deepEqual((await reqGets(mark)).sort(), loaded, p);
+      assert.ok(!r.html.includes(uk.admin.requests.capNotice));
     }
+    assert.equal(cards((await w.get("/admin/requests")).html), 25);
+    const p2 = ids((await w.get("/admin/requests?p=2")).html);
+    assert.equal(p2.length, 25);
+    assert.ok(p2.every((id) => !all.includes(id)), "page 2 is disjoint from page 1");
+    assert.ok((await w.get("/admin/requests?p=2")).html.includes('aria-label="Сторінки заявок"'));
+    assert.ok(!(await w.get("/admin/requests?kind=CATEGORY")).html.includes('aria-label="Сторінки заявок"'), "one page: no pager");
   });
+  test("the filter applies BEFORE paging: the filtered set is paged, the pager keeps kind / q, a decision keeps p", async () => {
+    const typ1 = ids((await w.get("/admin/requests?kind=SERVICE_TYPE")).html), typ2 = (await w.get("/admin/requests?kind=SERVICE_TYPE&p=2")).html;
+    assert.equal(typ1.length, 25);
+    assert.ok(ids(typ2).length > 0 && ids(typ2).every((id) => !/^\d+$/.test(id) && !typ1.includes(id)), "page 2 of the filtered set holds only more types");
+    assert.ok(/href="\/admin\/requests\?kind=SERVICE_TYPE"/.test(typ2) && typ2.includes("Показано 26–"), "pager keeps kind, footer counts the filtered set");
+    assert.match((await w.get(`/admin/requests?kind=SERVICE_TYPE&p=2&open=SERVICE_TYPE:${ids(typ2)[0]}`)).html, /name="p" value="2"/, "the detail form carries the page, so a decision comes back to it");
+  });
+  test("kind chips and counts: ?kind=CATEGORY / SERVICE_TYPE filter; the counts ignore q; an unknown kind is «Усі»", async () => {
+    const all = (await w.get("/admin/requests")).html;
+    const nCat = [...all.matchAll(/Категорії<span class="n">(\d+)/g)].map((m) => Number(m[1]))[0];
+    assert.deepEqual(["Усі", "Категорії", "Типи послуг"].map((l) => chip(all, l)), [51, nCat, 51 - nCat]);
+    const cat = (await w.get("/admin/requests?kind=CATEGORY")).html;
+    assert.equal(cards(cat), Math.min(25, nCat)); assert.ok(ids(cat).every((id) => /^\d+$/.test(id)));
+    const typ = (await w.get("/admin/requests?kind=SERVICE_TYPE")).html;
+    assert.equal(cards(typ), Math.min(25, 51 - nCat)); assert.ok(ids(typ).every((id) => !/^\d+$/.test(id)));
+    assert.equal(cards((await w.get("/admin/requests?kind=NOPE")).html), 25);
+    const withQ = (await w.get("/admin/requests?kind=CATEGORY&q=Салон 3")).html;
+    assert.equal(chip(withQ, "Усі"), 51, "chip counts ignore q");
+  });
+  test("q matches the label, the category and the requester (case-insensitive), is trimmed, and shows «Нічого не знайдено» + a reset link", async () => {
+    assert.deepEqual(ids((await w.get("/admin/requests?q=%20категорія%2012%20")).html), ["112"], "the label (a category is listed by its display name), case-insensitive and trimmed");
+    assert.ok(cards((await w.get("/admin/requests?q=BROWS")).html) > 0, "the category name of a type request");
+    assert.deepEqual(ids((await w.get("/admin/requests?q=салон%2049")).html), [gen(49)], "the requester label");
+    const none = (await w.get("/admin/requests?q=zzzzzz")).html;
+    assert.equal(cards(none), 0);
+    assert.ok(main(none).includes(uk.admin.requests.noneFound) && main(none).includes('href="/admin/requests"'));
+    assert.ok(cards((await w.get(`/admin/requests?q=${"я".repeat(300)}`)).html) === 0, "an over-long q is cut to 100 code points, never a 5xx");
+  });
+  test("a decision keeps the list filter (kind, q) and the page field; page 1 / no filter adds nothing", async () => {
+    const r = await w.post({ ...card("CATEGORY", "130", "x"), p: "2", fk: "CATEGORY", fq: "Салон", action: "approve" });
+    assert.equal(r.location, "/admin/requests?done=approved&p=2&kind=CATEGORY&q=%D0%A1%D0%B0%D0%BB%D0%BE%D0%BD");
+    const plain = await w.post({ ...card("CATEGORY", "133", "x"), fk: "ALL", fq: "  ", action: "approve" });
+    assert.equal(plain.location, "/admin/requests?done=approved");
+  });
+});
 
-  test("past the end (p=4, p=9999) redirects to the last page, keeping the flash and card", async () => {
-    for (const p of ["4", "9999"]) {
-      const r = await w.get(`/admin/requests?p=${p}&done=approved&card=CATEGORY%3A41`);
-      assert.equal(r.status, 303, p);
-      const l = q(r.location);
-      assert.equal(l.get("p"), "3");
-      assert.equal(l.get("done"), "approved");
-      assert.equal(l.get("card"), "CATEGORY:41");
-      assert.ok(r.location.startsWith("/admin/requests?"), "relative");
+describe("the 200-request cap", () => {
+  let w;
+  before(async () => { w = await startAdmin(250); });
+  after(() => w?.stop());
+  test("250 pending: 8 backend pages, 200 rows, the notice «Показано перші 200 заявок»", async () => {
+    const mark = (await w.calls()).length;
+    const r = await w.get("/admin/requests");
+    const pages = (await w.calls()).slice(mark).filter((c) => c.path.includes("/requests?")).map((c) => /page=(\d+)/.exec(c.path)[1]);
+    assert.equal(cards(r.html), 25);
+    assert.ok(r.html.includes(uk.admin.requests.capNotice));
+    assert.ok(r.html.includes("Показано 1–25 із 250"));
+    assert.equal(cards((await w.get("/admin/requests?p=8")).html), 25, "200 rows = 8 pages of 25");
+    assert.equal(cards((await w.get("/admin/requests?p=9")).html), 25, "p past the end clamps to the last page");
+    assert.deepEqual(pages.sort(), ["0", "1", "2", "3", "4", "5", "6", "7"]);
+  });
+});
+
+describe("detail and dialogs by URL: ?open=KIND:id, ?dlg=approve|reject&id=KIND:id (W052 D1, D3)", () => {
+  let w;
+  before(async () => { w = await startAdmin(8); });
+  after(() => w?.stop());
+  const html = async (u) => (await w.get(u)).html;
+  const NOT_PENDING = uk.admin.requests.flash.REQUEST_NOT_PENDING;
+
+  test("the detail of a category: facts, editable name + first service, save / reject… / approve; the age pill; a sheet with a link scrim", async () => {
+    const h = await html("/admin/requests?open=CATEGORY:41");
+    assert.match(h, /<section class="dlg sheet"[^>]*role="dialog" aria-modal="true" aria-labelledby="dlg-t"/);
+    assert.match(h, /<div class="app" inert[ >=]/, "the page behind the sheet is inert");
+    assert.ok(h.indexOf("</main>") < h.indexOf('role="dialog"'), "the dialog is outside <main>/.app, so it is not inert itself");
+    assert.ok(!/<div class="app" inert/.test((await html("/admin/requests")) ), "no dialog -> nothing inert");
+    assert.ok(h.includes(uk.admin.requests.detailCat) && h.includes("Салон «Лотос»") && h.includes("Ламінування брів"));
+    assert.match(h, /id="rn" name="name"[^>]*value="Brow bar"/);
+    assert.match(h, /id="rs" name="initialServiceName"[^>]*value="Ламінування брів"/);
+    assert.equal((h.match(/name="action" value="save"/g) ?? []).length, 1);
+    assert.match(h, /href="\/admin\/requests\?dlg=reject&amp;id=CATEGORY%3A41&amp;open=CATEGORY%3A41"/);
+    // «Схвалити» is a submit of the SAME form as the name fields (save-then-approve): edits are never dropped by a navigation to the confirm dialog.
+    assert.ok(!/href="\/admin\/requests\?dlg=approve&amp;id=CATEGORY%3A41&amp;open=CATEGORY%3A41"/.test(h));
+    assert.equal((h.match(/name="action" value="approve"/g) ?? []).length, 1);
+    const form = h.slice(h.indexOf('<form method="post"'), h.indexOf("</form>", h.indexOf('<form method="post"')));
+    assert.ok(form.includes('id="rn" name="name"') && form.includes('name="action" value="approve"'), "the approve button shares the form with the name field");
+    assert.match(h, /class="scrim" href="\/admin\/requests"/);
+    assert.match(h, /class="pill age bad"/, "a request older than 7 days is red");
+  });
+  test("the detail of a type has no first-service field and shows its category", async () => {
+    const h = await html(`/admin/requests?open=SERVICE_TYPE:${SVC1}`);
+    assert.ok(h.includes(uk.admin.requests.detailType) && h.includes("brows") && !h.includes('name="initialServiceName"'));
+  });
+  test("approve and reject panels: copy, hidden origName, one submit; reject has maxlength=300 and the static hint; cancel returns to the list (with the filter)", async () => {
+    const a = await html("/admin/requests?kind=CATEGORY&dlg=approve&id=CATEGORY:41");
+    assert.ok(a.includes(uk.admin.requests.approveTitle) && a.includes("«Brow bar» зʼявиться у каталозі як нова категорія") && a.includes(uk.admin.requests.approveConfirm));
+    assert.match(a, /name="origName" value="Brow bar"/);
+    assert.match(a, /name="fk" value="CATEGORY"/);
+    assert.ok(a.includes('href="/admin/requests?kind=CATEGORY"'), "cancel / scrim keep the filter");
+    const t = await html(`/admin/requests?dlg=approve&id=SERVICE_TYPE:${SVC2}`);
+    assert.ok(t.includes("«Нігті» буде додано до категорії «nails»"));
+    const r = await html("/admin/requests?dlg=reject&id=CATEGORY:41");
+    assert.ok(r.includes(uk.admin.requests.rejectTitle) && r.includes(uk.admin.requests.rejectConfirm) && r.includes(uk.admin.requests.reasonHint) && r.includes(uk.admin.requests.reasonMax));
+    assert.match(r, /<textarea[^>]*name="reason"[^>]*maxlength="300"/);
+    assert.ok(!/<script/i.test(r));
+  });
+  test("an unknown, malformed or already-decided id: the list plus «Заявку вже розглянуто», no panel, no 5xx", async () => {
+    for (const u of ["/admin/requests?open=CATEGORY:99999", "/admin/requests?open=garbage", "/admin/requests?dlg=approve&id=CATEGORY:99999", "/admin/requests?dlg=reject&id=%3Cb%3E", "/admin/requests?dlg=approve", `/admin/requests?dlg=approve&id=SERVICE_TYPE:${gen(9999)}`]) {
+      const r = await w.get(u);
+      assert.equal(r.status, 200, u);
+      assert.ok(!/<section class="dlg/.test(r.html) && !/<script/i.test(r.html), u);
+      assert.equal(flashOf(r.html), `alert|${NOT_PENDING}`, u);
     }
+    assert.ok(!/<section class="dlg/.test((await w.get("/admin/requests?dlg=nuke&id=CATEGORY:41")).html), "an unknown dialog name opens nothing");
   });
-
-  test("a middle and the last page: right window text, hidden p on every card, prev / next links", async () => {
-    const mid = await w.get("/admin/requests?p=2");
-    assert.ok(mid.html.includes("Показано 26–50 із 51"));
-    assert.deepEqual([...new Set(hidden(mid.html, "p"))], ["2"]);
-    assert.ok(mid.html.includes('href="/admin/requests"') && mid.html.includes('href="/admin/requests?p=3"'));
-    const last = await w.get("/admin/requests?p=3");
-    assert.equal(cards(last.html), 1);
-    assert.ok(!last.html.includes(uk.admin.requests.next));
+  test("approve / reject from a panel: the same single POST as before (no PATCH for an unchanged name), then 303 + the flash; the row is gone", async () => {
+    const mark = (await w.calls()).length;
+    const a = await w.post({ kind: "CATEGORY", id: "41", origName: "Brow bar", origInitialServiceName: "Ламінування брів", name: "Brow bar", initialServiceName: "Ламінування брів", action: "approve" });
+    assert.equal(a.location, "/admin/requests?done=approved");
+    assert.deepEqual((await w.writes(mark)).map((c) => [c.method, c.path.split("/41")[1]]), [["POST", "/approve"]]);
+    const g = await w.get(a.location);
+    assert.equal(flashOf(g.html), `status|${uk.admin.requests.flash.approved}`);
+    assert.match(g.html, /class="x" href="\/admin\/requests" aria-label="Закрити"/, "the toast's × drops done/err");
+    assert.ok(!g.html.includes('id="req-41"'));
   });
-
-  test("a decision on page 2 returns to page 2 (POST -> ?done=approved&p=2)", async () => {
-    const r = await w.post({ ...card("CATEGORY", "130", "x"), p: "2", action: "approve" }); // 130 = generated category row i=30 (page 2)
-    assert.equal(r.location, "/admin/requests?done=approved&p=2");
-    assert.equal(cards((await w.get(r.location)).html), 25);
-  });
-
-  test("emptying the last page: deciding its only row on p=3 lands on p=2 (the new last page) with the banner", async () => {
-    const r = await w.post({ ...card("SERVICE_TYPE", gen(50), "Заявка 50"), p: "3", action: "approve" });
-    assert.equal(r.location, "/admin/requests?done=approved&p=3");
-    const hop = await w.get(r.location);
-    assert.equal(hop.status, 303);
-    assert.deepEqual([...q(hop.location).entries()].sort(), [["done", "approved"], ["p", "2"]]);
-    const landed = await w.get(hop.location);
-    assert.equal(landed.status, 200);
-    assert.ok(landed.html.includes("Показано 26–49 із 49"));
-    assert.equal(flashOf(landed.html), `status|${uk.admin.requests.flash.approved}`);
-    assert.ok(!landed.html.includes(uk.admin.requests.next), "p=2 is now the last page");
+  test("the waiting-age UI: red pills say only «Чекає N дн.» (no e-mail-link text, notification-only e-mails), and the «Заявки» count turns amber", async () => {
+    const h = await html("/admin/requests");
+    assert.ok(!h.includes(uk.admin.age.linkGone) && !h.includes("Посилання в листі"));
+    assert.match(h, /class="pill age bad"/);
+    assert.match(h, /<span class="count warn" aria-hidden="true">\d+<\/span>\s*<span class="sr">, \d+ [^<]*, є ті, що чекають понад 3 дні<\/span>/);
+    assert.match(h, /aria-current="page"[^>]*title="Заявки на категорії й типи"/);
   });
 });
 

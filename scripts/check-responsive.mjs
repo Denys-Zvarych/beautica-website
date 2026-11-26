@@ -50,10 +50,20 @@ for (const route of ROUTES) {
           const host = el.closest(".prose p, .prose li");
           if (el.checkVisibility && !el.checkVisibility()) return false; // still not rendered after every <details> was opened (display:none, hidden)
           if (getComputedStyle(el).pointerEvents === "none") return false; // inert (e.g. the always-open contents summary from 600 px)
+          if (el.matches('[aria-hidden="true"][tabindex="-1"]')) return false; // a redundant pointer-only duplicate (the dialog scrim link; the real close button is a target)
+          if (el.closest("[inert]")) return false; // the page behind an open dialog / sheet (W052): unreachable by pointer, keyboard and AT, so not a target
           return !(host && el.matches(".prose a") && host.textContent.trim().length > el.textContent.trim().length);
         })
         .map((el) => ({ el, b: el.getBoundingClientRect() }))
         .filter((t) => t.b.width > 0 && t.b.height > 0)
+        .filter((t) => {
+          // Covered by something else (a modal scrim / sheet painted over it): not a target the user can hit. Only decided for a centre inside the viewport,
+          // and only when the topmost element is unrelated to the target (neither inside it nor containing it), so overlapping siblings on a plain page still count.
+          const cx = t.b.x + t.b.width / 2, cy = t.b.y + t.b.height / 2;
+          if (cx < 0 || cy < 0 || cx >= innerWidth || cy >= innerHeight) return true;
+          const top = document.elementFromPoint(cx, cy);
+          return !top || t.el.contains(top) || top.contains(t.el);
+        })
         .map((t) => ({ row: !!t.el.closest(".site-footer .links, .toc"), tag: t.el.tagName + (t.el.className ? "." + String(t.el.className).split(" ")[0] : ""), x: t.b.x, y: t.b.y, w: t.b.width, h: t.b.height }));
       return { scrollWidth: document.documentElement.scrollWidth, innerWidth: window.innerWidth, targets };
     });

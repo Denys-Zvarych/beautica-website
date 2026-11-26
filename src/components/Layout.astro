@@ -42,9 +42,11 @@ interface Props {
   preconnectImage?: string;
   /** Cloudflare Web Analytics + Umami (phase 007). Token routes pass `false` and get neither tag; `noReferrer` pages never get them either. Default true. */
   analytics?: boolean;
+  /** A modal dialog is open and the page behind it is inert: omit the skip link (it would be the first Tab stop, pointing at inert content). Default false. */
+  modal?: boolean;
 }
 
-const { hideHeader = false, hideFooter = false, noReferrer = false, preloadLatin = true, basicLatin = false, preconnect, preconnectImage, analytics = true, ...seo } = Astro.props;
+const { hideHeader = false, hideFooter = false, noReferrer = false, preloadLatin = true, basicLatin = false, preconnect, preconnectImage, analytics = true, modal = false, ...seo } = Astro.props;
 const withAnalytics = analytics && !noReferrer; // a token route (noReferrer) must never carry analytics, even if a caller forgets the prop
 ---
 
@@ -71,7 +73,7 @@ const withAnalytics = analytics && !noReferrer; // a token route (noReferrer) mu
     <slot name="head" />
   </head>
   <body>
-    <a class="skip-link" href="#main">{t("a11y.skipToContent")}</a>
+    {!modal && <a class="skip-link" href="#main">{t("a11y.skipToContent")}</a>}
     {!hideHeader && <Header />}
     <slot />
     {!hideFooter && <Footer />}

@@ -286,6 +286,9 @@ for (const file of scanned) {
   styleText.split("\n").forEach((rawLine, i) => {
     const line = rawLine.replace(/\/\*.*?\*\//g, "");
     const at = `${rel}:${i + 1 + offset}`;
+    // W052 D7: the admin-local `--a-*` custom properties (e.g. the amber warning, the sidebar width) live in src/styles/admin.css, each with a `/* reason: ... */` comment (a bare comment does not exempt);
+    // the app has no such value, so they cannot be --vt-* tokens. Exactly these declarations are exempt; every other line of that file is still checked.
+    if (rel === "src/styles/admin.css" && /^\s*--a-[a-z0-9-]+\s*:/.test(line) && /\/\*\s*reason:\s*[^*\s][^*]*\*\//.test(rawLine)) return;
     const mq = line.match(/@media[^{]*\(\s*(min|max)-width\s*:\s*(\d+)px\s*\)/);
     if (mq) {
       if (mq[1] === "max") fail(`${at}: max-width media query (mobile-first: use min-width)`);
