@@ -13,7 +13,7 @@ const pkg = JSON.parse(read("package.json"));
 const lhci = JSON.parse(read("lighthouserc.json"));
 /** Steps of the workflow: { job, text } (a step starts with `      - ` inside a job). */
 const steps = [];
-for (const [, job, body] of ci.matchAll(/^  (\w+):\n([\s\S]*?)(?=^  \w+:\n|(?![\s\S]))/gm)) for (const s of body.split(/^      - /m).slice(1)) steps.push({ job, text: s });
+for (const [, job, body] of ci.matchAll(/^  ([\w-]+):\n([\s\S]*?)(?=^  [\w-]+:\n|(?![\s\S]))/gm)) for (const s of body.split(/^      - /m).slice(1)) steps.push({ job, text: s });
 const specs = readdirSync(join(ROOT, "tests")).filter((f) => f.endsWith(".test.mjs"));
 const excluded = (/TEST_EXCLUDE:\s*([\w.,-]+)/.exec(ci)?.[1] ?? "").split(",").filter(Boolean);
 
