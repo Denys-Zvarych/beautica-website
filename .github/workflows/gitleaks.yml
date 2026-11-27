@@ -8,6 +8,12 @@ name: Gitleaks
 # BOOKING_INFO_WORKER_KEY, any service token or API key. Runs on every PR and
 # push to dev/main, plus a weekly FULL-HISTORY sweep. Any finding fails the job.
 #
+# Phase 055 W5 (deferred): the `push` trigger (dev/main) STAYS. It may be removed
+# only after the owner's rulesets on dev + main (OD-1) exist, block direct pushes
+# and require this check: then pushes arrive only through scanned PRs and the
+# weekly sweep still covers the full history. Until then a direct push is
+# scanned here (docs/website-phases/phase-055 § Owner steps).
+#
 # Cost / licensing:
 #   - Free for personal-account repos (Denys-Zvarych/*). GITLEAKS_LICENSE is
 #     ONLY required for repos owned by a GitHub *organization*; if this repo
@@ -37,7 +43,7 @@ permissions:
 jobs:
   gitleaks:
     name: Scan for secrets
-    runs-on: ubuntu-latest
+    runs-on: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && vars.CI_RUNNER_LINUX || 'ubuntu-latest' }}
     timeout-minutes: 10
     steps:
       - name: Checkout (full history)
