@@ -64,7 +64,7 @@ Cloudflare deploys; CI never does.
   A runner named by the variable must provide `/usr/bin/google-chrome` (the `e2e*` jobs). Pinned by `tests/ci-workflows.test.mjs`.
 - `e2e` keeps 2 test files at once (`TEST_CONCURRENCY`). Raising it to 4 is deferred until 10 consecutive green e2e runs prove it (then 3 on a flake).
 - Lighthouse stays at 3 runs (median) with unchanged budgets (`tests/ci-workflows.test.mjs` pins the configs and the step lists).
-- Gitleaks keeps its push trigger on `dev`/`main`; it may be removed only after the rulesets exist and block direct pushes.
+- Gitleaks has no push trigger (rulesets on `dev`/`main` block direct pushes since 2026-11-27); it runs on PRs, weekly (full history) and manually.
 
 ## Owner checklist: Cloudflare Worker + domain (one-time, manual, phase 001)
 

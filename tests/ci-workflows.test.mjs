@@ -161,14 +161,14 @@ describe("workflow wiring: heavy jobs, the gate, triggers (Q1-Q4)", () => {
     assert.match(read("scripts/run-tests.mjs"), /let concurrency = Number\(process\.env\.TEST_CONCURRENCY \?\? 2\);/);
     assert.equal([...ci.matchAll(/TEST_CONCURRENCY/g)].length - [...ci.matchAll(/# .*TEST_CONCURRENCY/g)].length, 1, "set once, on the e2e npm test step");
   });
-  test("W5 (deferred): gitleaks KEEPS its push trigger on dev/main until the rulesets exist; PR, weekly schedule and manual dispatch stay", () => {
+  test("W5: gitleaks has NO push trigger (rulesets block direct pushes); PR, weekly schedule and manual dispatch stay", () => {
     const g = code(wf["gitleaks.yml"]).join("\n");
-    assert.match(g, /^  push:\n    branches: \[main, dev\]/m);
+    assert.doesNotMatch(g, /^  push:/m, "no push trigger: the rulesets force every change through a scanned PR");
     assert.match(g, /^  pull_request:\n    branches: \[main, dev\]/m);
     assert.match(g, /^  schedule:\n.*cron: '0 6 \* \* 1'/m);
     assert.match(g, /^  workflow_dispatch: \{\}/m);
     assert.match(g, /^    name: Scan for secrets$/m);
-    assert.match(wf["gitleaks.yml"], /rulesets/i, "the note that the push trigger may go only after the rulesets exist stays");
+    assert.match(wf["gitleaks.yml"], /rulesets/i, "the note why there is no push trigger (rulesets) stays");
   });
   test("the required check names exist: `CI Gate`, `Scan for secrets`, `Promotion source (<base>)`", () => {
     assert.match(wf["promotion-source.yml"], /^    name: Promotion source \(\$\{\{ github\.event\.pull_request\.base\.ref \}\}\)$/m);
