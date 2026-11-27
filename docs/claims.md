@@ -21,7 +21,7 @@ Columns:
 | Salon admin opens settings from the profile tune button | delete-account#app | `../beautica-mobile/lib/features/salon/presentation/admin_own_profile_screen.dart:347` | live |
 | Client with more than 50 future bookings must cancel some first | delete-account#app | `../beautica-backend/src/main/java/com/beautica/user/ClientAccountDeletionService.java:77` | live |
 | Master with more than 500 future bookings must cancel some first | delete-account#app | `../beautica-backend/src/main/java/com/beautica/user/StaffAccountSelfDeletionService.java:73` | live |
-| Reply to a deletion request within 30 calendar days (policy commitment, no code behind it) | delete-account#request | `src/content/legal/uk/privacy.md:224` | live |
+| Reply to a deletion request within 30 calendar days (policy commitment, no code behind it) | delete-account#request | `src/content/legal/uk/privacy.md:225` | live |
 | Guest can cancel a booking until 2 hours before it starts | l/cancel#st-closed | `../beautica-backend/src/main/java/com/beautica/config/BookingSmsProperties.java:33` | live |
 | After that window the cancel is refused (422) and the guest is told to contact the master | l/cancel#st-closed | `../beautica-backend/src/main/java/com/beautica/booking/service/BookingCancellationService.java:150` | live |
 | A used or unknown cancel link answers 404 («вже використано або недійсне») | l/cancel#st-notfound | `../beautica-backend/src/main/java/com/beautica/booking/controller/PublicBookingController.java:234` | live |
@@ -103,3 +103,6 @@ Columns:
 | 21 category icons: «Масаж і догляд за тілом» is the 21st, shown with the app's own icon (guarded by tests/booking-lib.test.mjs «category icon files (21)») | src:src/lib/categoryIcon.ts#"масаж і догляд за тілом": "body_massage" | `../beautica-mobile/lib/core/icons/category_icons.dart:181` | live |
 | SMS provider is SMSClub (OTP codes and the staff invite SMS) | privacy#recipients | `../beautica-backend/src/main/java/com/beautica/config/SmsClubProperties.java:18` | live |
 | Booking SMS/Telegram messages go only to guests (registered users get booking notices in the app and by email) | privacy#data | `../beautica-backend/src/main/java/com/beautica/notification/channel/GuestMessageKind.java:9` | live |
+| Privacy 2.2 (W051): guests and walk-ins are rated by phone: a provider can rate a client without an account, keyed to the phone (E.164) the client gave or the provider typed | privacy#data | `../docs/specs/client.md:146` | live |
+| Privacy 2.2 (W051): providers see comments about a client anonymously (no author, visit month only) on the client card; the client sees them only through a support data-access request | privacy#recipients | `../docs/specs/support-legal.md:104` | live |
+| Privacy 2.2 (W051): guest and walk-in ratings are deleted when the guest data is anonymised (12 months after the visit) | privacy#retention | `../docs/specs/reviews.md:61` | live |
