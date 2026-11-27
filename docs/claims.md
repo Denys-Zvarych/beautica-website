@@ -56,7 +56,7 @@ Columns:
 | Reports (terms §7): the button in the app is «Поскаржитися» (on a photo «Поскаржитися на фото», on a client «Поскаржитися на клієнта») | terms#prohibited | `../beautica-mobile/lib/l10n/app_uk.arb:7280` | live |
 | Reports (terms §7): the report is anonymous, the author is not told who reported | terms#prohibited | `../beautica-mobile/lib/l10n/app_uk.arb:7282` | live |
 | Reports (privacy §2): the team e-mail carries only report number, target type and id, reason and reporter id, never the comment or the review text | privacy#data | `../docs/backend-phases/phase-395-ugc-content-reports.md:35` | live |
-| Moderation (terms §4): 3 different clients with a completed visit at that master or salon hide a review automatically (staff do not count) | terms#reviews | `../beautica-backend/src/main/resources/application.yml:744` | live |
+| Moderation (terms §4): 3 different clients with a completed visit at that master or salon hide a review automatically (staff do not count) | terms#reviews | `../beautica-backend/src/main/resources/application.yml:748` | live |
 | Moderation (terms §4): a hidden or removed review leaves public lists and the rating; the author still sees it in their own list; support can restore or remove | terms#reviews | `../docs/backend-phases/phase-396-ugc-moderation-takedown.md:28` | live |
 | Moderation (terms §7): support can hide/remove, leave unchanged or restore; the author and the reporter are not told the outcome | terms#prohibited | `../docs/backend-phases/phase-396-ugc-moderation-takedown.md:40` | live |
 | Moderation (privacy §8): resolved reports are kept while the target exists, then 1 year after it is gone | privacy#retention | `../beautica-backend/src/main/java/com/beautica/moderation/service/ContentReportRetentionService.java:39` | live |
@@ -87,7 +87,7 @@ Columns:
 | Telegram (opt-in, guests): the confirmation of a booking the master / salon made for the guest can go to Telegram (2026-11-04) | privacy#guest | `../beautica-backend/src/main/java/com/beautica/notification/channel/GuestMessageKind.java:14` | live |
 | Telegram link is keyed by an HMAC-SHA-256 of the phone | privacy#guest | `../beautica-backend/src/main/java/com/beautica/common/security/PhoneHasher.java:29` | live |
 | Telegram link row holds the phone hash and no raw phone (the number shared in the bot is compared once and discarded) | privacy#guest | `../beautica-backend/src/main/java/com/beautica/notification/telegram/link/TelegramLink.java:42` | live |
-| Telegram link is deleted with the guest data 12 months after the last visit | privacy#retention | `../beautica-backend/src/main/resources/application.yml:737` | live |
+| Telegram link is deleted with the guest data 12 months after the last visit | privacy#retention | `../beautica-backend/src/main/resources/application.yml:741` | live |
 | Telegram link is deleted 12 months after the bot was blocked (phase 409 D2, NOT SHIPPED: release gate) | privacy#retention | `../docs/backend-phases/phase-409-telegram-retention-erasure.md:20` | not-live |
 | Telegram link codes are deleted at most 2 days after they expire: 1 day past expiry, daily job (phase 409 D4, NOT SHIPPED: release gate) | privacy#retention | `../docs/backend-phases/phase-409-telegram-retention-erasure.md:25` | not-live |
 | In-app crash reports are on by default (opt-out switch) | privacy#data | `../beautica-mobile/lib/core/diagnostics/install_id.dart:93` | live |
