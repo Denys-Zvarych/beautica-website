@@ -4,7 +4,7 @@ import { test, describe, before, after } from "node:test";
 import assert from "node:assert/strict";
 import { launch, open } from "./helpers/browser.mjs";
 import { gzSize } from "../scripts/lib/gzSize.mjs";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { salonPage, pickServices, toggleMaster, clickAndLoadDays, scheduleMaster } from "./helpers/salon.mjs";
 import { driveTo } from "./helpers/book.mjs";
@@ -179,11 +179,25 @@ describe("JS budget: before intent and after a full walk", () => {
       const u = new URL(r.url());
       if (u.origin === new URL(BASE).origin && u.pathname.endsWith(".js") && r.status() === 200 && existsSync(join(ROOT, "dist/client", u.pathname))) seen.set(u.pathname, gzSize(readFileSync(join(ROOT, "dist/client", u.pathname))));
     });
-    await env.page.reload({ waitUntil: "networkidle" }); // listener on, then everything the page loads by itself
+    // In-flight bookkeeping instead of Playwright's "networkidle": that state needs 500 ms of zero connections and never arrives while one slow
+    // request hangs, and then the failure names no request (CI PR #68: waitForLoadState timed out after 60 s). This one lists what is pending.
+    const pending = new Map();
+    env.page.on("request", (r) => pending.set(r, r.url()));
+    for (const ev of ["requestfinished", "requestfailed"]) env.page.on(ev, (r) => pending.delete(r));
+    const settled = async (what) => {
+      const deadline = Date.now() + 60_000;
+      for (let calm = 0; calm < 3; ) {
+        if (Date.now() > deadline) throw new Error(`${what}: ${pending.size} request(s) still in flight after 60 s: ${[...pending.values()].join(", ")}`);
+        await new Promise((r) => setTimeout(r, 200));
+        calm = pending.size === 0 ? calm + 1 : 0;
+      }
+    };
+    await env.page.reload({ waitUntil: "load" }); // listener on, then everything the page loads by itself
+    await settled("after reload");
     const total = () => [...seen.values()].reduce((a, n) => a + n, 0);
     const before = total();
     await walk();
-    await env.page.waitForLoadState("networkidle");
+    await settled("after the walk");
     return { before, full: total(), files: [...seen.keys()].map((p) => p.split("/").pop()) };
   }
   const gate = (route, m) => {
@@ -227,5 +241,19 @@ describe("JS budget: before intent and after a full walk", () => {
     } finally {
       await env.context.close();
     }
+  });
+});
+
+// W050: the server-icon feature must not grow the page-load entry. main.js (every link page, before intent) was 3822 B gz on the dev baseline when measured with
+// gzSize (the phase notes record 3807 B from another measurement); the feature moved its code into the lazy icon-probe / icons-remote chunks, so main.js
+// may not exceed the dev figure. Lower it when main.js shrinks; do not raise it: put new code in a chunk.
+const MAIN_JS_DEV_GZ = 3822;
+describe("main.js gz size vs the dev baseline", () => {
+  test(`dist main.js <= ${MAIN_JS_DEV_GZ} B gz`, () => {
+    const dir = join(ROOT, "dist/client/_astro");
+    const files = readdirSync(dir).filter((f) => /^main\.[\w-]+\.js$/.test(f));
+    assert.equal(files.length, 1, `exactly one main.*.js expected, got ${files.join(", ")}`);
+    const size = gzSize(readFileSync(join(dir, files[0])));
+    assert.ok(size <= MAIN_JS_DEV_GZ, `${files[0]} is ${size} B gz, over the dev baseline ${MAIN_JS_DEV_GZ} B: move the new code into a lazy chunk`);
   });
 });

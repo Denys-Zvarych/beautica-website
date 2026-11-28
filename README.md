@@ -51,6 +51,21 @@ Feature branch from `dev` -> PR to `dev` -> release PR `dev` -> `main`. Never pu
 CI (`.github/workflows/ci.yml`) runs on PRs: dependency audit, build, lychee (offline), html-validate, token parity, Lighthouse budget.
 Cloudflare deploys; CI never does.
 
+### CI gate, draft PRs, path skip (phase 055)
+
+- **`CI Gate`** is the one required check (rulesets on `dev` + `main`, with `Scan for secrets` and `Promotion source (dev|main)`). It runs always and
+  summarises `changes`, `site`, `e2e`, `e2e_booking`, `lighthouse`: any failure, cancellation or heavy job skipped when it was needed fails it. Its script
+  (`scripts/ci/gate.mjs`) and the classifier (`scripts/ci/classify-changes.mjs`) run from the BASE branch copy. Never require the heavy jobs themselves.
+- **Draft PRs** run `site` only; `e2e`, `e2e_booking`, `lighthouse` are deferred and `CI Gate` FAILS with `DEFERRED: draft` (so a draft can never read green).
+  Mark the PR ready: all four jobs run on the ready head. A re-run of an old draft run fails closed (`STALE DEFERRED`: the live PR is checked). Label `full-ci` forces the heavy jobs (also on a draft or a docs-only PR): it takes effect on the next push (or close and reopen the PR); a re-run reuses the old event payload and does not see a new label (labeling alone triggers nothing).
+- **Path skip**: the heavy jobs are skipped on a ready PR only when EVERY changed file is root `*.md`, `docs/**`, `LICENSE`, `.gitignore`,
+  `.github/ISSUE_TEMPLATE/**` or `.claude/**`. Any other file, an empty or unreadable diff or a classifier error runs everything. A PR into `main` (the release) always runs all four jobs.
+- **Runners**: every job uses `runs-on: ${{ <fork guard> && vars.CI_RUNNER_LINUX || 'ubuntu-latest' }}` (fork PRs always GitHub-hosted; variable unset = `ubuntu-latest`).
+  A runner named by the variable must provide `/usr/bin/google-chrome` (the `e2e*` jobs). Pinned by `tests/ci-workflows.test.mjs`.
+- `e2e` keeps 2 test files at once (`TEST_CONCURRENCY`). Raising it to 4 is deferred until 10 consecutive green e2e runs prove it (then 3 on a flake).
+- Lighthouse stays at 3 runs (median) with unchanged budgets (`tests/ci-workflows.test.mjs` pins the configs and the step lists).
+- Gitleaks has no push trigger (rulesets on `dev`/`main` block direct pushes since 2026-11-27); it runs on PRs, weekly (full history) and manually.
+
 ## Owner checklist: Cloudflare Worker + domain (one-time, manual, phase 001)
 
 Hosting is a Cloudflare Worker with static assets (`wrangler.jsonc`), built by Workers Builds. Do these in order.
@@ -90,3 +105,40 @@ via `.wrangler/deploy/config.json`; `.assetsignore` keeps it out of the public a
 
 Token parity checks out `Denys-Zvarych/beautica-mobile` (branch `dev`, `lib/core/theme` only). That works while the mobile repo is public.
 When it goes private the checkout step fails softly and CI prints a warning (parity is then not verified in CI; run the check locally).
+
+## Admin (`/admin*`, phase 039): owner setup per environment
+
+Private operator area. Cloudflare Access at the edge plus a Worker-side Access-JWT check (anything else: 404). The Worker calls only
+`/api/v1/internal/catalog/**` with the catalog-scoped key (secret, never sent to the browser). Missing value = `/admin` disabled (404).
+The check is IdP-independent (Google, one-time PIN...): only the signed claims (`aud`, `iss`, `exp`, `email`) count.
+
+| | Prod (`https://beautica.app`) | Staging (`https://dev-beautica-site.beautica-ua.workers.dev`) |
+|---|---|---|
+| Access app (Zero Trust > Access > Applications > Self-hosted) | domain `beautica.app`, path `admin` (also `admin/*`), policy Allow: email = owner, session 24 h | domain `dev-beautica-site.beautica-ua.workers.dev`, path `admin`, same policy; own AUD |
+| `CF_ACCESS_TEAM_DOMAIN` (var) | `beautica.cloudflareaccess.com` (in `wrangler.jsonc` `vars`) | same (in `previews.vars`) |
+| `CF_ACCESS_AUD` (var) | prod app's Application Audience (AUD) tag | staging app's AUD tag (differs) |
+| `ADMIN_EMAILS` (var) | owner email(s), comma-separated | same |
+| `INTERNAL_CATALOG_KEY` (secret) | = backend prod `INTERNAL_CATALOG_KEY` | = backend staging `INTERNAL_CATALOG_KEY` |
+| `API_ORIGIN` (var, exists) | `https://api.beautica.app` | staging Railway API (already in `previews.vars`) |
+
+Vars/secrets go in the dashboard (Workers > beautica-site > Settings > Variables and Secrets; staging = the preview environment) or
+`wrangler secret put INTERNAL_CATALOG_KEY`; `keep_vars` keeps them across deploys. Other preview URLs have no Access app: `/admin` returns 404 there.
+
+Render the authenticated shell (test-only harness, no bypass in `src/`; it serves a throwaway JWKS to a temp copy of `dist/`):
+
+```bash
+npm run build
+node scripts/render-admin.mjs --out /tmp/admin.html            # HTML of /admin as the owner (exit 0 on 200); then html-validate / axe on the file
+node scripts/render-admin.mjs --serve 4399                     # http://127.0.0.1:4399/admin for screenshots at 360/768/1280 and axe (Ctrl-C to stop)
+```
+
+Checks on `/admin` (all through the harness; `npm run build` first):
+
+```bash
+npm run check:admin                                   # harness + check-responsive --base + check-axe + Lighthouse (scripts/lighthouserc-admin.json); wired into the CI `lighthouse` job
+node scripts/render-admin.mjs --serve 4399            # in one shell, then in another:
+node scripts/check-responsive.mjs --base http://127.0.0.1:4399 --routes /admin
+node scripts/check-axe.mjs http://127.0.0.1:4399/admin   # Playwright + axe-core (any URL; replaces @axe-core/cli, whose chromedriver does not run here)
+```
+
+`/admin` uses the small Latin font subsets of the legal pages (~83 KB of fonts instead of ~109 KB). `INTERNAL_CATALOG_KEY` must be >= 32 characters and `API_ORIGIN` must be a valid https origin (no prod fallback), else `/admin` is disabled (404).

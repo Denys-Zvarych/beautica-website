@@ -22,7 +22,7 @@ export default defineConfig({
   integrations: [
     sitemap({
       // 404, the token-route shells (/l/*) and the wizard fragment (/book-steps/*) must never reach the sitemap.
-      filter: (page) => !/\/404$/.test(page) && !/\/l\//.test(page) && !/\/book-steps\//.test(page),
+      filter: (page) => !/\/404$/.test(page) && !/\/l\//.test(page) && !/\/book-steps\//.test(page) && !/\/admin(\/|$)/.test(page),
     }),
   ],
   i18n: {

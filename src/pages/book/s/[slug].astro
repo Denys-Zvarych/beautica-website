@@ -14,9 +14,11 @@ import SalonProfile from "../../../components/book/SalonProfile.astro";
 import { t } from "../../../i18n/t";
 import { isValidSlug } from "../../../lib/booking/slug";
 import { bookingConfig } from "../../../lib/booking/config";
-import { fetchReviewsFirstPage, fetchSalonInfo } from "../../../lib/booking/info";
+import { fetchCategoryIcons, fetchReviewsFirstPage, fetchSalonInfo } from "../../../lib/booking/info";
+import { imgOriginsFor } from "../../../lib/mediaOrigin";
+import { iconUrls } from "../../../lib/booking/icons";
 import { imageOrigins, noticeResponse, okResponse } from "../../../lib/booking/respond";
-import { imageOrigin } from "../../../lib/booking/types";
+import { imageOrigin, pinSalonPhotos } from "../../../lib/booking/types";
 import { fitDescription, fitTitle, parseSort } from "../../../lib/booking/format";
 import { breadcrumbList, profileBusiness } from "../../../lib/jsonld";
 
@@ -25,9 +27,9 @@ const cfg = bookingConfig();
 const ip = Astro.request.headers.get("cf-connecting-ip") ?? undefined;
 const sort = parseSort(Astro.url.searchParams.get("sort"));
 // The profile and (for a non-default sort) page 0 of the chosen sort are independent calls: fetched in parallel.
-const [result, sortedReviews] = isValidSlug(slug)
-  ? await Promise.all([fetchSalonInfo(cfg, slug, ip), sort !== "NEWEST" ? fetchReviewsFirstPage(cfg, "salon", slug, sort, ip) : Promise.resolve(null)])
-  : ([{ kind: "not-found" } as const, null] as const);
+const [result, sortedReviews, icons] = isValidSlug(slug)
+  ? await Promise.all([fetchSalonInfo(cfg, slug, ip), sort !== "NEWEST" ? fetchReviewsFirstPage(cfg, "salon", slug, sort, ip) : Promise.resolve(null), fetchCategoryIcons(cfg, { self: Astro.url.origin, waitUntil: (pr) => (Astro.locals as { cfContext?: { waitUntil(p: Promise<unknown>): void } }).cfContext?.waitUntil(pr) })])
+  : ([{ kind: "not-found" } as const, null, {}] as const);
 const site = (Astro.site as URL).origin;
 const home = { href: "/", label: t("book.notice.home") };
 const retry = { href: Astro.url.pathname, label: t("book.notice.unavailable.cta") };
@@ -44,8 +46,8 @@ else if (!result.data.bookable || result.data.masters.length === 0) notice = { .
 if (notice) noticeResponse(Astro.response, notice.status, notice.retryAfter);
 // An unknown slug (the backend's 404) may be answered from the edge for a few seconds so a probe loop stays off the backend. Internal header, stripped by the middleware.
 if (result.kind === "not-found" && isValidSlug(slug)) Astro.response.headers.set("X-Beautica-Neg-Ttl", "15");
-const info = result.kind === "ok" && !notice ? result.data : null;
-if (info && result.kind === "ok") okResponse(Astro.response, cfg, result.ttl, imageOrigins([info.avatarUrl, info.coverImageUrl, ...info.portfolio, ...info.masters.map((m) => m.avatarUrl)]), { noindexFollow: parseSort(Astro.url.searchParams.get("sort")) !== "NEWEST" });
+const info = result.kind === "ok" && !notice ? pinSalonPhotos(result.data, imgOriginsFor(cfg)) : null;
+if (info && result.kind === "ok") okResponse(Astro.response, cfg, result.ttl, imageOrigins([info.avatarUrl, info.coverImageUrl, ...info.portfolio, ...info.masters.map((m) => m.avatarUrl), ...iconUrls(icons)], imgOriginsFor(cfg)), { noindexFollow: parseSort(Astro.url.searchParams.get("sort")) !== "NEWEST" });
 
 const firstReviews = info ? (sortedReviews ?? info.latestReviews) : [];
 const canonical = `${site}/book/s/${slug}`;
@@ -92,8 +94,9 @@ const jsonLd = info
         data-city={info.city ?? info.region ?? ""}
         data-address={street}
         data-note={info.locationNote ?? ""}
+        data-icons={iconUrls(icons).length > 0 ? JSON.stringify(icons) : undefined}
       >
-        <SalonProfile info={info} apiOrigin={cfg.apiOrigin} sort={sort} reviews={firstReviews} />
+        <SalonProfile info={info} icons={icons} apiOrigin={cfg.apiOrigin} sort={sort} reviews={firstReviews} />
       </main>
     ) : (
       <BookNotice topbar={t("book.salon.topbar")} title={notice!.title} text={notice!.text} cta={notice!.cta} />
@@ -104,3 +107,6 @@ const jsonLd = info
 <script>
   import "../../../scripts/booking/main";
 </script>
+{iconUrls(icons).length > 0 && <script>
+  import "../../../scripts/booking/icons-remote";
+</script>}

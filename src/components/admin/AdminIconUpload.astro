@@ -1,0 +1,35 @@
+---
+// The category-icon upload form (W049): a plain multipart <form method="post" action="/admin/icon"> (no script). `category` = the wire name, `returnTo` = the admin URL to come back
+// to (the Worker rebuilds it from whitelisted params, it is never echoed raw). `replace` only picks the «Іконку замінено» wording. Used in the icon dialog, the request detail /
+// approve panel and the enable panel; never nested in another <form>.
+import CtaButton from "../CtaButton.astro";
+import AdminButton from "./AdminButton.astro";
+import { t } from "../../i18n/t";
+interface Props {
+  category: string;
+  returnTo: string;
+  replace?: boolean;
+  /** Distinguishes several forms on one page (label / hint ids). */
+  id?: string;
+  /** Mark the field invalid (the last upload was refused). */
+  invalid?: boolean;
+  /** A «Скасувати» link before the submit (the dialog's close target). */
+  cancelHref?: string;
+}
+const { category, returnTo, replace = false, id = "ic", invalid = false, cancelHref } = Astro.props;
+---
+
+<form method="post" action="/admin/icon" enctype="multipart/form-data" class="icon-form">
+  <input type="hidden" name="category" value={category} />
+  <input type="hidden" name="return" value={returnTo} />
+  {replace && <input type="hidden" name="replace" value="1" />}
+  <div class="field">
+    <label for={`${id}-f`}>{t("admin.icons.fileLabel")}</label>
+    <input class="in" id={`${id}-f`} name="icon" type="file" accept=".svg,image/svg+xml" required aria-describedby={`${id}-h`} aria-invalid={invalid ? "true" : undefined} />
+    <span class="hint" id={`${id}-h`}>{t("admin.icons.hint")}</span>
+  </div>
+  <div class="dlg-f">
+    {cancelHref && <AdminButton href={cancelHref}>{t("admin.cancel")}</AdminButton>}
+    <CtaButton type="submit">{t("admin.icons.save")}</CtaButton>
+  </div>
+</form>

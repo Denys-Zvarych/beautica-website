@@ -1,0 +1,26 @@
+---
+// GET search form of an /admin list (W052 D2): the text goes to `?q=`, the current filter rides along as hidden fields. Enter or «Шукати» submits.
+import Icon from "../Icon.astro";
+import AdminButton from "./AdminButton.astro";
+import { t } from "../../i18n/t";
+interface Props {
+  action: string;
+  value: string;
+  label: string;
+  placeholder: string;
+  submit: string;
+  /** Filter params kept across a search (only the non-default ones). */
+  keep?: Record<string, string>;
+}
+const { action, value, label, placeholder, submit, keep = {} } = Astro.props;
+---
+
+<form class="search" method="get" action={action} role="search">
+  {Object.entries(keep).map(([k, v]) => <input type="hidden" name={k} value={v} />)}
+  <div class="box">
+    <label class="sr" for="q">{label}</label>
+    <Icon name="search" />
+    <input id="q" class="in" type="search" name="q" placeholder={placeholder} value={value} maxlength="100" autocomplete="off" />
+  </div>
+  <AdminButton type="submit" small>{submit}</AdminButton>
+</form>

@@ -310,14 +310,16 @@
   color: var(--vt-color-accent);
   clip-path: inset(0 var(--cut, 0%) 0 0);
 }
-/* Category icons are fetched after the page has loaded (src/scripts/booking/icons.ts): they are decorative and must not compete with the first paint. */
-.ai[data-src]:not([data-ready]) {
+/* Category icons are fetched after the page has loaded (src/scripts/booking/icons.ts, icon-probe.ts for server icons): they are decorative and must not compete with the first paint. */
+.ai[data-src]:not([data-ready]),
+.ai[data-remote]:not([data-ready]) {
   visibility: hidden;
 }
 
 /* ---------- ProfileTabBar (progressive: without script every panel is shown, one after another) ---------- */
 .tabs {
   display: flex;
+  gap: var(--vt-space-sm);
   border-bottom: var(--vt-app-hair) solid var(--vt-color-faint);
 }
 .tab {
@@ -943,6 +945,108 @@ a.tab {
   border-radius: var(--vt-radius-pill);
   background: linear-gradient(to right, var(--vt-color-accent), var(--vt-color-accent-latte));
 }
+/* Bar width = whole percent as a class (no inline style: CSP-clean, html-validate no-inline-style). */
+.drow .fillbar.w0 { width: 0%; }
+.drow .fillbar.w1 { width: 1%; }
+.drow .fillbar.w2 { width: 2%; }
+.drow .fillbar.w3 { width: 3%; }
+.drow .fillbar.w4 { width: 4%; }
+.drow .fillbar.w5 { width: 5%; }
+.drow .fillbar.w6 { width: 6%; }
+.drow .fillbar.w7 { width: 7%; }
+.drow .fillbar.w8 { width: 8%; }
+.drow .fillbar.w9 { width: 9%; }
+.drow .fillbar.w10 { width: 10%; }
+.drow .fillbar.w11 { width: 11%; }
+.drow .fillbar.w12 { width: 12%; }
+.drow .fillbar.w13 { width: 13%; }
+.drow .fillbar.w14 { width: 14%; }
+.drow .fillbar.w15 { width: 15%; }
+.drow .fillbar.w16 { width: 16%; }
+.drow .fillbar.w17 { width: 17%; }
+.drow .fillbar.w18 { width: 18%; }
+.drow .fillbar.w19 { width: 19%; }
+.drow .fillbar.w20 { width: 20%; }
+.drow .fillbar.w21 { width: 21%; }
+.drow .fillbar.w22 { width: 22%; }
+.drow .fillbar.w23 { width: 23%; }
+.drow .fillbar.w24 { width: 24%; }
+.drow .fillbar.w25 { width: 25%; }
+.drow .fillbar.w26 { width: 26%; }
+.drow .fillbar.w27 { width: 27%; }
+.drow .fillbar.w28 { width: 28%; }
+.drow .fillbar.w29 { width: 29%; }
+.drow .fillbar.w30 { width: 30%; }
+.drow .fillbar.w31 { width: 31%; }
+.drow .fillbar.w32 { width: 32%; }
+.drow .fillbar.w33 { width: 33%; }
+.drow .fillbar.w34 { width: 34%; }
+.drow .fillbar.w35 { width: 35%; }
+.drow .fillbar.w36 { width: 36%; }
+.drow .fillbar.w37 { width: 37%; }
+.drow .fillbar.w38 { width: 38%; }
+.drow .fillbar.w39 { width: 39%; }
+.drow .fillbar.w40 { width: 40%; }
+.drow .fillbar.w41 { width: 41%; }
+.drow .fillbar.w42 { width: 42%; }
+.drow .fillbar.w43 { width: 43%; }
+.drow .fillbar.w44 { width: 44%; }
+.drow .fillbar.w45 { width: 45%; }
+.drow .fillbar.w46 { width: 46%; }
+.drow .fillbar.w47 { width: 47%; }
+.drow .fillbar.w48 { width: 48%; }
+.drow .fillbar.w49 { width: 49%; }
+.drow .fillbar.w50 { width: 50%; }
+.drow .fillbar.w51 { width: 51%; }
+.drow .fillbar.w52 { width: 52%; }
+.drow .fillbar.w53 { width: 53%; }
+.drow .fillbar.w54 { width: 54%; }
+.drow .fillbar.w55 { width: 55%; }
+.drow .fillbar.w56 { width: 56%; }
+.drow .fillbar.w57 { width: 57%; }
+.drow .fillbar.w58 { width: 58%; }
+.drow .fillbar.w59 { width: 59%; }
+.drow .fillbar.w60 { width: 60%; }
+.drow .fillbar.w61 { width: 61%; }
+.drow .fillbar.w62 { width: 62%; }
+.drow .fillbar.w63 { width: 63%; }
+.drow .fillbar.w64 { width: 64%; }
+.drow .fillbar.w65 { width: 65%; }
+.drow .fillbar.w66 { width: 66%; }
+.drow .fillbar.w67 { width: 67%; }
+.drow .fillbar.w68 { width: 68%; }
+.drow .fillbar.w69 { width: 69%; }
+.drow .fillbar.w70 { width: 70%; }
+.drow .fillbar.w71 { width: 71%; }
+.drow .fillbar.w72 { width: 72%; }
+.drow .fillbar.w73 { width: 73%; }
+.drow .fillbar.w74 { width: 74%; }
+.drow .fillbar.w75 { width: 75%; }
+.drow .fillbar.w76 { width: 76%; }
+.drow .fillbar.w77 { width: 77%; }
+.drow .fillbar.w78 { width: 78%; }
+.drow .fillbar.w79 { width: 79%; }
+.drow .fillbar.w80 { width: 80%; }
+.drow .fillbar.w81 { width: 81%; }
+.drow .fillbar.w82 { width: 82%; }
+.drow .fillbar.w83 { width: 83%; }
+.drow .fillbar.w84 { width: 84%; }
+.drow .fillbar.w85 { width: 85%; }
+.drow .fillbar.w86 { width: 86%; }
+.drow .fillbar.w87 { width: 87%; }
+.drow .fillbar.w88 { width: 88%; }
+.drow .fillbar.w89 { width: 89%; }
+.drow .fillbar.w90 { width: 90%; }
+.drow .fillbar.w91 { width: 91%; }
+.drow .fillbar.w92 { width: 92%; }
+.drow .fillbar.w93 { width: 93%; }
+.drow .fillbar.w94 { width: 94%; }
+.drow .fillbar.w95 { width: 95%; }
+.drow .fillbar.w96 { width: 96%; }
+.drow .fillbar.w97 { width: 97%; }
+.drow .fillbar.w98 { width: 98%; }
+.drow .fillbar.w99 { width: 99%; }
+.drow .fillbar.w100 { width: 100%; }
 .drow .cnt {
   width: calc(var(--vt-space-lg) + var(--vt-space-xs) / 2);
   text-align: right;

@@ -1,0 +1,22 @@
+---
+// How long a pending request has waited (W052, WEB-70): neutral 0-2 days, amber 3-6, red 7+. The e-mail-link tooltip text (D6) is a `title` AND visually hidden
+// text, so it never depends on hover. Rendered only while REQUEST_EMAIL_LINK_DAYS is set (requestAge.ts).
+import Icon from "../Icon.astro";
+import { t } from "../../i18n/t";
+import { ageBand, ageLabelMsg, linkTipMsg } from "../../lib/admin/requestAge.ts";
+interface Props {
+  days: number;
+}
+const { days } = Astro.props;
+const band = ageBand(days);
+const msg = (m: { key: string; vars?: Record<string, number> }) => t(m.key, m.vars);
+const label = msg(ageLabelMsg(days));
+const tipMsg = linkTipMsg(days);
+const tip = tipMsg ? msg(tipMsg) : null;
+---
+
+<span class:list={["pill", "age", { warn: band === "warn", bad: band === "bad" }]} title={tip ?? undefined}>
+  <Icon name={band === "bad" ? "error" : band === "warn" ? "warning" : "schedule"} />
+  {label}
+  {tip && <span class="sr">. {tip}</span>}
+</span>

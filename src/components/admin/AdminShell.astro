@@ -1,0 +1,83 @@
+---
+// The private /admin shell (W052): sidebar (bottom bar < 600 px, rail 600-1023, sidebar 1024+) from ADMIN_NAV, top bar with crumbs, the signed-in actor and «Вийти»,
+// the page content, and the flash toast. Wraps Layout with the same props every /admin page used (noindex, no analytics, no header / footer). No script.
+import Layout from "../Layout.astro";
+import "../../styles/fonts-legal.css"; // after Layout (its later @font-face wins): the small Latin subset, like the legal pages
+import "../../styles/admin.css";
+import Icon from "../Icon.astro";
+import AdminButton from "./AdminButton.astro";
+import AdminFlash from "../AdminFlash.astro";
+import { t } from "../../i18n/t";
+import { ADMIN_NAV } from "../../lib/admin/nav.ts";
+import { loadNav, NAV_UNKNOWN, type NavInfo } from "../../lib/admin/navInfo.ts";
+import { pluralUk } from "../../lib/admin/listQuery.ts";
+import type { AdminConfig } from "../../lib/admin/config.ts";
+interface Props {
+  title: string;
+  description: string;
+  /** Path of the page: also the active nav item (`aria-current`). */
+  path: string;
+  actor: string;
+  /** Sidebar count: pass what the page already loaded; omitted = one extra backend call (needs `cfg`). */
+  nav?: NavInfo;
+  cfg?: AdminConfig | null;
+  flash?: { ok: boolean; text: string; closeHref: string } | null;
+  /** A dialog / sheet is open (slot="dialog"): the whole page behind it is rendered `inert` (no tab, no click, hidden from AT). */
+  modal?: boolean;
+}
+const { title, description, path, actor, nav, cfg, flash, modal = false } = Astro.props;
+const info = nav ?? (cfg ? await loadNav(cfg, actor) : NAV_UNKNOWN);
+let crumb: [string | null, string] = [null, t("admin.nav.overview")];
+for (const sec of ADMIN_NAV) for (const it of sec.items) if (it.href === path) crumb = [sec.titleKey ? t(sec.titleKey) : null, t(it.labelKey)];
+const noun = (n: number) => pluralUk(n, [t("admin.nav.newOne"), t("admin.nav.newFew"), t("admin.nav.newMany")]);
+const countAria = (n: number) => t("admin.nav.countAria", { n, noun: noun(n) }) + (info.urgent ? t("admin.nav.urgentSuffix") : "");
+const initial = [...actor][0]?.toUpperCase() ?? "";
+---
+
+<Layout title={title} description={description} canonicalPath={path} noindex noReferrer referrerPolicy="same-origin" analytics={false} hideHeader hideFooter basicLatin modal={modal}>
+  <div class="app" inert={modal}>
+    <aside class="side" aria-label={t("admin.navLabel")}>
+      <a class="brand" href="/admin">
+        <span class="logo"><img src="/icon-192.png" alt="" width="40" height="40" /></span>
+        <span class="brand-t"><span class="vt-wordmark">{t("admin.brand")}</span><span class="vt-label">{t("admin.brandSub")}</span></span>
+      </a>
+      <nav class="nav" aria-label={t("admin.nav.menu")}>
+        {ADMIN_NAV.map((sec) => (
+          <div class="nav-sec" role={sec.id ? "group" : undefined} aria-labelledby={sec.id ? `ns-${sec.id}` : undefined}>
+            {sec.titleKey && <p class="nav-h vt-label" id={`ns-${sec.id}`}>{t(sec.titleKey)}</p>}
+            {sec.items.map((it) => (
+              <a class="nav-i" href={it.href} aria-current={it.href === path ? "page" : undefined} title={it.longKey ? t(it.longKey) : undefined}>
+                <Icon name={it.icon} />
+                <span class="nav-l">{t(it.labelKey)}</span>
+                {it.href === "/admin/requests" && info.count !== null && info.count > 0 && (
+                  <span class:list={["count", { warn: info.urgent }]} aria-hidden="true">{info.count}</span>
+                  <span class="sr">, {countAria(info.count)}</span>
+                )}
+              </a>
+            ))}
+          </div>
+        ))}
+      </nav>
+      <p class="side-foot vt-label">{t("admin.footA")}<br />{t("admin.footB")}</p>
+    </aside>
+
+    <div class="col">
+      <header class="top">
+        <nav class="crumbs vt-label" aria-label={t("admin.crumbsLabel")}>
+          {crumb[0] && <><span>{crumb[0]}</span><Icon name="chevron-right" /></>}
+          <span aria-current="page">{crumb[1]}</span>
+        </nav>
+        <div class="who">
+          <span class="avatar" aria-hidden="true">{initial}</span>
+          <span class="who-t"><span class="vt-label">{t("admin.actorLabel")}</span><span class="who-mail">{actor}</span></span>
+          <AdminButton href="/cdn-cgi/access/logout" icon="logout" small label={t("admin.logoutTitle")}><span class="hide-sm">{t("admin.logout")}</span></AdminButton>
+        </div>
+      </header>
+      <main id="main" tabindex="-1">
+        {flash && <div class="toasts" aria-live="polite"><AdminFlash ok={flash.ok} text={flash.text} closeHref={flash.closeHref} /></div>}
+        <slot />
+      </main>
+    </div>
+  </div>
+  <slot name="dialog" />
+</Layout>

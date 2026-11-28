@@ -1,0 +1,425 @@
+---
+// W041 / W052: the live catalog. GET lists the categories (filter chips + search + 10 per page = GET params the Worker applies to the full list) as a table; a category's
+// service types open with `?open=<wire name>`. Rename / disable / enable / delete are server-rendered panels (`?dlg=...&cat=...[&type=...]`), each confirming with a plain
+// <form method="post"> back to this route (no scripts: ADMIN_CSP has none). POST -> backend call -> 303 -> GET with a flash code (src/lib/admin/catalog.ts); a refresh
+// never re-submits. (One route for GET and POST: Astro cannot map catalog.astro and catalog.ts to the same path.)
+export const prerender = false;
+
+import AdminShell from "../../components/admin/AdminShell.astro";
+import AdminDialog from "../../components/admin/AdminDialog.astro";
+import AdminButton from "../../components/admin/AdminButton.astro";
+import AdminSearch from "../../components/admin/AdminSearch.astro";
+import AdminIconTile from "../../components/admin/AdminIconTile.astro";
+import AdminIconUpload from "../../components/admin/AdminIconUpload.astro";
+import AdminFlash from "../../components/AdminFlash.astro";
+import AdminPager from "../../components/AdminPager.astro";
+import Chip from "../../components/Chip.astro";
+import CtaButton from "../../components/CtaButton.astro";
+import Icon from "../../components/Icon.astro";
+import { t } from "../../i18n/t";
+import { WIRE as WIRE_NAME, ICON_DONE_CODES, ICON_ERR_CODES, isIconCode } from "../../lib/admin/common.ts";
+import { requireActor } from "../../lib/admin/access.ts";
+import { adminConfig } from "../../lib/admin/runtime.ts";
+import { DONE_CODES, ERR_CODES, FLASH_COOKIE, KEEP_MAX, PAGE_SIZE, countsFromQuery, decide, loadCategories, loadTypes, parsePage, type Category, type ServiceType } from "../../lib/admin/catalog.ts";
+import { CATALOG_FILTERS, catalogMatches, filterCatalog, paginate, parseCatalogFilter, parseQuery, pluralUk, withQuery } from "../../lib/admin/listQuery.ts";
+import { adminCsp } from "../../lib/securityHeaders.ts";
+import { imgOriginsFor } from "../../lib/mediaOrigin.ts";
+import { loadNav, type NavInfo } from "../../lib/admin/navInfo.ts";
+
+const actor = requireActor(Astro.locals);
+if (actor instanceof Response) return actor;
+const cfg = adminConfig();
+if (!cfg) return new Response("Not Found", { status: 404, headers: { "Cache-Control": "no-store", "X-Robots-Tag": "noindex, nofollow" } });
+
+if (Astro.request.method === "POST") {
+  let form: FormData;
+  try {
+    form = await Astro.request.formData();
+  } catch {
+    return Astro.redirect("/admin/catalog?err=FAILED", 303);
+  }
+  const d = await decide(cfg, actor, form);
+  // The typed names of a failed edit ride in a one-shot cookie (not in the URL: no history / log / Referer copy of them).
+  if (d.typed) Astro.cookies.set(FLASH_COOKIE, d.typed, { httpOnly: true, secure: true, sameSite: "strict", path: "/admin/catalog", maxAge: 60 });
+  return Astro.redirect(d.location, 303); // relative Location: works on prod and staging origins alike
+}
+if (Astro.request.method !== "GET" && Astro.request.method !== "HEAD") return new Response(null, { status: 405, headers: { Allow: "GET, HEAD, POST", "Cache-Control": "no-store" } });
+
+const WIRE = WIRE_NAME;
+const UUID = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
+const q = Astro.url.searchParams;
+const f = parseCatalogFilter(q.get("f"));
+const text = parseQuery(q.get("q"));
+const page = parsePage(q.get("p"));
+const done = ([...DONE_CODES, ...ICON_DONE_CODES] as readonly string[]).includes(q.get("done") ?? "") ? q.get("done") : null;
+let err = ([...ERR_CODES, ...ICON_ERR_CODES] as readonly string[]).includes(q.get("err") ?? "") ? q.get("err") : null;
+const used = countsFromQuery(q);
+const card = q.get("card") ?? "";
+let keep: [string, string] = ["", ""];
+try {
+  const raw = JSON.parse(Astro.cookies.get(FLASH_COOKIE)?.value ?? "null");
+  if (Array.isArray(raw) && typeof raw[0] === "string" && typeof raw[1] === "string") keep = [raw[0].slice(0, KEEP_MAX), raw[1].slice(0, KEEP_MAX)];
+} catch { /* no / bad cookie */ }
+if (Astro.cookies.has(FLASH_COOKIE)) Astro.cookies.delete(FLASH_COOKIE, { path: "/admin/catalog" }); // read once
+
+const navP: Promise<NavInfo> = loadNav(cfg, actor); // D5: the sidebar count runs concurrently with the category load (loadNav never rejects)
+const all = await loadCategories(cfg, actor);
+const cats: Category[] = all.ok ? all.cats : [];
+const filtered = filterCatalog(cats, f, text);
+const pg = paginate(filtered, page, PAGE_SIZE);
+// A delete can empty the last page (or a stale link points past it): send the owner to the last page (flash rides along).
+if (all.ok && page > pg.pages) {
+  const to = new URLSearchParams(q);
+  if (pg.pages > 1) to.set("p", String(pg.pages)); else to.delete("p");
+  return Astro.redirect(`/admin/catalog${to.size ? `?${to}` : ""}`, 303);
+}
+
+const openRaw = q.get("open") ?? "";
+const openCat = all.ok && WIRE.test(openRaw) ? pg.slice.find((c) => c.name === openRaw) : undefined;
+const typesCache = new Map<string, Promise<ServiceType[] | null>>(); // one types call per category per request (open row and dialog target may be the same)
+const typesOf = (c: Category) => { let p = typesCache.get(c.name); if (!p) typesCache.set(c.name, (p = loadTypes(cfg, actor, c))); return p; };
+const openTypes: ServiceType[] | null | undefined = openCat ? await typesOf(openCat) : undefined;
+const catUrl = (extra: Record<string, string | number | undefined | false> = {}) => withQuery("/admin/catalog", { f: f !== "ALL" && f, q: text, p: pg.page > 1 && pg.page, open: openCat?.name, ...extra });
+
+// Which panel is asked for: `?dlg=` + target, or derived from a failed POST (its `card` row / the refused delete).
+type Dlg = "rename" | "disable" | "enable" | "delete" | "icon";
+const DLGS = ["rename", "disable", "enable", "delete", "icon"];
+let dlg: Dlg | null = DLGS.includes(q.get("dlg") ?? "") ? (q.get("dlg") as Dlg) : null;
+let tCat = WIRE.test(q.get("cat") ?? "") ? (q.get("cat") as string) : "";
+let tType = UUID.test(q.get("type") ?? "") ? (q.get("type") as string) : "";
+if (!dlg && card && err) {
+  if (err === "BAD_INPUT" || err === "TYPE_EXISTS" || err === "CATEGORY_NAME_EXISTS") dlg = "rename";
+  else if (err === "NAME_MISMATCH") dlg = "delete";
+  if (dlg && card.startsWith("c:")) tCat = card.slice(2);
+  else if (dlg && card.startsWith("t:")) { tType = card.slice(2); tCat = openRaw; }
+}
+if (!dlg && err === "CATALOG_IN_USE" && WIRE.test(openRaw)) { dlg = "delete"; tCat = openRaw; } // a refused delete: the blocked panel with the returned counts
+const tgtCat = all.ok && dlg ? cats.find((c) => c.name === tCat) : undefined;
+const tgtTypes = tgtCat && tType ? await typesOf(tgtCat) : undefined;
+const tgtType = tType ? tgtTypes?.find((x) => x.id === tType) : undefined;
+const resolved = !!dlg && !!tgtCat && tgtCat.status === "APPROVED" && (tType ? !!tgtType : true) && !(dlg === "rename" && tgtCat.status !== "APPROVED");
+if (dlg && all.ok && !resolved && !err && !done) err = tgtCat && tgtCat.status !== "APPROVED" ? "CATEGORY_NOT_APPROVED" : "NOT_FOUND";
+const nav: NavInfo = await navP;
+const isType = !!tgtType;
+const tgt = resolved ? (isType ? { kind: "type" as const, id: tgtType!.id, name: tgtType!.nameUk, nameEn: tgtType!.nameEn, active: tgtType!.active, usage: tgtType!.usageCount, types: 0 } : { kind: "category" as const, id: tgtCat!.name, name: tgtCat!.displayName, nameEn: "", active: tgtCat!.active, usage: tgtCat!.usageCount, types: tgtCat!.typeCount }) : null;
+const dlgClose = tgt && isType ? catUrl({ open: tgtCat!.name }) : catUrl();
+const rowKey = tgt ? `${isType ? "t" : "c"}:${tgt.id}` : "";
+const typed = (i: 0 | 1, orig: string) => (tgt && card === rowKey && (keep[0] !== "" || keep[1] !== "") ? keep[i] : orig);
+
+const details = [used.df ? t("admin.catalog.flash.inUseServices", { n: used.df }) : "", used.st ? t("admin.catalog.flash.inUseTypes", { n: used.st }) : "", used.ps ? t("admin.catalog.flash.inUsePending", { n: used.ps }) : ""].filter(Boolean).join(", ");
+const flash = done
+  ? { ok: true, text: t(isIconCode(done) ? `admin.icons.done.${done}` : `admin.catalog.flash.${done}`) }
+  : err === "CATALOG_IN_USE" && details
+    ? { ok: false, text: t("admin.catalog.flash.inUse", { details }) }
+    : err
+      ? { ok: false, text: t(isIconCode(err) ? `admin.icons.err.${err}` : `admin.catalog.flash.${err}`) }
+      : null;
+const closeFlash = catUrl();
+
+const ctxFields = (extra: Record<string, string>): [string, string][] => Object.entries({ ...extra, ...(pg.page > 1 ? { p: String(pg.page) } : {}), ...(f !== "ALL" ? { f } : {}), ...(text ? { q: text } : {}) });
+const usageIn = (n: number) => (n % 10 === 1 && n % 100 !== 11 ? t("admin.catalog.usageOne", { n }) : t("admin.catalog.usageMany", { n }));
+// W049: the icon column, strip and «Без іконки» chip exist only when the backend exposes `iconUrl` (B539); until then the page is exactly the W052 one and nothing is gated.
+const iconsOn = cats.some((c) => c.iconUrl !== undefined);
+const iconed = cats.filter((c) => c.status === "APPROVED" && typeof c.iconUrl === "string");
+const noIconN = cats.filter((c) => catalogMatches(c, "NOICON")).length;
+const chips = CATALOG_FILTERS.filter((k) => k !== "NOICON" || iconsOn).map((k) => [k, { ALL: t("admin.catalog.fAll"), LIVE: t("admin.catalog.fLive"), HIDDEN: t("admin.catalog.fHidden"), PENDING: t("admin.catalog.fPending"), UNUSED: t("admin.catalog.fUnused"), NOICON: t("admin.icons.fNone") }[k], cats.filter((c) => catalogMatches(c, k)).length] as const);
+Astro.response.headers.set("Content-Security-Policy", adminCsp({ imgOrigins: cats.flatMap((c) => (typeof c.iconUrl === "string" ? [c.iconUrl] : [])), allow: imgOriginsFor(cfg) })); // WEB-71: img-src gains only the media origins present in the data (the middleware re-validates them)
+const iconUrl = (c: Category) => catUrl({ dlg: "icon", cat: c.name });
+const tableCols = iconsOn ? 7 : 6;
+// The enable panel of a category with no icon (B541): the inline upload first, «Увімкнути» off until the icon is there. A 409 CATEGORY_ICON_REQUIRED shows the same panel.
+const enableNeedsIcon = !!tgtCat && !isType && dlg === "enable" && (tgtCat.iconUrl === null || err === "CATEGORY_ICON_REQUIRED");
+// Blocked-delete numbers: what the backend refused with (st = types, df = services, ps = pending suggestions), else what this page loaded.
+const blocked = (() => {
+  if (!tgt) return { services: 0, types: 0, pending: 0, is: false };
+  const fromBackend = err === "CATALOG_IN_USE" && (used.df > 0 || used.st > 0 || used.ps > 0);
+  const services = fromBackend ? used.df : tgt.usage, types = fromBackend ? used.st : tgt.types, pending = fromBackend ? used.ps : 0;
+  return { services, types, pending, is: err === "CATALOG_IN_USE" || tgt.usage > 0 || tgt.types > 0 };
+})();
+const rowActs = (kind: "cat" | "type", c: Category, ty?: ServiceType) => {
+  const name = ty ? ty.nameUk : c.displayName, active = ty ? ty.active : c.active;
+  const tgtQ = ty ? { cat: c.name, type: ty.id, open: c.name } : { cat: c.name };
+  return { name, active, rename: catUrl({ dlg: "rename", ...tgtQ }), toggle: catUrl({ dlg: active ? "disable" : "enable", ...tgtQ }), del: catUrl({ dlg: "delete", ...tgtQ }), kind };
+};
+---
+
+<AdminShell title={t("admin.catalog.metaTitle")} description={t("admin.catalog.metaDescription")} path="/admin/catalog" actor={actor} nav={nav} modal={!!(tgt && dlg)} flash={flash ? { ...flash, closeHref: closeFlash } : null}>
+  <Fragment slot="dialog">
+  {tgt && dlg === "rename" && (
+    <AdminDialog title={isType ? t("admin.catalog.renameType") : t("admin.catalog.renameCat")} icon="edit" closeHref={dlgClose}>
+      <form method="post" action="/admin/catalog">
+        {ctxFields({ kind: tgt.kind, id: tgt.id, origName: tgt.name, ...(isType ? { cat: tgtCat!.name, origNameEn: tgt.nameEn } : {}) }).map(([k, v]) => <input type="hidden" name={k} value={v} />)}
+        <div class="field">
+          <label for="nn">{t("admin.catalog.name")}</label>
+          <input class="in" id="nn" name="name" type="text" required maxlength="400" value={typed(0, tgt.name)} autocomplete="off" autofocus aria-invalid={err === "BAD_INPUT" || err === "TYPE_EXISTS" || err === "CATEGORY_NAME_EXISTS" ? "true" : undefined} />
+        </div>
+        {isType ? (
+          <div class="field">
+            <label for="ne">{t("admin.catalog.nameEn")}</label>
+            <input class="in" id="ne" name="nameEn" type="text" maxlength="400" lang="en" value={typed(1, tgt.nameEn)} autocomplete="off" aria-describedby="ne-h" />
+            <span class="hint" id="ne-h">{t("admin.catalog.nameEnHint")}</span>
+          </div>
+        ) : (
+          <p class="hint">{t("admin.catalog.codeHint", { code: tgt.id })}</p>
+        )}
+        {tgt.usage > 0 && <p class="hint">{t("admin.catalog.renameUsage", { in: `${usageIn(tgt.usage)}` })}</p>}
+        <div class="dlg-f">
+          <AdminButton href={dlgClose}>{t("admin.cancel")}</AdminButton>
+          <CtaButton type="submit" name="action" value="save">{t("admin.catalog.save")}</CtaButton>
+        </div>
+      </form>
+    </AdminDialog>
+  )}
+
+  {tgt && (dlg === "disable" || dlg === "enable") && (
+    <AdminDialog title={t(dlg === "disable" ? "admin.catalog.disableTitle" : "admin.catalog.enableTitle", { name: tgt.name })} icon={dlg === "disable" ? "eye-off" : "eye"} closeHref={dlgClose}>
+      {enableNeedsIcon && dlg === "enable" && (
+        <>
+          {err === "CATEGORY_ICON_REQUIRED" && <p class="hint bad" role="alert">{t("admin.icons.enableRequired")}</p>}
+          <AdminIconUpload id="en" category={tgtCat!.name} returnTo={catUrl({ dlg: "enable", cat: tgtCat!.name })} invalid={isIconCode(err)} />
+        </>
+      )}
+      {tgtCat && !isType && dlg === "enable" && !enableNeedsIcon && tgtCat.iconUrl && (
+        <p class="icon-have"><AdminIconTile src={tgtCat.iconUrl} /><span class="pill ok dot">{t("admin.icons.enableHas")}</span></p>
+      )}
+      <form method="post" action="/admin/catalog">
+        {ctxFields({ kind: tgt.kind, id: tgt.id, origName: tgt.name, ...(isType ? { cat: tgtCat!.name, origNameEn: tgt.nameEn } : {}) }).map(([k, v]) => <input type="hidden" name={k} value={v} />)}
+        <input type="hidden" name="name" value={tgt.name} />
+        {isType && <input type="hidden" name="nameEn" value={tgt.nameEn} />}
+        <p class="t-body">
+          {dlg === "disable"
+            ? t(isType ? "admin.catalog.disableBodyType" : "admin.catalog.disableBodyCat", { usage: tgt.usage > 0 ? t("admin.catalog.disableUsage", { in: usageIn(tgt.usage) }) : "" })
+            : t("admin.catalog.enableBody")}
+        </p>
+        {enableNeedsIcon && dlg === "enable" && <p class="hint bad">{t("admin.icons.enableBlocked")}</p>}
+        <div class="dlg-f">
+          <AdminButton autofocus href={dlgClose}>{t("admin.cancel")}</AdminButton>
+          <CtaButton type="submit" name="action" value={dlg === "disable" ? "hide" : "show"} disabled={enableNeedsIcon && dlg === "enable"}>{dlg === "disable" ? t("admin.catalog.disableConfirm") : t("admin.catalog.enableConfirm")}</CtaButton>
+        </div>
+      </form>
+    </AdminDialog>
+  )}
+
+  {tgt && dlg === "icon" && !isType && (
+    <AdminDialog title={t(tgtCat!.iconUrl ? "admin.icons.replaceTitle" : "admin.icons.addTitle")} icon="category" closeHref={dlgClose}>
+      <p class="t-body">{t("admin.icons.forCat", { name: tgt.name })}</p>
+      {tgtCat!.iconUrl && (
+        <div class="icon-cur">
+          <span class="lbl">{t("admin.icons.current")}</span>
+          <span class="ico-pair"><AdminIconTile src={tgtCat!.iconUrl} size="lg" /><AdminIconTile src={tgtCat!.iconUrl} /></span>
+        </div>
+      )}
+      <AdminIconUpload id="ic" category={tgtCat!.name} returnTo={catUrl({ dlg: "icon", cat: tgtCat!.name })} replace={!!tgtCat!.iconUrl} invalid={isIconCode(err)} cancelHref={dlgClose} />
+    </AdminDialog>
+  )}
+
+  {tgt && dlg === "delete" && blocked.is && (
+    <AdminDialog title={t("admin.catalog.blockedTitle")} icon="warning" bad closeHref={dlgClose}>
+      <p class="t-body">{t("admin.catalog.blockedBody", { name: tgt.name })}</p>
+      <ul class="usage-list">
+        {blocked.services > 0 && <li>{t("admin.catalog.blockedUsage", { in: usageIn(blocked.services) })}</li>}
+        {blocked.types > 0 && <li>{pluralUk(blocked.types, [t("admin.catalog.blockedTypesOne", { n: blocked.types }), t("admin.catalog.blockedTypesFew", { n: blocked.types }), t("admin.catalog.blockedTypesMany", { n: blocked.types })])}</li>}
+        {blocked.pending > 0 && <li>{t("admin.catalog.blockedPending", { n: blocked.pending })}</li>}
+      </ul>
+      <p class="t-body">{t("admin.catalog.blockedAdvice")}</p>
+      <div class="dlg-f">
+        <AdminButton autofocus href={dlgClose}>{t("admin.close")}</AdminButton>
+        {tgt.active && <CtaButton href={catUrl({ dlg: "disable", cat: tgtCat!.name, ...(isType ? { type: tgt.id, open: tgtCat!.name } : {}) })} icon="eye-off">{t("admin.catalog.disableConfirm")}</CtaButton>}
+      </div>
+    </AdminDialog>
+  )}
+
+  {tgt && dlg === "delete" && !blocked.is && (
+    <AdminDialog title={t("admin.catalog.deleteTitle", { name: tgt.name })} icon="delete" bad closeHref={dlgClose}>
+      <form method="post" action="/admin/catalog">
+        {ctxFields({ kind: tgt.kind, id: tgt.id, origName: tgt.name, ...(isType ? { cat: tgtCat!.name } : {}) }).map(([k, v]) => <input type="hidden" name={k} value={v} />)}
+        <p class="t-body">{t("admin.catalog.deleteBody")}</p>
+        <div class="field">
+          <label for="dc">{t("admin.catalog.deleteLabel")}</label>
+          <input class="in" id="dc" name="confirmName" type="text" autocomplete="off" required placeholder={tgt.name} autofocus aria-invalid={err === "NAME_MISMATCH" ? "true" : undefined} />
+        </div>
+        <div class="dlg-f">
+          <AdminButton href={dlgClose}>{t("admin.cancel")}</AdminButton>
+          <CtaButton type="submit" name="action" value="delete">{t("admin.catalog.deleteConfirm")}</CtaButton>
+        </div>
+      </form>
+    </AdminDialog>
+  )}
+  </Fragment>
+
+  <div class="page-h">
+    <div>
+      <span class="eyebrow vt-label">{t("admin.catalog.eyebrow")}</span>
+      <h1 class="vt-heading">{t("admin.catalog.h1")}</h1>
+      <p class="t-body">{t("admin.catalog.intro")}</p>
+    </div>
+  </div>
+
+  {!all.ok && <AdminFlash ok={false} text={t("admin.catalog.loadFailed")} retryHref={catUrl()} />}
+
+  {all.ok && iconsOn && (
+    <section class="card card-pad strip-card" aria-labelledby="strip-t">
+      <div class="card-h">
+        <h2 class="vt-card-title" id="strip-t">{t("admin.icons.stripTitle")}</h2>
+        {noIconN > 0 && <a class="pill bad" href={withQuery("/admin/catalog", { f: "NOICON" })}>{t("admin.icons.stripNone", { n: noIconN })}</a>}
+      </div>
+      <p class="hint">{t("admin.icons.stripHint")}</p>
+      {iconed.length > 0 ? (
+        <ul class="strip">
+          {iconed.map((c) => (
+            <li><span class="ico-pair"><AdminIconTile src={c.iconUrl} size="lg" /><AdminIconTile src={c.iconUrl} /></span><span class="vt-label">{c.displayName}</span></li>
+          ))}
+        </ul>
+      ) : (
+        <p class="vt-body">{t("admin.icons.stripEmpty")}</p>
+      )}
+    </section>
+  )}
+
+  {all.ok && (
+    <section class="card">
+      <div class="toolbar">
+        <ul class="seg" aria-label={t("admin.catalog.filterLabel")}>
+          {chips.map(([k, label, n]) => (
+            <li><Chip href={withQuery("/admin/catalog", { f: k !== "ALL" && k, q: text })} selected={f === k}>{label}<span class="n">{n}</span></Chip></li>
+          ))}
+        </ul>
+        <span class="sp"></span>
+        <AdminSearch action="/admin/catalog" value={text} label={t("admin.catalog.searchLabel")} placeholder={t("admin.catalog.search")} submit={t("admin.catalog.searchBtn")} keep={f !== "ALL" ? { f } : {}} />
+      </div>
+
+      {cats.length === 0 && (
+        <div class="empty">
+          <span class="big"><Icon name="category" /></span>
+          <h2 class="vt-heading">{t("admin.catalog.empty")}</h2>
+          <p class="t-body">{t("admin.catalog.emptyBody")}</p>
+          <AdminButton href="/admin/requests">{t("admin.catalog.goRequests")}</AdminButton>
+        </div>
+      )}
+      {cats.length > 0 && filtered.length === 0 && (
+        <div class="empty">
+          <span class="big"><Icon name="search" /></span>
+          <h2 class="vt-heading">{t("admin.catalog.noneFound")}</h2>
+          <p class="t-body">{t("admin.catalog.noneFoundBody")}</p>
+          <AdminButton href="/admin/catalog">{t("admin.catalog.resetFilters")}</AdminButton>
+        </div>
+      )}
+      {filtered.length > 0 && (
+        <>
+          <div class="tbl-wrap">
+            <table class="tbl wide">
+              <thead>
+                <tr>
+                  <th scope="col">{t("admin.catalog.colCategory")}</th>
+                  <th scope="col" class="hide-md">{t("admin.catalog.colCode")}</th>
+                  {iconsOn && <th scope="col">{t("admin.icons.colIcon")}</th>}
+                  <th scope="col">{t("admin.catalog.colStatus")}</th>
+                  <th scope="col" class="num" title={t("admin.catalog.colUsageTip")}>{t("admin.catalog.colUsage")}</th>
+                  <th scope="col" class="num">{t("admin.catalog.colTypes")}</th>
+                  <th scope="col" class="act"><span class="sr">{t("admin.catalog.colActions")}</span></th>
+                </tr>
+              </thead>
+              <tbody>
+                {pg.slice.map((c) => {
+                  const live = c.status === "APPROVED";
+                  const isOpen = openCat?.name === c.name;
+                  const a = rowActs("cat", c);
+                  return (
+                    <>
+                      <tr id={`cat-${c.name}`} class:list={{ dim: live && !c.active }}>
+                        <td>
+                          <a class:list={["exp", { on: isOpen }]} href={isOpen ? catUrl({ open: undefined }) : catUrl({ open: c.name })} aria-label={t("admin.catalog.toggleTypes", { name: c.displayName })}>
+                            <Icon name="chevron-right" />
+                            <span class="name"><b>{c.displayName}</b></span>
+                          </a>
+                        </td>
+                        <td class="hide-md mono"><code>{c.name}</code></td>
+                        {iconsOn && (
+                          <td>
+                            {live && c.iconUrl !== undefined ? (
+                              <span class="icell">
+                                {c.iconUrl ? <AdminIconTile src={c.iconUrl} /> : <span class="pill bad">{t("admin.icons.none")}</span>}
+                                <a class="vt-label vt-u" href={iconUrl(c)} aria-label={t(c.iconUrl ? "admin.icons.replaceRow" : "admin.icons.uploadRow", { name: c.displayName })}>{t(c.iconUrl ? "admin.icons.replace" : "admin.icons.upload")}</a>
+                              </span>
+                            ) : (
+                              <span class="usage muted">—</span>
+                            )}
+                          </td>
+                        )}
+                        <td>
+                          {c.status === "PENDING" && <span class="pill dot">{t("admin.catalog.statusPending")}</span>}
+                          {live && (c.active ? <span class="pill ok dot">{t("admin.catalog.statusLive")}</span> : <span class="pill mute dot">{t("admin.catalog.statusHidden")}</span>)}
+                        </td>
+                        <td class="num">
+                          {c.usageCount > 0 ? <span class="usage"><b>{usageIn(c.usageCount)}</b><small>{t("admin.catalog.usageSub")}</small></span> : <span class="usage muted">{t("admin.catalog.notUsed")}</span>}
+                        </td>
+                        <td class="num">{c.typeCount}</td>
+                        <td class="act">
+                          {live ? (
+                            <span class="acts">
+                              <AdminButton href={a.rename} icon="edit" iconOnly label={t("admin.catalog.renameRow", { name: a.name })} />
+                              <AdminButton href={a.toggle} icon={a.active ? "eye-off" : "eye"} iconOnly label={t(a.active ? "admin.catalog.disableRow" : "admin.catalog.enableRow", { name: a.name })} />
+                              <AdminButton href={a.del} icon="delete" iconOnly danger label={t("admin.catalog.deleteRow", { name: a.name })} />
+                            </span>
+                          ) : (
+                            <a class="vt-label vt-u" href="/admin/requests">{t("admin.catalog.reviewInRequests")}</a>
+                          )}
+                        </td>
+                      </tr>
+                      {isOpen && (
+                        <tr class="sub">
+                          <td colspan={tableCols}>
+                            <div class="well types-box">
+                              {openTypes === null && <p class="t-body bad" role="alert">{t("admin.catalog.typesFailed")}</p>}
+                              {openTypes && openTypes.length === 0 && <p class="t-body">{t("admin.catalog.noTypes")}</p>}
+                              {openTypes && openTypes.length > 0 && (
+                                <table class="types-t">
+                                  <thead>
+                                    <tr>
+                                      <th scope="col">{t("admin.catalog.colType")}</th>
+                                      <th scope="col"><span class="sr">{t("admin.catalog.colStatus")}</span></th>
+                                      <th scope="col" class="num" title={t("admin.catalog.colUsageTip")}>{t("admin.catalog.colUsage")}</th>
+                                      <th scope="col" class="act"><span class="sr">{t("admin.catalog.colActions")}</span></th>
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {openTypes.map((ty) => {
+                                      const ta = rowActs("type", c, ty);
+                                      return (
+                                        <tr class:list={{ dim: !ty.active }}>
+                                          <td><span class="name"><b>{ty.nameUk}</b><small lang="en">{ty.nameEn || t("admin.catalog.noEnglish")}</small></span></td>
+                                          <td>{!ty.active && <span class="pill mute">{t("admin.catalog.typeHidden")}</span>}</td>
+                                          <td class="num">{ty.usageCount > 0 ? <span class="usage"><b>{usageIn(ty.usageCount)}</b><small>{t("admin.catalog.usageSub")}</small></span> : <span class="usage muted">{t("admin.catalog.notUsed")}</span>}</td>
+                                          <td class="act">
+                                            {live && (
+                                              <span class="acts">
+                                                <AdminButton href={ta.rename} icon="edit" iconOnly label={t("admin.catalog.renameRow", { name: ta.name })} />
+                                                <AdminButton href={ta.toggle} icon={ta.active ? "eye-off" : "eye"} iconOnly label={t(ta.active ? "admin.catalog.disableRow" : "admin.catalog.enableRow", { name: ta.name })} />
+                                                <AdminButton href={ta.del} icon="delete" iconOnly danger label={t("admin.catalog.deleteRow", { name: ta.name })} />
+                                              </span>
+                                            )}
+                                          </td>
+                                        </tr>
+                                      );
+                                    })}
+                                  </tbody>
+                                </table>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+          <div class="tfoot">
+            <span class="vt-label">{t("admin.catalog.range", { shown: `${pg.from}–${pg.to}`, total: pg.total })}</span>
+            <AdminPager base="/admin/catalog" page={pg.page} totalPages={pg.pages} label={t("admin.catalog.pager")} prev={t("admin.catalog.prev")} next={t("admin.catalog.next")} query={{ ...(f !== "ALL" ? { f } : {}), ...(text ? { q: text } : {}) }} />
+          </div>
+        </>
+      )}
+    </section>
+  )}
+</AdminShell>

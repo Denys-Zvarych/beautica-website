@@ -2,7 +2,9 @@
 // Mirrors NeumorphicButton: 49 px, radius 16, latte->deep gradient, extrudedButtonAccent,
 // cream Comfortaa 13/700, pressed = scale(.97) + shadow off (shadow lives on ::before, opacity only).
 // Optional `icon` prop (a name from Icon.astro): decorative leading glyph. No prop = unchanged.
+// Optional `name` + `value` (button only): which of several submit buttons of one form was pressed (no-JS admin forms).
 // Optional `type` ("submit" | "button") renders a <button> with the same classes instead of a link; `id` for scripts.
+// Optional `disabled` (button only): a permanently unavailable action; muted, no lift, not-allowed cursor. Default off = unchanged.
 // Optional `spinner` (button only): reserves a pure-CSS ring + a `.lbl` label span; the ring shows while a script sets aria-busy="true".
 import Icon, { type IconName } from "./Icon.astro";
 interface Props {
@@ -12,13 +14,16 @@ interface Props {
   icon?: IconName;
   class?: string;
   spinner?: boolean;
+  name?: string;
+  value?: string;
+  disabled?: boolean;
 }
-const { href, type, id, icon, class: className, spinner = false } = Astro.props;
+const { href, type, id, icon, class: className, spinner = false, name, value, disabled = false } = Astro.props;
 ---
 
 {
   type ? (
-    <button class:list={["cta vt-cta", className]} type={type} id={id}>
+    <button class:list={["cta vt-cta", { off: disabled }, className]} type={type} id={id} name={name} value={value} disabled={disabled || undefined}>
       {icon && <Icon name={icon} />}
       {spinner && <span class="spin" aria-hidden="true" />}
       {spinner ? <span class="lbl"><slot /></span> : <slot />}
@@ -87,6 +92,16 @@ const { href, type, id, icon, class: className, spinner = false } = Astro.props;
   .cta:disabled {
     cursor: progress;
     opacity: 0.7;
+  }
+  .cta.off,
+  .cta.off:hover,
+  .cta.off:focus-visible {
+    cursor: not-allowed;
+    transform: none;
+  }
+  .cta.off:hover::before,
+  .cta.off:focus-visible::before {
+    transform: none;
   }
   /* Sending state (spinner prop): a cream ring with one solid arc; rotation is transform-only. */
   .spin {

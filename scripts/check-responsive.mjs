@@ -2,7 +2,8 @@
 // Responsive check at 360 / 768 / 1280 px (also 320 for overflow): no horizontal scroll, tap targets >= 48 px,
 // targets >= 8 px apart. Serves dist/client with a tiny static server (unknown path -> 404.html, like Pages).
 //
-//   npm run build && node scripts/check-responsive.mjs [--routes /,/404] [--shots shots/]
+//   npm run build && node scripts/check-responsive.mjs [--routes /,/404] [--shots shots/] [--base http://127.0.0.1:4399]
+// `--base <url>` checks a running server instead of serving dist/client (e.g. the /admin harness: node scripts/render-admin.mjs --serve 4399).
 //
 // Browser: playwright-core + a Chromium. Set CHROMIUM_PATH, or install one with `npx playwright install chromium`.
 import { createServer } from "node:http";
@@ -17,7 +18,8 @@ const WIDTHS = [320, 360, 768, 1280];
 const DIST = resolve("dist/client");
 const MIME = { ".html": "text/html; charset=utf-8", ".css": "text/css", ".png": "image/png", ".webp": "image/webp", ".woff2": "font/woff2", ".ico": "image/x-icon", ".xml": "application/xml", ".txt": "text/plain" };
 
-const server = createServer((req, res) => {
+const BASE = arg("--base", "");
+const server = BASE ? null : createServer((req, res) => {
   const path = new URL(req.url, "http://x").pathname;
   const candidates = [path, path + ".html", join(path, "index.html")];
   const hit = candidates.map((c) => join(DIST, c)).find((p) => p.startsWith(DIST) && existsSync(p) && /\.[a-z0-9]+$/.test(p));
@@ -25,8 +27,8 @@ const server = createServer((req, res) => {
   res.writeHead(hit ? 200 : 404, { "content-type": MIME[extname(file)] ?? "application/octet-stream" });
   res.end(readFileSync(file));
 });
-await new Promise((r) => server.listen(0, "127.0.0.1", r));
-const base = `http://127.0.0.1:${server.address().port}`;
+if (server) await new Promise((r) => server.listen(0, "127.0.0.1", r));
+const base = BASE ? BASE.replace(/\/$/, "") : `http://127.0.0.1:${server.address().port}`;
 
 const executablePath = process.env.CHROMIUM_PATH ?? ["/usr/bin/chromium-browser", "/usr/bin/chromium", "/snap/bin/chromium"].find(existsSync);
 const browser = await chromium.launch({ executablePath, args: ["--no-sandbox"] });
@@ -38,16 +40,30 @@ for (const route of ROUTES) {
     const page = await browser.newPage({ viewport: { width, height: 800 } });
     await page.goto(base + route, { waitUntil: "networkidle" });
     await page.waitForTimeout(1500); // let entrance animations settle before measuring
+    // Open every <details> first: their controls (legal contents links, the admin reject forms) are real targets once the owner opens them, and a closed
+    // one keeps no usable box. Only elements still invisible after this are skipped below.
+    await page.evaluate(() => new Promise((done) => { document.querySelectorAll("details").forEach((d) => { d.open = true; }); requestAnimationFrame(() => requestAnimationFrame(done)); }));
     const r = await page.evaluate(() => {
       // WCAG 2.5.8 "inline" exception: links inside running legal prose (.prose p/li) whose paragraph has more text than the link are not tap-target buttons.
       const targets = [...document.querySelectorAll("a[href], button, input, select, textarea, summary, [role=button]")]
         .filter((el) => {
           const host = el.closest(".prose p, .prose li");
+          if (el.checkVisibility && !el.checkVisibility()) return false; // still not rendered after every <details> was opened (display:none, hidden)
           if (getComputedStyle(el).pointerEvents === "none") return false; // inert (e.g. the always-open contents summary from 600 px)
+          if (el.matches('[aria-hidden="true"][tabindex="-1"]')) return false; // a redundant pointer-only duplicate (the dialog scrim link; the real close button is a target)
+          if (el.closest("[inert]")) return false; // the page behind an open dialog / sheet (W052): unreachable by pointer, keyboard and AT, so not a target
           return !(host && el.matches(".prose a") && host.textContent.trim().length > el.textContent.trim().length);
         })
         .map((el) => ({ el, b: el.getBoundingClientRect() }))
         .filter((t) => t.b.width > 0 && t.b.height > 0)
+        .filter((t) => {
+          // Covered by something else (a modal scrim / sheet painted over it): not a target the user can hit. Only decided for a centre inside the viewport,
+          // and only when the topmost element is unrelated to the target (neither inside it nor containing it), so overlapping siblings on a plain page still count.
+          const cx = t.b.x + t.b.width / 2, cy = t.b.y + t.b.height / 2;
+          if (cx < 0 || cy < 0 || cx >= innerWidth || cy >= innerHeight) return true;
+          const top = document.elementFromPoint(cx, cy);
+          return !top || t.el.contains(top) || top.contains(t.el);
+        })
         .map((t) => ({ row: !!t.el.closest(".site-footer .links, .toc"), tag: t.el.tagName + (t.el.className ? "." + String(t.el.className).split(" ")[0] : ""), x: t.b.x, y: t.b.y, w: t.b.width, h: t.b.height }));
       return { scrollWidth: document.documentElement.scrollWidth, innerWidth: window.innerWidth, targets };
     });
@@ -70,7 +86,7 @@ for (const route of ROUTES) {
   }
 }
 await browser.close();
-server.close();
+server?.close();
 if (problems.length) {
   console.error("check-responsive: FAIL\n  - " + problems.join("\n  - "));
   process.exit(1);

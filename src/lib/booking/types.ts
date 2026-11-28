@@ -125,6 +125,24 @@ export function imageOrigin(...urls: (string | null | undefined)[]): string | un
   return undefined;
 }
 
+/** An image URL only when its origin is pinned (imgOriginsFor): an off-pin photo is dropped so the page renders its no-photo fallback, not an <img> the CSP blocks. */
+export function pinnedPhoto(u: string | null, allowed: readonly string[]): string | null {
+  if (!u) return null;
+  try { return allowed.includes(new URL(u).origin) ? u : null; } catch { return null; }
+}
+export function pinMasterPhotos(i: MasterInfo, allowed: readonly string[]): MasterInfo {
+  return { ...i, avatarUrl: pinnedPhoto(i.avatarUrl, allowed), portfolio: i.portfolio.filter((u) => pinnedPhoto(u, allowed)) };
+}
+export function pinSalonPhotos(i: SalonInfo, allowed: readonly string[]): SalonInfo {
+  return {
+    ...i,
+    avatarUrl: pinnedPhoto(i.avatarUrl, allowed),
+    coverImageUrl: pinnedPhoto(i.coverImageUrl, allowed),
+    portfolio: i.portfolio.filter((u) => pinnedPhoto(u, allowed)),
+    masters: i.masters.map((m) => ({ ...m, avatarUrl: pinnedPhoto(m.avatarUrl, allowed) })),
+  };
+}
+
 /** Only https image URLs are ever rendered (also what the CSP img-src is derived from). */
 export function safeImageUrl(v: unknown): string | null {
   const s = str(v);

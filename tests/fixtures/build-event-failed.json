@@ -1,0 +1,28 @@
+{
+  "type": "cf.workersBuilds.worker.build.failed",
+  "source": { "type": "workersBuilds.worker", "workerName": "beautica-site" },
+  "payload": {
+    "buildUuid": "11111111-2222-3333-4444-555555555555",
+    "status": "failed",
+    "buildOutcome": "failure",
+    "createdAt": "2026-11-26T10:00:00.000Z",
+    "stoppedAt": "2026-11-26T10:02:03.000Z",
+    "buildTriggerMetadata": {
+      "buildTriggerSource": "push_event",
+      "branch": "dev",
+      "commitHash": "abcdef0123456789abcdef0123456789abcdef01",
+      "commitMessage": "fix: sample failing build\n\nlong body line",
+      "author": "zz-author-leak-marker",
+      "repoName": "beautica-website",
+      "buildCommand": "zz-build-cmd-leak-marker",
+      "deployCommand": "zz-deploy-cmd-leak-marker",
+      "providerAccountName": "zz-provider-leak-marker"
+    }
+  },
+  "metadata": {
+    "accountId": "acc00000000000000000000000000001",
+    "eventSubscriptionId": "sub-1",
+    "eventSchemaVersion": 1,
+    "eventTimestamp": "2026-11-26T10:02:04.000Z"
+  }
+}

@@ -3,6 +3,10 @@ name: CI
 on:
   pull_request:
     branches: [dev, main]
+    # ready_for_review: a draft's deferred heavy jobs run on the ready head (phase 055).
+    # NO labeled/unlabeled: the `full-ci` label takes effect on the next push (or close and reopen the PR); a re-run reuses the old event
+    # payload and does not see a new label. A label event would otherwise re-run (or fake-green) the gate.
+    types: [opened, synchronize, reopened, ready_for_review]
 
 concurrency:
   group: ci-${{ github.event.pull_request.number }}
@@ -12,8 +16,42 @@ permissions:
   contents: read
 
 jobs:
+  # Phase 055. Decides whether the heavy jobs (e2e, e2e_booking, lighthouse) run: draft PRs defer them (CI Gate then FAILS `DEFERRED: draft`),
+  # a PR whose every file is on the allow-list skips them, everything else (and every doubt, and every PR into main) runs them.
+  # The classifier is taken from the BASE branch when it has one (a PR cannot loosen its own rule); the head copy is only the bootstrap.
+  changes:
+    runs-on: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && vars.CI_RUNNER_LINUX || 'ubuntu-latest' }}
+    timeout-minutes: 5
+    outputs:
+      heavy: ${{ steps.classify.outputs.heavy }}
+      reason: ${{ steps.classify.outputs.reason }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Classify the diff (heavy jobs needed?)
+        id: classify
+        timeout-minutes: 2
+        env:
+          BASE_REF: ${{ github.base_ref }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          DRAFT: ${{ github.event.pull_request.draft }}
+          LABELS_JSON: ${{ toJSON(github.event.pull_request.labels.*.name) }}
+        run: |
+          script="$RUNNER_TEMP/classify-changes.mjs"
+          if git cat-file -e "$BASE_SHA:scripts/ci/classify-changes.mjs" 2>/dev/null; then
+            git show "$BASE_SHA:scripts/ci/classify-changes.mjs" > "$script"
+          else
+            echo "::warning::base branch has no scripts/ci/classify-changes.mjs yet: using the PR's copy (bootstrap)"
+            cp scripts/ci/classify-changes.mjs "$script"
+          fi
+          node "$script"
+
   site:
-    runs-on: ubuntu-latest
+    runs-on: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && vars.CI_RUNNER_LINUX || 'ubuntu-latest' }}
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
@@ -153,7 +191,9 @@ jobs:
   # Runs in parallel with `site`, `lighthouse` and `e2e_booking` (the slow browser specs, below): each job stays far from its 20-minute cap
   # (the single job that held everything was cancelled at its old 12-minute cap).
   e2e:
-    runs-on: ubuntu-latest
+    needs: changes
+    if: needs.changes.outputs.heavy == 'true'
+    runs-on: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && vars.CI_RUNNER_LINUX || 'ubuntu-latest' }}
     timeout-minutes: 20
     env:
       CHROMIUM_PATH: /usr/bin/google-chrome
@@ -174,6 +214,9 @@ jobs:
         timeout-minutes: 8
         run: npm test
         env:
+          # Phase 055 W4 (deferred): file-level workers stay at today's 2. Raise to 4 (then 3 on a flake) ONLY after 10 consecutive green
+          # e2e runs prove it; until then no flake risk is taken. The CLS probes below run after the pool and are unaffected.
+          TEST_CONCURRENCY: "2"
           TEST_EXCLUDE: booking-flow.test,booking-flow-b,book-compact,book-axe,booking-privacy,book-salon-wizard,review-page,book-blocked,book-reminders,service-copy-hint
 
       # The flow spec is split in two (phase 025): the single file ran ~273 s with its failures and sat on the 5-minute cap. Each half is ~2 min.
@@ -222,7 +265,9 @@ jobs:
   # The slow browser specs of the booking pages (salon wizard, axe sweeps) and Lighthouse on the SSR link pages, against `wrangler dev` + the mock
   # backend. A job of its own so the two e2e jobs run side by side (both are required checks).
   e2e_booking:
-    runs-on: ubuntu-latest
+    needs: changes
+    if: needs.changes.outputs.heavy == 'true'
+    runs-on: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && vars.CI_RUNNER_LINUX || 'ubuntu-latest' }}
     timeout-minutes: 25
     env:
       CHROMIUM_PATH: /usr/bin/google-chrome
@@ -285,7 +330,9 @@ jobs:
   # Lighthouse over every page (3 runs, median): perf >= 95, a11y 100, SEO 100 (0.66 on the noindex pages, where only
   # is-crawlable fails by design), CLS/LCP/TBT, and resource budgets. Own job: ~4 min of Chrome runs stay off the critical path.
   lighthouse:
-    runs-on: ubuntu-latest
+    needs: changes
+    if: needs.changes.outputs.heavy == 'true'
+    runs-on: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && vars.CI_RUNNER_LINUX || 'ubuntu-latest' }}
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
@@ -303,3 +350,58 @@ jobs:
       - name: Lighthouse budget (mobile; every page)
         timeout-minutes: 12
         run: npx --no-install lhci autorun
+
+      # /admin (phase 039) is behind Cloudflare Access, so lhci cannot reach it: the test-only harness (scripts/render-admin.mjs) serves it with a
+      # throwaway JWT; responsive + axe + Lighthouse (scripts/lighthouserc-admin.json).
+      # `if: always()`: runs even when the lhci step above is red (both results are reported; neither hides the other).
+      # Split in two (one script, `--group`): measured locally 205 s (sample data) and 244 s (large variants, incl. the open-category Lighthouse URL), 449 s together, over a 5-minute step. Each step
+      # gets its measured time + >= 50 % (8 and 8 minutes), and both run even when the other, or lhci above, is red.
+      - name: /admin quality gate (harness, sample data)
+        if: always()
+        timeout-minutes: 8
+        run: node scripts/check-admin.mjs --group sample
+
+      - name: /admin quality gate (harness, large variants)
+        if: always()
+        timeout-minutes: 8
+        run: node scripts/check-admin.mjs --group large
+
+  # Phase 055: the ONE required check (ruleset on dev + main, owner step OD-1). Runs always; summarises every job and fails on a failure, a
+  # cancellation, a heavy job skipped when it was needed, or any draft deferral (`DEFERRED: draft`; a stale deferral is re-checked live and
+  # fails closed). Run from the BASE branch copy of scripts/ci/gate.mjs (the head copy only while the base has none: the shipping PR).
+  ci-gate:
+    name: CI Gate
+    if: always()
+    needs: [changes, site, e2e, e2e_booking, lighthouse]
+    runs-on: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && vars.CI_RUNNER_LINUX || 'ubuntu-latest' }}
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      # Shallow checkout + ONE base-sha object: the gate only needs scripts/ci/gate.mjs from the base commit, not the history (`changes` keeps
+      # the full depth for its three-dot diff). Credentials stay persisted so the fetch works on a private repo; a failed fetch fails the job.
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - name: Fetch the base commit
+        timeout-minutes: 2
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: git fetch --no-tags --depth=1 origin "$BASE_SHA"
+
+      - name: Gate
+        timeout-minutes: 2
+        env:
+          NEEDS_JSON: ${{ toJSON(needs) }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          script="$RUNNER_TEMP/gate.mjs"
+          if git cat-file -e "$BASE_SHA:scripts/ci/gate.mjs" 2>/dev/null; then
+            git show "$BASE_SHA:scripts/ci/gate.mjs" > "$script"
+          else
+            echo "::warning::base branch has no scripts/ci/gate.mjs yet: using the PR's copy (bootstrap)"
+            cp scripts/ci/gate.mjs "$script"
+          fi
+          node "$script"

@@ -1,0 +1,298 @@
+---
+// W040 / W052: pending catalog requests. GET lists them (kind chips + search = GET params the Worker applies to the loaded list); the request detail
+// (`?open=KIND:id`) and the approve / reject dialogs (`?dlg=approve|reject&id=KIND:id`) are server-rendered panels. Every change is a plain <form method="post"> back to
+// this route (no scripts: ADMIN_CSP has none): POST -> backend call(s) -> 303 -> GET with a flash code (src/lib/admin/requests.ts); a refresh never re-submits.
+// (One route for GET and POST: Astro cannot map requests.astro and requests.ts to the same path.)
+export const prerender = false;
+
+import AdminShell from "../../components/admin/AdminShell.astro";
+import AdminDialog from "../../components/admin/AdminDialog.astro";
+import AdminButton from "../../components/admin/AdminButton.astro";
+import AdminAgePill from "../../components/admin/AdminAgePill.astro";
+import AdminSearch from "../../components/admin/AdminSearch.astro";
+import AdminIconTile from "../../components/admin/AdminIconTile.astro";
+import AdminIconUpload from "../../components/admin/AdminIconUpload.astro";
+import AdminFlash from "../../components/AdminFlash.astro";
+import AdminPager from "../../components/AdminPager.astro";
+import Chip from "../../components/Chip.astro";
+import CtaButton from "../../components/CtaButton.astro";
+import Icon from "../../components/Icon.astro";
+import { t } from "../../i18n/t";
+import { ICON_DONE_CODES, ICON_ERR_CODES, isIconCode } from "../../lib/admin/common.ts";
+import { requireActor } from "../../lib/admin/access.ts";
+import { adminConfig } from "../../lib/admin/runtime.ts";
+import { DONE_CODES, ERR_CODES, FLASH_COOKIE, KEEP_MAX, PAGE_SIZE, REASON_MAX, decide, formatDate, listAllPending, parsePage, requestIconTarget, type CatalogRequest } from "../../lib/admin/requests.ts";
+import { filterRequests, paginate, parseKindFilter, parseQuery, requestLabel, withQuery } from "../../lib/admin/listQuery.ts";
+import { ageDays } from "../../lib/admin/requestAge.ts";
+import { adminCsp } from "../../lib/securityHeaders.ts";
+import { imgOriginsFor } from "../../lib/mediaOrigin.ts";
+import { navFrom, NAV_UNKNOWN } from "../../lib/admin/navInfo.ts";
+
+const actor = requireActor(Astro.locals);
+if (actor instanceof Response) return actor;
+const cfg = adminConfig();
+if (!cfg) return new Response("Not Found", { status: 404, headers: { "Cache-Control": "no-store", "X-Robots-Tag": "noindex, nofollow" } });
+
+if (Astro.request.method === "POST") {
+  let form: FormData;
+  try {
+    form = await Astro.request.formData();
+  } catch {
+    return Astro.redirect("/admin/requests?err=FAILED", 303);
+  }
+  const d = await decide(cfg, actor, form);
+  // The typed name of a failed edit rides in a one-shot cookie (not in the URL: no history / log / Referer copy of it).
+  if (d.typed) Astro.cookies.set(FLASH_COOKIE, d.typed, { httpOnly: true, secure: true, sameSite: "strict", path: "/admin/requests", maxAge: 60 });
+  return Astro.redirect(d.location, 303); // relative Location: works on prod and staging origins alike
+}
+if (Astro.request.method !== "GET" && Astro.request.method !== "HEAD") return new Response(null, { status: 405, headers: { Allow: "GET, HEAD, POST", "Cache-Control": "no-store" } });
+
+const q = Astro.url.searchParams;
+const kind = parseKindFilter(q.get("kind"));
+const text = parseQuery(q.get("q"));
+const reqPage = parsePage(q.get("p"));
+const keyOf = (r: CatalogRequest) => `${r.kind}:${r.id}`;
+const KEY = /^(?:CATEGORY|SERVICE_TYPE):[0-9A-Za-z-]{1,40}$/;
+const done = ([...DONE_CODES, ...ICON_DONE_CODES] as readonly string[]).includes(q.get("done") ?? "") ? q.get("done") : null;
+let err = ([...ERR_CODES, ...ICON_ERR_CODES] as readonly string[]).includes(q.get("err") ?? "") ? q.get("err") : null;
+const card = q.get("card") ?? "";
+const keepName = (Astro.cookies.get(FLASH_COOKIE)?.value ?? "").slice(0, KEEP_MAX);
+if (Astro.cookies.has(FLASH_COOKIE)) Astro.cookies.delete(FLASH_COOKIE, { path: "/admin/requests" }); // read once
+
+const list = await listAllPending(cfg, actor);
+const items = list.ok ? list.items : [];
+const shown = filterRequests(items, kind, text);
+const pg = paginate(shown, reqPage, PAGE_SIZE); // filter / search run over the whole loaded list first, then one page of 25 renders
+const nCat = items.filter((r) => r.kind === "CATEGORY").length;
+const nav = list.ok ? navFrom(items, list.total) : NAV_UNKNOWN;
+
+// Where the dialogs point (the list with its filter), and the panels asked for.
+const listUrl = (extra: Record<string, string | undefined> = {}) => withQuery("/admin/requests", { kind: kind !== "ALL" && kind, q: text, p: pg.page > 1 && pg.page, ...extra });
+const rawOpen = q.get("open") ?? "";
+const dlg = q.get("dlg") === "approve" || q.get("dlg") === "reject" || q.get("dlg") === "icon" ? q.get("dlg") : null;
+const rawId = q.get("id") ?? "";
+const wantDetail = rawOpen !== "" ? rawOpen : err && card ? card : ""; // a failed edit re-opens its own detail with the typed name
+const detailReq = list.ok && KEY.test(wantDetail) ? items.find((r) => keyOf(r) === wantDetail) : undefined;
+// W049: the icon field and gate exist only when the backend exposes `iconUrl` (B539); until then the page is exactly the W052 one. «Схвалити» is a hint-disabled button, the backend stays the authority (B541).
+const iconsOn = items.some((r) => r.kind === "CATEGORY" && r.iconUrl !== undefined);
+const iconTarget = (r: CatalogRequest) => (iconsOn && r.iconUrl !== undefined ? requestIconTarget(r) : null);
+Astro.response.headers.set("Content-Security-Policy", adminCsp({ imgOrigins: items.flatMap((r) => (typeof r.iconUrl === "string" ? [r.iconUrl] : [])), allow: imgOriginsFor(cfg) })); // WEB-71: img-src gains only the media origins present in the data (the middleware re-validates them)
+const dlgFound = list.ok && dlg && KEY.test(rawId) ? items.find((r) => keyOf(r) === rawId) : undefined;
+const dlgReq = dlgFound && (dlg !== "icon" || iconTarget(dlgFound) !== null) ? dlgFound : undefined; // an icon panel only for a request whose icon the backend exposes
+// An id that is not (or no longer) pending: the list plus «Заявку вже розглянуто».
+if (list.ok && !err && !done && ((rawOpen !== "" && !detailReq) || (dlg !== null && !dlgReq))) err = "REQUEST_NOT_PENDING";
+const flash = done ? { ok: true, text: t(isIconCode(done) ? `admin.icons.done.${done}` : `admin.requests.flash.${done}`) } : err ? { ok: false, text: t(isIconCode(err) ? `admin.icons.err.${err}` : `admin.requests.flash.${err}`) } : null;
+const closeFlash = withQuery("/admin/requests", { kind: kind !== "ALL" && kind, q: text, p: pg.page > 1 && pg.page, open: detailReq && rawOpen ? rawOpen : undefined });
+const detailClose = listUrl();
+const badName = !!detailReq && err !== null && card === keyOf(detailReq) && (err === "BAD_INPUT" || err === "TYPE_EXISTS" || err === "DUPLICATE_PENDING");
+const typedName = (r: CatalogRequest) => (card === keyOf(r) && keepName !== "" ? keepName : requestLabel(r));
+
+const rows = pg.slice;
+const dateOf = (r: CatalogRequest) => formatDate(r.createdAt).replace(/ р\.?/, "");
+const daysAgo = (r: CatalogRequest) => (ageDays(r.createdAt) <= 0 ? t("admin.requests.today") : t("admin.requests.daysAgo", { n: ageDays(r.createdAt) }));
+const hiddenCtx = (r: CatalogRequest) => ({ kind: r.kind, id: r.id, origName: requestLabel(r), origInitialServiceName: r.kind === "CATEGORY" ? r.initialServiceName ?? "" : undefined, fk: kind !== "ALL" ? kind : undefined, fq: text || undefined, p: pg.page > 1 ? String(pg.page) : undefined });
+const dlgUrl = (name: "approve" | "reject", r: CatalogRequest, withOpen: boolean) => listUrl({ dlg: name, id: keyOf(r), open: withOpen ? keyOf(r) : undefined });
+const needsIcon = (r: CatalogRequest) => iconTarget(r) !== null && r.iconUrl === null;
+const iconDlgUrl = (r: CatalogRequest) => listUrl({ dlg: "icon", id: keyOf(r), open: keyOf(r) });
+const chips: [typeof kind, string, number][] = [["ALL", t("admin.requests.all"), items.length], ["CATEGORY", t("admin.requests.categories"), nCat], ["SERVICE_TYPE", t("admin.requests.serviceTypes"), items.length - nCat]];
+---
+
+<AdminShell title={t("admin.requests.metaTitle")} description={t("admin.requests.metaDescription")} path="/admin/requests" actor={actor} nav={nav} modal={!!(detailReq || dlgReq)} flash={flash ? { ...flash, closeHref: closeFlash } : null}>
+  <Fragment slot="dialog">
+  {detailReq && !dlgReq && (
+    <AdminDialog sheet title={detailReq.kind === "CATEGORY" ? t("admin.requests.detailCat") : t("admin.requests.detailType")} icon={detailReq.kind === "CATEGORY" ? "category" : "inbox"} closeHref={detailClose}>
+      <div class="age-row"><AdminAgePill days={ageDays(detailReq.createdAt)} /></div>
+      <dl class="facts">
+        {detailReq.kind === "SERVICE_TYPE" && detailReq.categoryName && <div><dt>{t("admin.requests.category")}</dt><dd>{detailReq.categoryName}</dd></div>}
+        <div><dt>{t("admin.requests.requester")}</dt><dd>{detailReq.requesterLabel}</dd></div>
+        {detailReq.createdAt && <div><dt>{t("admin.requests.sent")}</dt><dd><time datetime={detailReq.createdAt}>{formatDate(detailReq.createdAt)}</time> · {daysAgo(detailReq)}</dd></div>}
+        {detailReq.description && <div><dt>{t("admin.requests.description")}</dt><dd class="desc">{detailReq.description}</dd></div>}
+      </dl>
+      {iconTarget(detailReq) && (
+        <div class="icon-field well">
+          <AdminIconTile src={detailReq.iconUrl} size="lg" />
+          <span class="grow">
+            <span class="lbl">{t("admin.icons.fieldLabel")}</span>
+            {detailReq.iconUrl ? <><b>{t("admin.icons.added")}</b><span class="hint">{t("admin.icons.addedSub")}</span></> : <span class="pill bad">{t("admin.icons.none")}</span>}
+          </span>
+          <a class="vt-label vt-u" href={iconDlgUrl(detailReq)}>{t(detailReq.iconUrl ? "admin.icons.replace" : "admin.icons.upload")}</a>
+        </div>
+      )}
+      <hr class="rule" />
+      <form method="post" action="/admin/requests">
+        {Object.entries(hiddenCtx(detailReq)).map(([k, v]) => v !== undefined && <input type="hidden" name={k} value={v} />)}
+        <div class="field">
+          <label for="rn">{t("admin.requests.name")}</label>
+          <input class="in" id="rn" name="name" type="text" required maxlength="400" value={typedName(detailReq)} autocomplete="off" aria-invalid={badName ? "true" : undefined} aria-describedby="rn-h" autofocus />
+          <span class="hint" id="rn-h">{t("admin.requests.nameHint")}</span>
+        </div>
+        {detailReq.kind === "CATEGORY" && (
+          <div class="field">
+            <label for="rs">{t("admin.requests.initialService")}</label>
+            <input class="in" id="rs" name="initialServiceName" type="text" maxlength="400" value={detailReq.initialServiceName ?? ""} autocomplete="off" />
+          </div>
+        )}
+        <div class="sheet-f">
+          <AdminButton type="submit" name="action" value="save">{t("admin.requests.save")}</AdminButton>
+          <span class="grow"></span>
+          <AdminButton href={dlgUrl("reject", detailReq, true)} danger>{t("admin.requests.rejectOpen")}</AdminButton>
+          <CtaButton type="submit" name="action" value="approve" icon="check" disabled={needsIcon(detailReq)}>{t("admin.requests.approve")}</CtaButton>
+          {needsIcon(detailReq) && <p class="hint bad need-icon">{t("admin.icons.approveBlocked")}</p>}
+        </div>
+      </form>
+    </AdminDialog>
+  )}
+
+  {dlgReq && dlg === "approve" && (
+    <AdminDialog title={t("admin.requests.approveTitle")} icon="ok" bad={err === "CATEGORY_ICON_REQUIRED"} closeHref={rawOpen ? listUrl({ open: rawOpen }) : listUrl()}>
+      {iconTarget(dlgReq) && (needsIcon(dlgReq) || err === "CATEGORY_ICON_REQUIRED") && (
+        <>
+          <p class="hint bad" role="alert">{t(err === "CATEGORY_ICON_REQUIRED" ? "admin.icons.approveRequired" : "admin.icons.approveBlocked")}</p>
+          <AdminIconUpload id="ap" category={iconTarget(dlgReq)!} returnTo={listUrl({ dlg: "approve", id: keyOf(dlgReq), open: rawOpen || undefined })} invalid={isIconCode(err)} />
+        </>
+      )}
+      <form method="post" action="/admin/requests">
+        {Object.entries(hiddenCtx(dlgReq)).map(([k, v]) => v !== undefined && <input type="hidden" name={k} value={v} />)}
+        <input type="hidden" name="name" value={requestLabel(dlgReq)} />
+        {dlgReq.kind === "CATEGORY" && <input type="hidden" name="initialServiceName" value={dlgReq.initialServiceName ?? ""} />}
+        <p class="t-body">
+          {dlgReq.kind === "CATEGORY" ? t("admin.requests.approveBodyCat", { name: requestLabel(dlgReq) }) : t("admin.requests.approveBodyType", { name: requestLabel(dlgReq), category: dlgReq.categoryName ?? "" })}
+        </p>
+        <div class="dlg-f">
+          <AdminButton autofocus href={rawOpen ? listUrl({ open: rawOpen }) : listUrl()}>{t("admin.cancel")}</AdminButton>
+          <CtaButton type="submit" name="action" value="approve" disabled={needsIcon(dlgReq)}>{t("admin.requests.approveConfirm")}</CtaButton>
+        </div>
+      </form>
+    </AdminDialog>
+  )}
+
+  {dlgReq && dlg === "icon" && iconTarget(dlgReq) && (
+    <AdminDialog title={t(dlgReq.iconUrl ? "admin.icons.replaceTitle" : "admin.icons.addTitle")} icon="category" closeHref={rawOpen ? listUrl({ open: rawOpen }) : listUrl()}>
+      <p class="t-body">{t("admin.icons.forCat", { name: requestLabel(dlgReq) })}</p>
+      {dlgReq.iconUrl && (
+        <div class="icon-cur">
+          <span class="lbl">{t("admin.icons.current")}</span>
+          <span class="ico-pair"><AdminIconTile src={dlgReq.iconUrl} size="lg" /><AdminIconTile src={dlgReq.iconUrl} /></span>
+        </div>
+      )}
+      <AdminIconUpload id="ic" category={iconTarget(dlgReq)!} returnTo={iconDlgUrl(dlgReq)} replace={!!dlgReq.iconUrl} invalid={isIconCode(err)} cancelHref={rawOpen ? listUrl({ open: rawOpen }) : listUrl()} />
+    </AdminDialog>
+  )}
+
+  {dlgReq && dlg === "reject" && (
+    <AdminDialog title={t("admin.requests.rejectTitle")} icon="close" bad closeHref={rawOpen ? listUrl({ open: rawOpen }) : listUrl()}>
+      <form method="post" action="/admin/requests">
+        {Object.entries(hiddenCtx(dlgReq)).map(([k, v]) => v !== undefined && <input type="hidden" name={k} value={v} />)}
+        <p class="t-body">{t("admin.requests.rejectBody", { name: requestLabel(dlgReq) })}</p>
+        <div class="field">
+          <label for="rr">{t("admin.requests.reason")}</label>
+          <textarea class="in" id="rr" name="reason" rows="4" maxlength={REASON_MAX} aria-describedby="rr-h" autofocus></textarea>
+          <div class="row-split"><span class="hint" id="rr-h">{t("admin.requests.reasonHint")}</span><span class="hint">{t("admin.requests.reasonMax")}</span></div>
+        </div>
+        <div class="dlg-f">
+          <AdminButton href={rawOpen ? listUrl({ open: rawOpen }) : listUrl()}>{t("admin.cancel")}</AdminButton>
+          <CtaButton type="submit" name="action" value="reject">{t("admin.requests.rejectConfirm")}</CtaButton>
+        </div>
+      </form>
+    </AdminDialog>
+  )}
+  </Fragment>
+
+  <div class="page-h">
+    <div>
+      <span class="eyebrow vt-label">{t("admin.requests.eyebrow")}</span>
+      <h1 class="vt-heading">{t("admin.requests.h1")}</h1>
+      <p class="t-body">{t("admin.requests.lead")}</p>
+    </div>
+  </div>
+
+  {!list.ok && <AdminFlash ok={false} text={t("admin.requests.loadFailed")} retryHref={listUrl()} />}
+
+  {list.ok && (
+    <section class="card">
+      <div class="toolbar">
+        <ul class="seg" aria-label={t("admin.requests.filterLabel")}>
+          {chips.map(([k, label, n]) => (
+            <li><Chip href={withQuery("/admin/requests", { kind: k !== "ALL" && k, q: text })} selected={kind === k}>{label}<span class="n">{n}</span></Chip></li>
+          ))}
+        </ul>
+        <span class="sp"></span>
+        <AdminSearch action="/admin/requests" value={text} label={t("admin.requests.searchLabel")} placeholder={t("admin.requests.search")} submit={t("admin.requests.searchBtn")} keep={kind !== "ALL" ? { kind } : {}} />
+      </div>
+
+      {items.length === 0 && (
+        <div class="empty">
+          <span class="big"><Icon name="ok" /></span>
+          <h2 class="vt-heading">{t("admin.requests.empty")}</h2>
+          <p class="t-body">{t("admin.requests.emptyBody")}</p>
+          <AdminButton href="/admin/catalog">{t("admin.requests.openCatalog")}</AdminButton>
+        </div>
+      )}
+      {items.length > 0 && rows.length === 0 && (
+        <div class="empty">
+          <span class="big"><Icon name="search" /></span>
+          <h2 class="vt-heading">{t("admin.requests.noneFound")}</h2>
+          <p class="t-body">{t("admin.requests.noneFoundBody")}</p>
+          <AdminButton href="/admin/requests">{t("admin.requests.resetFilters")}</AdminButton>
+        </div>
+      )}
+      {rows.length > 0 && (
+        <>
+          <div class="tbl-wrap">
+            <table class="tbl">
+              <thead>
+                <tr>
+                  <th scope="col">{t("admin.requests.colType")}</th>
+                  <th scope="col">{t("admin.requests.colName")}</th>
+                  <th scope="col" class="hide-md">{t("admin.requests.colRequester")}</th>
+                  <th scope="col">{t("admin.requests.colSent")}</th>
+                  <th scope="col" class="act"><span class="sr">{t("admin.requests.colActions")}</span></th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((r) => {
+                  const label = requestLabel(r);
+                  return (
+                    <tr id={`req-${r.id}`}>
+                      <td><span class:list={["pill", { mute: r.kind !== "CATEGORY" }]}>{r.kind === "CATEGORY" ? t("admin.requests.kindCategory") : t("admin.requests.kindType")}</span></td>
+                      <td>
+                        <span class="name">
+                          <b><a class="nm vt-u" href={listUrl({ open: keyOf(r) })}>{label}</a></b>
+                          <small>{r.kind === "SERVICE_TYPE" ? t("admin.requests.inCategory", { name: r.categoryName ?? "" }) : r.initialServiceName ? t("admin.requests.firstService", { name: r.initialServiceName }) : t("admin.requests.noFirstService")}</small>
+                          {needsIcon(r) && <span class="pill bad">{t("admin.icons.rowPill")}</span>}
+                          <span class="only-sm"><AdminAgePill days={ageDays(r.createdAt)} /></span>
+                        </span>
+                      </td>
+                      <td class="hide-md">{r.requesterLabel}</td>
+                      <td>
+                        <span class="name">
+                          <b class="when">{dateOf(r)}</b>
+                          <small>{daysAgo(r)}</small>
+                          <span class="from-sm"><AdminAgePill days={ageDays(r.createdAt)} /></span>
+                        </span>
+                      </td>
+                      <td class="act">
+                        <span class="acts">
+                          {needsIcon(r)
+                            ? <AdminButton href={listUrl({ open: keyOf(r) })} icon="check" iconOnly ariaDisabled label={t("admin.icons.approveRowNeeds", { name: label })} />
+                            : <AdminButton href={dlgUrl("approve", r, false)} icon="check" iconOnly label={t("admin.requests.approveRow", { name: label })} />}
+                          <AdminButton href={dlgUrl("reject", r, false)} icon="close" iconOnly danger label={t("admin.requests.rejectRow", { name: label })} />
+                          <AdminButton href={listUrl({ open: keyOf(r) })} icon="chevron-right" iconOnly label={t("admin.requests.openRow", { name: label })} />
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+          <div class="tfoot">
+            <span class="vt-label">{t("admin.requests.range", { shown: `${pg.from}–${pg.to}`, total: kind !== "ALL" || text ? pg.total : list.total })}</span>
+            {list.capped && <span class="vt-label" role="status">{t("admin.requests.capNotice")}</span>}
+          </div>
+          <AdminPager base="/admin/requests" page={pg.page} totalPages={pg.pages} label={t("admin.requests.pager")} prev={t("admin.requests.prev")} next={t("admin.requests.next")} query={{ ...(kind !== "ALL" ? { kind } : {}), ...(text ? { q: text } : {}) }} />
+        </>
+      )}
+    </section>
+  )}
+</AdminShell>

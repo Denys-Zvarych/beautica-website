@@ -1,5 +1,5 @@
 // Response plumbing shared by the two SSR link pages: status, robots header, cache policy, CSP.
-import { bookingCsp } from "../securityHeaders";
+import { bookingCsp } from "../securityHeaders.ts";
 import type { BookingConfig } from "./config";
 
 interface Res {
@@ -10,14 +10,14 @@ interface Res {
 
 export const NOINDEX = "noindex, nofollow";
 
-/** Origins of the https image URLs present in the page data (R2 media), for CSP img-src. */
-export function imageOrigins(urls: (string | null | undefined)[]): string[] {
+/** Origins of the https image URLs present in the page data (R2 media), for CSP img-src. With `allowed` (imgOriginsFor) only the pinned media origin(s) survive. */
+export function imageOrigins(urls: (string | null | undefined)[], allowed?: readonly string[]): string[] {
   const out = new Set<string>();
   for (const u of urls) {
     if (!u) continue;
     try {
       const url = new URL(u);
-      if (url.protocol === "https:") out.add(url.origin);
+      if (url.protocol === "https:" && (!allowed || allowed.includes(url.origin))) out.add(url.origin);
     } catch {
       /* ignore */
     }

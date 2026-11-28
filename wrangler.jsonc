@@ -20,17 +20,20 @@
     // /r/{token} (guest review, phase 019) is rendered by the Worker as well; its trailing-slash variant and the bare /r/ (where history.replaceState leaves the address after a review) are the 307 rules in _redirects.
     // /api/* is listed too: once this array exists the asset layer no longer lets a GET to a path without an asset reach the Worker, and
     // /api/delete-request must keep answering 405 to a GET (tests/headers-seo.test.mjs).
-    "run_worker_first": ["/book/*", "!/book/cancel/*/", "/c/*", "!/c/*/", "/r/*", "!/r/*/", "!/r/", "/api/*"]
+    "run_worker_first": ["/book/*", "!/book/cancel/*/", "/c/*", "!/c/*/", "/r/*", "!/r/*/", "!/r/", "/api/*", "/admin", "/admin/*", "!/admin/"]
   },
   // Booking-link pages (phases 008/009), read at run time by src/lib/booking/config.ts. Public values only; the Worker key is a secret.
   //   API_ORIGIN               prod API. Previews (dev branch, staging) override it below; local dev: .dev.vars (see .dev.vars.example).
   //   TURNSTILE_SITE_KEY       prod: the real site key of the beautica.app widget, set as a plain-text variable in the Cloudflare dashboard
   //                            (never committed; keep_vars stops a deploy from wiping it). Previews: Cloudflare's always-pass test key.
-  //   MEDIA_ORIGIN            optional; image origin allowed in the CSP img-src and used for avatars. Default https://media.beautica.app.
-  //                            Staging photos live on another host: set MEDIA_ORIGIN there, or /r/{token} drops the master avatar.
+  //   MEDIA_ORIGIN            optional; image origin (photos + category icons) allowed in the CSP img-src. Prod: unset = default https://media.beautica.app.
+  //                            Previews (staging) set it in previews.vars to https://media-staging.beautica.app (dashboard-set vars are reset on rebuild).
   //   BOOKING_INFO_WORKER_KEY  secret (wrangler secret put / dashboard Secrets, previews.secrets); same value as the backend env var.
   "keep_vars": true,
-  "vars": { "API_ORIGIN": "https://api.beautica.app" },
+  // Private /admin (phase 039). Per environment, never in code: CF_ACCESS_TEAM_DOMAIN is the Zero Trust team (same org for prod and staging, so it is
+  // set here and in previews.vars); CF_ACCESS_AUD (that environment's own Access app), ADMIN_EMAILS and the secret INTERNAL_CATALOG_KEY are set in the
+  // dashboard (prod: Variables and Secrets; staging: the preview/`dev` environment's). A missing value disables /admin (404). See README § Admin.
+  "vars": { "API_ORIGIN": "https://api.beautica.app", "CF_ACCESS_TEAM_DOMAIN": "beautica.cloudflareaccess.com" },
   // Account-deletion requests (phase 011): Email Routing send binding, locked to the verified team inbox.
   "send_email": [{ "name": "DELETION_MAIL", "destination_address": "beautica.ua@gmail.com" }],
   // 3 requests / 60 s per IP on /api/delete-request.
@@ -38,7 +41,7 @@
   // Previews do not inherit production bindings: same names, Preview-safe values (separate rate-limit namespace).
   "previews": {
     // Staging: the Railway staging API and Cloudflare's always-pass Turnstile test key (the staging backend accepts only test secrets).
-    "vars": { "API_ORIGIN": "https://beautica-backend-staging.up.railway.app", "TURNSTILE_SITE_KEY": "1x00000000000000000000AA" },
+    "vars": { "API_ORIGIN": "https://beautica-backend-staging.up.railway.app", "TURNSTILE_SITE_KEY": "1x00000000000000000000AA", "CF_ACCESS_TEAM_DOMAIN": "beautica.cloudflareaccess.com", "MEDIA_ORIGIN": "https://media-staging.beautica.app" },
     "send_email": [{ "name": "DELETION_MAIL", "destination_address": "beautica.ua@gmail.com" }],
     "ratelimits": [{ "name": "DELETION_LIMITER", "namespace_id": "1012", "simple": { "limit": 3, "period": 60 } }]
   }

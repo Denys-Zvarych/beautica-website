@@ -1,0 +1,103 @@
+---
+// Private operator overview (phase 039, redesigned W052). The middleware has already verified the Cloudflare Access JWT (src/middleware.ts); the page re-checks the
+// actor it left in locals (404 if absent), so a route can never render without the gate. No scripts, no analytics, no-store, noindex.
+// «Огляд»: category KPIs (new requests, categories, disabled) and the catalog attention list, from the two backend lists this page loads itself.
+export const prerender = false;
+
+import AdminShell from "../../components/admin/AdminShell.astro";
+import AdminFlash from "../../components/AdminFlash.astro";
+import Icon from "../../components/Icon.astro";
+import { t } from "../../i18n/t";
+import { requireActor } from "../../lib/admin/access.ts";
+import { adminConfig } from "../../lib/admin/runtime.ts";
+import { listAllPending } from "../../lib/admin/requests.ts";
+import { loadCategories } from "../../lib/admin/catalog.ts";
+import { ageDays, AGE_WARN_DAYS } from "../../lib/admin/requestAge.ts";
+import { navFrom, NAV_UNKNOWN } from "../../lib/admin/navInfo.ts";
+import { pluralUk } from "../../lib/admin/listQuery.ts";
+
+const actor = requireActor(Astro.locals);
+if (actor instanceof Response) return actor;
+const cfg = adminConfig();
+
+const [pending, catalog] = cfg ? await Promise.all([listAllPending(cfg, actor), loadCategories(cfg, actor)]) : [null, null];
+const reqs = pending?.ok ? pending : null;
+const cats = catalog?.ok ? catalog.cats : null;
+const nav = reqs ? navFrom(reqs.items, reqs.total) : NAV_UNKNOWN;
+
+const nCat = reqs ? reqs.items.filter((r) => r.kind === "CATEGORY").length : 0;
+const nTyp = reqs ? reqs.items.length - nCat : 0;
+// KPI split bar: widths come from preset 5 % classes (.w0 .. .w20), never an inline style (CSP-clean).
+const wA = nCat + nTyp > 0 ? Math.round((nCat / (nCat + nTyp)) * 20) : 0;
+const wB = nCat + nTyp > 0 ? 20 - wA : 0;
+const old = reqs ? reqs.items.filter((r) => ageDays(r.createdAt) >= AGE_WARN_DAYS).length : 0;
+const approved = cats ? cats.filter((c) => c.status === "APPROVED") : [];
+const hidden = approved.filter((c) => !c.active).length;
+const unused = approved.filter((c) => c.usageCount === 0 && c.typeCount === 0).length;
+const types = approved.reduce((sum, c) => sum + c.typeCount, 0);
+const noIcon = approved.filter((c) => c.iconUrl === null).length; // W049: only when the backend exposes icons (undefined = not exposed)
+const notApproved = cats ? cats.filter((c) => c.status === "PENDING") : [];
+const attention: { icon: "warning" | "eye-off" | "delete"; title: string; sub: string; href: string }[] = [
+  ...notApproved.map((c) => ({ icon: "warning" as const, title: t("admin.overview.pendingCat", { name: c.displayName }), sub: t("admin.overview.pendingCatSub"), href: "/admin/requests" })),
+  ...(hidden ? [{ icon: "eye-off" as const, title: pluralUk(hidden, [t("admin.overview.hiddenOne", { n: hidden }), t("admin.overview.hiddenFew", { n: hidden }), t("admin.overview.hiddenMany", { n: hidden })]), sub: t("admin.overview.hiddenSub"), href: "/admin/catalog?f=HIDDEN" }] : []),
+  ...(noIcon ? [{ icon: "warning" as const, title: pluralUk(noIcon, [t("admin.icons.ovOne", { n: noIcon }), t("admin.icons.ovFew", { n: noIcon }), t("admin.icons.ovMany", { n: noIcon })]), sub: t("admin.icons.ovSub"), href: "/admin/catalog?f=NOICON" }] : []),
+  ...(unused ? [{ icon: "delete" as const, title: pluralUk(unused, [t("admin.overview.unusedOne", { n: unused }), t("admin.overview.unusedFew", { n: unused }), t("admin.overview.unusedMany", { n: unused })]), sub: t("admin.overview.unusedSub"), href: "/admin/catalog?f=UNUSED" }] : []),
+];
+const oldText = old === 1 ? t("admin.overview.oldOne", { n: old }) : t("admin.overview.oldMany", { n: old });
+---
+
+<AdminShell title={t("admin.metaTitle")} description={t("admin.metaDescription")} path="/admin" actor={actor} nav={nav} cfg={cfg}>
+  <div class="page-h">
+    <div>
+      <h1 class="vt-heading">{t("admin.h1")}</h1>
+      <p class="t-body">{t("admin.lead")}</p>
+    </div>
+  </div>
+
+  <section aria-labelledby="ov-cat">
+    <h2 class="sec-h vt-heading" id="ov-cat">{t("admin.overview.section")}</h2>
+    {!cfg || !reqs ? <div class="banner"><AdminFlash ok={false} text={t("admin.requests.loadFailed")} retryHref="/admin" /></div> : null}
+    {cfg && !cats ? <div class="banner"><AdminFlash ok={false} text={t("admin.catalog.loadFailed")} retryHref="/admin" /></div> : null}
+
+    <div class="kpis">
+      <a class:list={["card", "kpi", { warn: !!reqs && reqs.items.length > 0 }]} href="/admin/requests">
+        <div class="kpi-h"><span class="vt-label">{t("admin.overview.kpiRequests")}</span><span class="kpi-ic"><Icon name="inbox" /></span></div>
+        <div class="kpi-v">{reqs ? reqs.total : "—"}</div>
+        {!reqs && <span class="vt-body">{t("admin.unavailable")}</span>}
+        {reqs && old > 0 && <span class="vt-body kpi-old"><Icon name="warning" />{oldText}</span>}
+        {reqs && (
+          <div>
+            <div class="split" aria-hidden="true">
+              <i class={`a w${wA}`}></i>
+              <i class={`b w${wB}`}></i>
+            </div>
+            <div class="legend vt-label"><span>{t("admin.overview.legendCat", { n: nCat })}</span><span class="b">{t("admin.overview.legendType", { n: nTyp })}</span></div>
+          </div>
+        )}
+      </a>
+      <a class="card kpi" href="/admin/catalog">
+        <div class="kpi-h"><span class="vt-label">{t("admin.overview.kpiCats")}</span><span class="kpi-ic"><Icon name="category" /></span></div>
+        <div class="kpi-v">{cats ? approved.length : "—"}</div>
+        <span class="vt-body">{cats ? t("admin.overview.kpiTypes", { n: types }) : t("admin.unavailable")}</span>
+      </a>
+      <a class="card kpi" href="/admin/catalog?f=HIDDEN">
+        <div class="kpi-h"><span class="vt-label">{t("admin.overview.kpiHidden")}</span><span class="kpi-ic"><Icon name="eye-off" /></span></div>
+        <div class="kpi-v">{cats ? hidden : "—"}</div>
+        <span class="vt-body">{cats ? t("admin.overview.kpiHiddenSub") : t("admin.unavailable")}</span>
+      </a>
+    </div>
+
+    <section class="card card-pad" aria-labelledby="ov-a">
+      <div class="card-h"><h3 class="vt-card-title" id="ov-a">{t("admin.overview.attnTitle")}</h3></div>
+      {cats && attention.length === 0 && <p class="vt-body">{t("admin.overview.attnOk")}</p>}
+      {!cats && <p class="vt-body">{t("admin.unavailable")}</p>}
+      {cats && attention.map((a) => (
+        <a class="attn" href={a.href}>
+          <span class="lead"><Icon name={a.icon} /></span>
+          <span class="grow"><span class="t-strong">{a.title}</span><span class="vt-label">{a.sub}</span></span>
+          <Icon name="chevron-right" />
+        </a>
+      ))}
+    </section>
+  </section>
+</AdminShell>

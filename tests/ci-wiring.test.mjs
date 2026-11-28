@@ -13,7 +13,7 @@ const pkg = JSON.parse(read("package.json"));
 const lhci = JSON.parse(read("lighthouserc.json"));
 /** Steps of the workflow: { job, text } (a step starts with `      - ` inside a job). */
 const steps = [];
-for (const [, job, body] of ci.matchAll(/^  (\w+):\n([\s\S]*?)(?=^  \w+:\n|(?![\s\S]))/gm)) for (const s of body.split(/^      - /m).slice(1)) steps.push({ job, text: s });
+for (const [, job, body] of ci.matchAll(/^  ([\w-]+):\n([\s\S]*?)(?=^  [\w-]+:\n|(?![\s\S]))/gm)) for (const s of body.split(/^      - /m).slice(1)) steps.push({ job, text: s });
 const specs = readdirSync(join(ROOT, "tests")).filter((f) => f.endsWith(".test.mjs"));
 const excluded = (/TEST_EXCLUDE:\s*([\w.,-]+)/.exec(ci)?.[1] ?? "").split(",").filter(Boolean);
 
@@ -64,7 +64,8 @@ describe("every spec runs on pull requests", () => {
     for (const s of heavy) {
       const t = Number(/timeout-minutes:\s*(\d+)/.exec(s.text)?.[1]);
       // npm test (792 tests) takes ~305 s on a runner, just over 5 min: its step allows 8 (PR #30).
-      const limit = /lhci autorun/.test(s.text) ? 14 : /^\s*run: npm test\s*$/m.test(s.text) ? 8 : 5; // lhci over 10 pages x 3 runs takes ~5.5 min on a runner; its job allows 15; lighthouse-ssr is split in two steps (3 + 2 pages) to stay within 5
+      // check-admin --group sample / large (W041): 205 s / 244 s measured; the steps allow 8 / 8 (>= +50 %).
+      const limit = /lhci autorun/.test(s.text) ? 14 : /^\s*run: npm test\s*$/m.test(s.text) || /node scripts\/check-admin\.mjs --group sample/.test(s.text) ? 8 : /node scripts\/check-admin\.mjs --group large/.test(s.text) ? 8 : 5; // lhci over 10 pages x 3 runs takes ~5.5 min on a runner; its job allows 15; lighthouse-ssr is split in two steps (3 + 2 pages) to stay within 5
       assert.ok(t >= 1 && t <= limit, `step "${s.text.split("\n")[0]}" has timeout-minutes ${t || "none"}`);
     }
   });
@@ -75,14 +76,38 @@ describe("every route is under Lighthouse", () => {
     e.isDirectory() ? (e.name === "api" ? [] : routes(join(dir, e.name), `${base}/${e.name}`)) : [`${base}/${e.name.replace(/\.(astro|ts)$/, "")}`]);
   // The one deliberate exclusion: /book-steps/* are noindex HTML fragments the booking island fetches (phase 016), not pages; Lighthouse
   // measures the pages that load them. static-build.test.mjs checks the fragment itself (CSP-safe, no <html>/<title>).
-  const staticRoutes = routes("").filter((r) => !r.includes("[") && !r.startsWith("/book-steps/")).map((r) => (r === "/index" ? "/index" : r));
+  // Non-page endpoints (no HTML, nothing for Lighthouse to measure). Listed by name with a reason so a new page cannot slip past unnoticed.
+  // /admin/icon: POST-only category-icon upload form handler (405 for any other method, 303 back to /admin/catalog); its page is /admin/catalog.
+  const NON_PAGE_ENDPOINTS = ["/admin/icon"];
+  const staticRoutes = routes("").filter((r) => !r.includes("[") && !r.startsWith("/book-steps/") && !NON_PAGE_ENDPOINTS.includes(r)).map((r) => (r === "/index" ? "/index" : r));
   // Catch-all 404 routes ([...rest]) are not pages either: they only re-serve the static /404 page through the middleware so that malformed
   // token paths get the token headers (phase 007). Listed by name so a new catch-all cannot slip past Lighthouse unnoticed; /404 is measured.
-  const CATCH_ALL_404 = ["/book/cancel/[...rest]", "/c/[...rest]"];
+  // /admin/[...rest] (phase 039) is the gate's catch-all: the middleware answers its unauthenticated 404 (admin headers); an owner gets a plain 404 too.
+  const CATCH_ALL_404 = ["/admin/[...rest]", "/book/cancel/[...rest]", "/c/[...rest]"];
   const catchAll = routes("").filter((r) => r.includes("[..."));
   const dynamicRoutes = routes("").filter((r) => r.includes("[") && !r.includes("[..."));
   const lhciUrls = lhci.ci.collect.url.map((u) => new URL(u).pathname.replace(/\.html$/, ""));
-  for (const r of staticRoutes)
+  // /admin (phase 039) sits behind Cloudflare Access, so lhci over dist/ cannot reach it: scripts/lighthouserc-admin.json measures it through the test harness.
+  const adminLhci = JSON.parse(read("scripts/lighthouserc-admin.json")).ci;
+  const ADMIN_ROUTES = { "/admin/index": "/admin", "/admin/requests": "/admin/requests", "/admin/catalog": "/admin/catalog" };
+  for (const r of staticRoutes.filter((x) => ADMIN_ROUTES[x]))
+    test(`admin page ${r} is measured by scripts/lighthouserc-admin.json (3 runs, median), and check-admin.mjs runs in CI`, () => {
+      assert.ok(adminLhci.collect.url.some((u) => new URL(u).pathname === ADMIN_ROUTES[r]), `${r} has no admin Lighthouse URL`);
+      assert.equal(adminLhci.collect.numberOfRuns, 3);
+      assert.equal(adminLhci.assert.aggregationMethod, "median");
+      for (const group of ["sample", "large"]) {
+        const gate = steps.find((x) => x.text.includes(`node scripts/check-admin.mjs --group ${group}`))?.text;
+        assert.ok(gate, `no CI step runs scripts/check-admin.mjs --group ${group}`);
+        assert.match(gate, /if: always\(\)/, `the admin gate (${group}) must run even when lhci or the other half is red`);
+        const min = Number(/timeout-minutes:\s*(\d+)/.exec(gate)?.[1]);
+        assert.ok(min * 60 >= { sample: 205, large: 244 }[group] * 1.5, `${group}: timeout ${min} min is below the measured time + 50 %`);
+      }
+      const src = read("scripts/check-admin.mjs");
+      assert.match(src, /lighthouserc-admin\.json/);
+      assert.match(src, /check-responsive\.mjs/);
+      assert.match(src, /check-axe\.mjs/);
+    });
+  for (const r of staticRoutes.filter((x) => !ADMIN_ROUTES[x]))
     test(`static page ${r} is in lighthouserc.json (3 runs, median)`, () => {
       assert.ok(lhciUrls.includes(r), `${r} has no Lighthouse URL`);
       assert.equal(lhci.ci.collect.numberOfRuns, 3);
@@ -105,6 +130,12 @@ describe("every route is under Lighthouse", () => {
   test("the only catch-all routes are the listed 404 re-servers (their page, /404, is under Lighthouse)", () => {
     assert.deepEqual(catchAll.sort(), CATCH_ALL_404);
     assert.ok(lhciUrls.includes("/404"));
+  });
+  test("the /admin catch-all's gated 404 (admin headers, with and without a JWT or actor) is asserted by admin-access.test.mjs", () => {
+    const t = read("tests/admin-access.test.mjs");
+    assert.match(t, /\/admin\/anything/);
+    assert.match(t, /catchAll\(\{ locals: \{\} \}\)\.status, 404/);
+    assert.match(t, /Cf-Access-Jwt-Assertion": "forged\.jwt\.value"/);
   });
   test("the guest-cancel token route is measured through its static shell /l/cancel", () => assert.ok(lhciUrls.includes("/l/cancel")));
 });
@@ -164,6 +195,13 @@ describe("phase 021 (privacy 1.4, Telegram section) is guarded on every PR", () 
   });
 });
 
+describe("phase 053: the build-alerts Worker is guarded on every PR", () => {
+  test("build-alerts.test.mjs is in test:static and the site job runs `npm run test:static`", () => {
+    assert.match(pkg.scripts["test:static"], /tests\/build-alerts\.test\.mjs/);
+    assert.ok(steps.some((s) => s.job === "site" && /run: npm run test:static\b/.test(s.text)), "no site-job step runs test:static");
+  });
+});
+
 describe("the shared mock backend", () => {
   test("no test clears its request log (POST /__mock/reset): files run concurrently against one mock, a reset deletes the other files' requests (use logMark() + mockLog(filter, mark))", () => {
     const offenders = readdirSync(join(ROOT, "tests")).filter((f) => f.endsWith(".test.mjs") && f !== "ci-wiring.test.mjs" && /__mock\/reset/.test(readFileSync(join(ROOT, "tests", f), "utf8")));
@@ -176,6 +214,14 @@ describe("phase 030: no bearer token in Cloudflare logs", () => {
     const cfg = JSON.parse(read("wrangler.jsonc").replace(/^\s*\/\/.*$/gm, ""));
     assert.equal(cfg.observability.enabled, true);
     assert.strictEqual(cfg.observability.logs?.invocation_logs, false);
+  });
+});
+
+describe("media origin per environment", () => {
+  test("previews.vars pins MEDIA_ORIGIN to the staging media host; prod vars leave it unset (code default media.beautica.app)", () => {
+    const cfg = JSON.parse(read("wrangler.jsonc").replace(/("(?:\\.|[^"\\])*")|\/\/[^\n]*/g, (m, s) => s ?? ""));
+    assert.equal(cfg.previews.vars.MEDIA_ORIGIN, "https://media-staging.beautica.app");
+    assert.ok(!("MEDIA_ORIGIN" in cfg.vars));
   });
 });
 

@@ -17,6 +17,7 @@ import { t } from "../../i18n/t";
 import { safeJson } from "../../lib/safeJson";
 import { formatDuration, formatPriceFrom, groupByCategory } from "../../lib/booking/format";
 import type { MasterInfo } from "../../lib/booking/types";
+import type { CategoryIcons } from "../../lib/categoryIcon";
 import { serviceNameHints } from "../../lib/booking/serviceHint.ts";
 
 interface Props {
@@ -25,8 +26,10 @@ interface Props {
   /** Salon mode (phase 016): the wizard skeleton. The services, strips and coverage are not in this markup: the island builds them from
    *  GET /book/s/{slug}/info when the visitor opens the wizard, so the salon page itself carries none of it. */
   salon?: boolean;
+  /** Server category icons (W050); absent = bundled icons only. */
+  icons?: CategoryIcons;
 }
-const { info, salon } = Astro.props;
+const { info, salon, icons } = Astro.props;
 const total = 4;
 const stepNo = (n: number) => t("book.salonFlow.step", { current: n, total });
 // Strings the island needs (everything else is in the server HTML). Escaped for a JSON data block.
@@ -70,7 +73,7 @@ const hints = serviceNameHints(info?.services ?? []);
       <div id="svc-list">
         {
           groups.map((g) => (
-            <CategoryGroup name={g.name} categoryKey={g.key || null} count={g.items.length} selectable open={!salon || g === groups[0]}>
+            <CategoryGroup name={g.name} categoryKey={g.key || null} icons={icons} count={g.items.length} selectable open={!salon || g === groups[0]}>
               {g.items.map((s) => <ServiceTile selectable id={s.id} name={s.name} minutes={s.durationMinutes} priceFrom={s.priceFrom} price={s.price} duration={formatDuration(s.durationMinutes)} hint={hints.get(s.id)} />)}
             </CategoryGroup>
           ))

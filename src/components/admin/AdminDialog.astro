@@ -1,0 +1,27 @@
+---
+// A server-rendered dialog panel (W052 D1, no script): `<section class="dlg">` placed first in <main> by the page that owns the data. The scrim is a link back to
+// `closeHref` (the same list without `dlg`); the page puts the confirm <form method="post"> in the slot. `sheet` = the request detail (right side from 1024 px).
+import Icon, { type IconName } from "../Icon.astro";
+import AdminButton from "./AdminButton.astro";
+import { t } from "../../i18n/t";
+interface Props {
+  title: string;
+  closeHref: string;
+  icon?: IconName;
+  bad?: boolean;
+  sheet?: boolean;
+}
+const { title, closeHref, icon, bad = false, sheet = false } = Astro.props;
+---
+
+<section class:list={["dlg", { sheet }]} role="dialog" aria-modal="true" aria-labelledby="dlg-t">
+  <a class="scrim" href={closeHref} tabindex="-1" aria-hidden="true"></a>
+  <div class="dlg-box">
+    <div class="dlg-h">
+      {icon && <span class:list={["dlg-ic", { bad }]}><Icon name={icon} /></span>}
+      <h2 class="vt-heading" id="dlg-t">{title}</h2>
+      <AdminButton href={closeHref} icon="close" iconOnly label={t("admin.close")} />
+    </div>
+    <slot />
+  </div>
+</section>

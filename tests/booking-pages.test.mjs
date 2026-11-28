@@ -5,7 +5,7 @@ import assert from "node:assert/strict";
 import { rawRequest, requireBase, freshIp, BASE, MOCK_API } from "./helpers/env.mjs";
 import { launch } from "./helpers/browser.mjs";
 import { bookPage, mockLog, logMark, callsTo, shot } from "./helpers/book.mjs";
-import { EVIL } from "./helpers/mock-api.mjs";
+import { EVIL, ICON_REMOTE, ICON_EVIL } from "./helpers/mock-api.mjs";
 import { visibleBox } from "./helpers/browser.mjs";
 import { PRIVACY_POLICY_VERSION } from "../src/config/legal.mjs";
 const text = (loc) => loc.innerText().then((s) => s.replace(/\s+/g, " ").trim());
@@ -260,7 +260,7 @@ describe("salon page", async () => {
 
 describe("salon page: category icons in the first HTML (phase 035)", async () => {
   const res = await get("/book/s/wiz-massage-0001");
-  const icons = [...res.body.matchAll(/<details class="cat-group"[\s\S]*?<span class="lbl[^>]*>([^<]+)<\/span>/g)].map((m) => [m[0].match(/data-src="([^"]+)"/)[1], m[1]]);
+  const icons = [...res.body.matchAll(/<details class="cat-group"[\s\S]*?<span class="lbl[^>]*>([^<]+)<\/span>/g)].map((m) => [(m[0].match(/data-src="([^"]+)"/) ?? m[0].match(/data-fallback="([^"]+)"/))[1], m[1]]); // a server-icon box (W050) carries the bundled icon as data-fallback
   test("a BODY_MASSAGE group shows the massage icon", () => assert.ok(icons.some(([src, name]) => name === "Масаж і догляд за тілом" && src === "/icons/category_body_massage.svg"), JSON.stringify(icons)));
   test("an unknown key with a massage name maps via the name rule", () => assert.ok(icons.some(([src, name]) => name === "Антицелюлітний масаж" && src === "/icons/category_body_massage.svg"), JSON.stringify(icons)));
   test("the other groups keep their own icons", () => assert.ok(icons.some(([src, name]) => name === "Нігтьовий сервіс" && src === "/icons/category_nail_service.svg"), JSON.stringify(icons)));
@@ -316,8 +316,12 @@ describe("salon hero card: rating line, address rule, note, image preconnect, co
     assert.equal(api.length, 1);
     assert.ok(api[0].includes(`href="${MOCK_API}"`), api[0]);
   });
-  test("the cover wins over the avatar for the image preconnect", async () => {
-    assert.deepEqual(imageHref(await page("salonrated-7012")), ["https://cover.beautica.test"]);
+  test("off-pin cover / avatar (salonrated-7012): no preconnect to them, no <img> for them, the no-photo fallback shows", async () => {
+    const h = await page("salonrated-7012");
+    assert.deepEqual(imageHref(h), []);
+    assert.equal(/cover\.beautica\.test|avatar\.beautica\.test/.test(h), false);
+    assert.equal(/<div class="cover">\s*<img/.test(h), false);
+    assert.equal(/<div class="cover">/.test(h) || /class="[^"]*(?:ph|placeholder|initial)[^"]*"/.test(h), true, "fallback markup");
   });
   test("no cover and no avatar: no image preconnect, only the API one", async () => {
     const h = await page("salonbare-7002");
@@ -602,9 +606,9 @@ describe("parity with the app (backend 383-385)", () => {
     try {
       const { page } = env;
       await page.getByRole("tab", { name: "Відгуки" }).click();
-      const rows = await page.locator("[data-panel='2'] .drow").evaluateAll((rs) => rs.map((r) => [r.children[0].textContent.trim(), r.querySelector(".cnt").textContent.trim(), r.querySelector(".fillbar").style.width]));
+      const rows = await page.locator("[data-panel='2'] .drow").evaluateAll((rs) => rs.map((r) => [r.children[0].textContent.trim(), r.querySelector(".cnt").textContent.trim(), r.querySelector(".fillbar").className.match(/\bw(\d+)\b/)[1] + "%"]));
       assert.deepEqual(rows.map((r) => r.slice(0, 2)), [["5", "110"], ["4", "14"], ["3", "3"], ["2", "1"], ["1", "0"]]);
-      assert.equal(rows[0][2], "85.9%");
+      assert.equal(rows[0][2], "86%");
       assert.equal(rows[4][2], "0%");
       assert.ok(await visibleBox(page.locator("[data-panel='2'] .rsum .divider")));
     } finally {
@@ -637,6 +641,7 @@ describe("parity with the app (backend 383-385)", () => {
       await page.locator("[data-sortmenu] summary").click();
       await page.locator("[data-sort-option=HIGHEST]").click();
       await page.waitForFunction(() => document.querySelectorAll("[data-review-list] article").length === 5);
+      await page.locator("[data-sort-label]").filter({ hasText: /^\s*Найвищий рейтинг\s*$/ }).waitFor({ timeout: 10000 });
       assert.equal(await text(page.locator("[data-sort-label]")), "Найвищий рейтинг");
       const first = await page.locator("[data-review-list] article").first().evaluate((a) => ({ name: a.querySelector(".t-sub12").textContent, on: a.querySelectorAll(".stars .on").length, svc: a.querySelector(".svc .t-fb").textContent }));
       assert.equal(first.on, 5);
@@ -647,13 +652,14 @@ describe("parity with the app (backend 383-385)", () => {
       await page.waitForFunction(() => document.querySelectorAll("[data-review-list] article").length === 10);
       await page.click("[data-more]");
       await page.waitForFunction(() => document.querySelectorAll("[data-review-list] article").length === 12);
+      await page.locator("[data-more]").waitFor({ state: "hidden", timeout: 10000 });
       assert.equal(await page.locator("[data-more]").isVisible(), false, "no more pages");
       const ratings = await page.locator("[data-review-list] article").evaluateAll((as) => as.map((a) => a.querySelectorAll(".stars .on").length));
       assert.deepEqual(ratings, [...ratings].sort((a, b) => b - a), "highest first across pages");
       await page.context().route(`${MOCK_API}/api/v1/book/oksana-ab12/reviews*`, (r) => r.fulfill({ status: 500, headers: { "access-control-allow-origin": "*" }, body: "" }));
       await page.locator("[data-sortmenu] summary").click();
       await page.locator("[data-sort-option=OLDEST]").click();
-      await page.waitForSelector("[data-rev-status]:not([hidden])");
+      await page.locator("[data-rev-status]").filter({ hasText: "Не вдалося завантажити відгуки" }).waitFor({ timeout: 10000 });
       assert.ok((await text(page.locator("[data-rev-status]"))).includes("Не вдалося завантажити відгуки"));
     } finally {
       await env.context.close();
@@ -933,4 +939,97 @@ describe("audit cycle 3: font bytes ahead of the first paint cannot silently gro
         await env.context.close();
       }
     });
+});
+
+// W050: server category icons (iconUrl from GET /service-categories/approved). The lookup is stale-while-revalidate, so the FIRST render of a worker has bundled
+// icons and a background fill (a cold worker's first fill can fail inside the 700 ms cap and is retried after the 30 s negative window); a test therefore waits
+// (on the condition, with a deadline) until the page shows the remote icon, never a fixed sleep.
+describe("server category icons on the link pages (W050)", () => {
+  const MEDIA_CSP = "img-src 'self' data: https://media.beautica.test;";
+  const SVG = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/></svg>';
+  const withRemoteIcon = async (path) => {
+    const deadline = Date.now() + 75_000;
+    let res;
+    do {
+      res = await get(path);
+      if (res.body.includes(`data-remote="${ICON_REMOTE}"`)) return res;
+      await new Promise((r) => setTimeout(r, 150));
+    } while (Date.now() < deadline);
+    assert.fail(`${path}: the server icon never reached the markup`);
+  };
+  before(() => withRemoteIcon("/book/oksana-ab12"), { timeout: 90_000 }); // warm the shared icon memo once; the tests below then see the filled state at once
+  const group = (html, label) => html.match(new RegExp(`<details class="cat-group"(?:(?!</details>)[\\s\\S])*?<span class="lbl[^>]*>${label}</span>`))?.[0] ?? "";
+  // The media host is faked in bookPage (image/png). The icon route answers an SVG the mask can use, or fails the request (a host the browser cannot reach / no CORS rule).
+  const iconRoute = (ok) => (r) => (ok ? r.fulfill({ status: 200, contentType: "image/svg+xml", body: SVG, headers: { "access-control-allow-origin": "*" } }) : r.abort("failed"));
+
+  test("master page: the pinned iconUrl is a data-remote box with the bundled icon as data-fallback; categories without one keep data-src", async () => {
+    const { body } = await withRemoteIcon("/book/oksana-ab12");
+    const brows = group(body, "Оформлення брів");
+    assert.ok(brows.includes(`data-remote="${ICON_REMOTE}"`) && brows.includes('data-fallback="/icons/category_brows.svg"'), brows);
+    assert.ok(!/data-src=/.test(brows.replace(/<noscript>[\s\S]*$/, "")), "a remote box has no data-src (main.js must not hydrate it)");
+    assert.ok(group(body, "Нігтьовий сервіс").includes('data-src="/icons/category_nail_service.svg"'), "no iconUrl -> bundled by key");
+  });
+
+  test("off-pin iconUrl (evil host): bundled icon, and the host is in neither the markup nor the CSP", async () => {
+    const { body, headers } = await withRemoteIcon("/book/oksana-ab12");
+    assert.ok(group(body, "Подологія").includes('data-src="/icons/category_podology.svg"'), "evil iconUrl -> bundled icon");
+    assert.ok(!body.includes("evil.example") && !body.includes(ICON_EVIL), "evil host in the markup");
+    assert.ok(!headers["content-security-policy"].includes("evil.example"), headers["content-security-policy"]);
+  });
+
+  test("CSP img-src gains the media origin from the icon alone (no photo on the page), and nothing else", async () => {
+    const { body, headers } = await withRemoteIcon("/book/icononly-0501");
+    assert.ok(!/<img[^>]*media\.beautica\.test/.test(body), "fixture has no photo, so the origin can only come from the icon");
+    assert.ok(headers["content-security-policy"].includes(MEDIA_CSP), headers["content-security-policy"]);
+  });
+
+  test("an off-pin cover / avatar (salonrated-7012) stays out of img-src: the CSP blocks them (the page no longer renders them)", async () => {
+    const { headers } = await get("/book/s/salonrated-7012").then((r) => r);
+    const csp = headers["content-security-policy"];
+    // The pin drops cover./avatar.beautica.test: only media.beautica.test is allowed to load images, so both photos are blocked client-side.
+    assert.ok(csp.includes(MEDIA_CSP), csp);
+    assert.ok(!/cover\.beautica\.test|avatar\.beautica\.test/.test(csp), csp);
+  });
+
+  for (const [path, tab] of [["/book/oksana-ab12", "Послуги"], ["/book/s/lavanda-1111", "Послуги"]]) {
+    for (const width of [360, 768, 1280]) {
+      test(`${path} @${width}: the remote icon is masked in after load, the box is visible, no horizontal overflow`, async () => {
+        await withRemoteIcon(path);
+        const env = await bookPage(browser, null, { path, width, height: 900 });
+        try {
+          const { page } = env;
+          await page.route(`${ICON_REMOTE}`, iconRoute(true));
+          await page.reload({ waitUntil: "load" });
+          await page.waitForSelector("[data-tabs][role=tablist]", { state: "attached" });
+          await page.getByRole("tab", { name: tab }).click();
+          const icon = page.locator(".tabpanel:not([hidden]) .ai[data-remote]").first();
+          await icon.waitFor({ state: "visible" });
+          await page.waitForFunction(() => document.querySelector(".ai[data-remote][data-ready]"));
+          assert.ok((await icon.evaluate((e) => getComputedStyle(e).maskImage)).includes(ICON_REMOTE), "mask points at the server icon");
+          assert.ok(await visibleBox(icon), "icon box has a size");
+          assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), "no horizontal overflow");
+          assert.deepEqual(env.problems.filter((p) => !/ERR_FAILED|blocked/i.test(String(p))), [], "no console errors");
+        } finally {
+          await env.context.close();
+        }
+      });
+    }
+  }
+
+  test("a server icon the browser cannot load (failed request) falls back to the bundled icon after the probe", async () => {
+    await withRemoteIcon("/book/oksana-ab12");
+    const env = await bookPage(browser, null, { path: "/book/oksana-ab12" });
+    try {
+      const { page } = env;
+      await page.route(`${ICON_REMOTE}`, iconRoute(false));
+      await page.reload({ waitUntil: "load" });
+      await page.waitForSelector("[data-tabs][role=tablist]", { state: "attached" });
+      await page.getByRole("tab", { name: "Послуги" }).click();
+      await page.waitForFunction(() => document.querySelector(".ai[data-remote][data-ready]"));
+      const mask = await page.locator(".ai[data-remote]").first().evaluate((e) => getComputedStyle(e).maskImage);
+      assert.ok(mask.includes("category_brows.svg") && !mask.includes("category-icons"), mask);
+    } finally {
+      await env.context.close();
+    }
+  });
 });

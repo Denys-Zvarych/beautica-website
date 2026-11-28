@@ -1,0 +1,27 @@
+---
+// Prev / «n / total» / next for the private /admin lists (W040 requests, W041 catalog, W052). Plain links, no script. `?p=` is 1-based; page 1 has no `p`.
+// `query` (additive) = the other params to keep on every link (filter, search, open category).
+import Chip from "./Chip.astro";
+import { withQuery } from "../lib/admin/listQuery.ts";
+interface Props {
+  base: string;
+  page: number;
+  totalPages: number;
+  label: string;
+  prev: string;
+  next: string;
+  query?: Record<string, string>;
+}
+const { base, page, totalPages, label, prev, next, query = {} } = Astro.props;
+const url = (n: number) => withQuery(base, { ...query, p: n > 1 ? n : undefined });
+---
+
+{
+  totalPages > 1 && (
+    <nav class="pager" aria-label={label}>
+      {page > 1 && <Chip href={url(page - 1)}>{prev}</Chip>}
+      <span class="vt-label" aria-current="page">{page} / {totalPages}</span>
+      {page < totalPages && <Chip href={url(page + 1)}>{next}</Chip>}
+    </nav>
+  )
+}

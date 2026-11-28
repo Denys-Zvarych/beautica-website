@@ -21,9 +21,12 @@ const rate = (page, n, v) => page.locator(`[data-svc]`).nth(n).locator(`.starbtn
 const RATING = (avg, n) => `${formatRating(avg)} (${n})`; // the shared helper's format, mock invite avgRating 4.9 / reviewCount 128
 const submitAll = async (page, stars) => {
   for (let i = 0; i < stars; i++) await rate(page, i, 5);
+  await widgetReady(page, "ts-form");
   await page.click("#rv-submit");
-  await page.waitForSelector("[data-screen=success]:not([hidden])");
+  await page.waitForSelector("[data-screen=success]:not([hidden])", SLOW);
 };
+const SLOW = { timeout: 30000 }; // a loaded runner (parallel CI shards) needs well over Playwright's 15 s default
+const widgetReady = (page, id) => page.waitForSelector(`#${id} iframe`, { state: "attached", ...SLOW }); // the Turnstile widget must be mounted before a click that needs its token
 const POST_API = (token, tail) => `/api/v1/public/review-invites/${token}${tail}`;
 
 describe("headers and markup (token route)", () => {
@@ -129,10 +132,10 @@ describe("the form", () => {
       assert.equal(await page.locator("#rv-submit").isDisabled(), false);
       await page.fill("#comment", "Дуже уважна майстриня!");
       assert.equal(await page.locator("#counter").innerText(), "22 / 2000");
-      await page.waitForSelector("#ts-form iframe", { state: "attached" });
+      await page.waitForSelector("#ts-form iframe", { state: "attached", ...SLOW });
       assert.equal((await page.evaluate(() => window.__tsOpts)).action, "review_submit");
       await page.click("#rv-submit");
-      await page.waitForSelector("[data-screen=success]:not([hidden])");
+      await page.waitForSelector("[data-screen=success]:not([hidden])", SLOW);
       assert.equal(await visibleScreen(page), "success");
       assert.match(await text(page.locator("[data-screen=success]")), /Дякуємо за відгук!.*Майстер.*Оксана Коваленко.*24 жовтня 2026 · Манікюр\+гель лак/);
       assert.equal(await text(page.locator("[data-screen=success] .strip .rate")), formatRated, "done card shows the rating exactly as the form strip did, in the shared helper's format");
@@ -166,8 +169,9 @@ describe("the form", () => {
       assert.equal(await page.locator("[data-svc]").nth(1).getAttribute("data-v"), "2");
       assert.equal(await page.locator("#rv-submit").isDisabled(), false);
       await page.fill("#comment", "Все чудово");
+      await widgetReady(page, "ts-form");
       await page.click("#rv-submit");
-      await page.waitForSelector("[data-screen=success]:not([hidden])");
+      await page.waitForSelector("[data-screen=success]:not([hidden])", SLOW);
       const posts = callsTo(await mockLog((e) => e.path.includes(token)), "POST", "/reviews");
       assert.deepEqual(posts[0].body.items.map((i) => [i.rating, i.comment ?? null]), [[5, "Все чудово"], [2, null]]);
       quiet(env);
@@ -188,8 +192,9 @@ describe("the form", () => {
       await rate(page, 0, 3);
       await rate(page, 1, 1);
       await page.fill("#comment", "Коментар на візит");
+      await widgetReady(page, "ts-form");
       await page.click("#rv-submit");
-      await page.waitForSelector("[data-screen=success]:not([hidden])");
+      await page.waitForSelector("[data-screen=success]:not([hidden])", SLOW);
       const posts = callsTo(await mockLog((e) => e.path.includes(token)), "POST", "/reviews");
       assert.equal(posts.length, 1);
       assert.deepEqual(posts[0].body.items, [
@@ -287,6 +292,7 @@ describe("the form", () => {
 describe("submit failures and the other states", () => {
   const fill = async (page) => {
     await rate(page, 0, 5);
+    await widgetReady(page, "ts-form");
     await page.click("#rv-submit");
   };
   test("429: the retry banner, the form stays, the button works again", async () => {
@@ -294,7 +300,7 @@ describe("submit failures and the other states", () => {
     try {
       const { page } = env;
       await fill(page);
-      await page.waitForSelector("#rv-error", { state: "visible" });
+      await page.waitForSelector("#rv-error", { state: "visible", ...SLOW });
       assert.equal(await text(page.locator("#rv-error")), "Забагато спроб. Спробуйте за кілька хвилин.");
       assert.equal(await visibleScreen(page), "form");
       assert.equal(await page.locator("#rv-submit").isDisabled(), false);
@@ -309,7 +315,7 @@ describe("submit failures and the other states", () => {
     try {
       const { page } = env;
       await fill(page);
-      await page.waitForSelector("#rv-error", { state: "visible" });
+      await page.waitForSelector("#rv-error", { state: "visible", ...SLOW });
       assert.match(await text(page.locator("#rv-error")), /Перевірте оцінки/);
       quiet(env);
     } finally {
@@ -324,7 +330,7 @@ describe("submit failures and the other states", () => {
       await page.route(`${MOCK_API}${POST_API(token, "/reviews")}`, (r) => r.abort("failed"));
       await page.fill("#comment", "Текст");
       await fill(page);
-      await page.waitForSelector("#rv-error", { state: "visible" });
+      await page.waitForSelector("#rv-error", { state: "visible", ...SLOW });
       assert.equal(await text(page.locator("#rv-error")), "Не вдалося надіслати відгук. Перевірте інтернет і спробуйте ще раз.");
       assert.equal(await page.inputValue("#comment"), "Текст");
       assert.equal(await page.locator("#rv-submit").isDisabled(), false);
@@ -339,7 +345,7 @@ describe("submit failures and the other states", () => {
       try {
         const { page } = env;
         await fill(page);
-        await page.waitForSelector(`[data-screen=${screen}]:not([hidden])`);
+        await page.waitForSelector(`[data-screen=${screen}]:not([hidden])`, SLOW);
         assert.equal(await text(page.locator(`[data-screen=${screen}] [role=status]`)), h);
         assert.equal(await page.locator("[data-screen=form]").isHidden(), true);
         assert.equal(new URL(page.url()).pathname, "/r/", "the dead token is scrubbed from the address");
@@ -354,7 +360,7 @@ describe("submit failures and the other states", () => {
     try {
       const { page } = env;
       await fill(page);
-      await page.waitForSelector("[data-screen=already]:not([hidden])");
+      await page.waitForSelector("[data-screen=already]:not([hidden])", SLOW);
       assert.equal(await page.locator("[data-screen=form]").isHidden(), true);
       assert.equal(new URL(page.url()).pathname, "/r/", "the dead token is scrubbed from the address");
       quiet(env);
@@ -421,9 +427,9 @@ describe("opt-out", () => {
       assert.equal(await visibleScreen(page), "form");
       assert.equal(await page.locator("[data-svc]").first().getAttribute("data-v"), "3");
       await page.click("#rv-optout");
-      await page.waitForSelector("#ts-optout iframe", { state: "attached" });
+      await page.waitForSelector("#ts-optout iframe", { state: "attached", ...SLOW });
       await page.click("#rv-optout-yes");
-      await page.waitForSelector("[data-screen=optout-done]:not([hidden])");
+      await page.waitForSelector("[data-screen=optout-done]:not([hidden])", SLOW);
       assert.equal(await text(page.locator("[data-screen=optout-done] [role=status]")), "Готово");
       assert.equal(new URL(page.url()).pathname, "/r/", "opt-out success scrubs the token");
       const posts = callsTo(await mockLog((e) => e.path.includes(token)), "POST", "/opt-out");
@@ -439,9 +445,9 @@ describe("opt-out", () => {
     try {
       const { page } = env;
       await page.click("#rv-optout");
-      await page.waitForSelector("#ts-optout iframe", { state: "attached" }); // the widget must be mounted before «Так», as in the happy-path test (a slow runner raced it)
+      await page.waitForSelector("#ts-optout iframe", { state: "attached", ...SLOW }); // the widget must be mounted before «Так», as in the happy-path test (a slow runner raced it)
       await page.click("#rv-optout-yes");
-      await page.waitForSelector("#rv-optout-error", { state: "visible" });
+      await page.waitForSelector("#rv-optout-error", { state: "visible", ...SLOW });
       assert.equal(await text(page.locator("#rv-optout-error")), "Забагато спроб. Спробуйте за кілька хвилин.");
       assert.equal(await visibleScreen(page), "optout-confirm");
       quiet(env);
@@ -478,6 +484,7 @@ describe("opt-out failure branches", () => {
   const toConfirm = async (token) => {
     const env = await reviewPage(token);
     await env.page.click("#rv-optout");
+    await widgetReady(env.page, "ts-optout");
     return env;
   };
   test("404 on opt-out (token spent or expired meanwhile): the neutral invalid screen and the dead token is scrubbed from the address", async () => {
@@ -487,7 +494,7 @@ describe("opt-out failure branches", () => {
       const { page } = env;
       assert.notEqual(new URL(page.url()).pathname, "/r/", "the token is still in the address before the request");
       await page.click("#rv-optout-yes");
-      await page.waitForSelector("[data-screen=invalid]:not([hidden])");
+      await page.waitForSelector("[data-screen=invalid]:not([hidden])", SLOW);
       assert.equal(await text(page.locator("[data-screen=invalid] [role=status]")), "Посилання недійсне або вже використане");
       assert.equal(await page.locator("[data-screen=optout-done]").isHidden(), true, "never claims success");
       assert.equal(new URL(page.url()).pathname, "/r/", "the dead token is scrubbed from the address");
@@ -504,7 +511,7 @@ describe("opt-out failure branches", () => {
       const { page } = env;
       await page.route(`${MOCK_API}${POST_API(token, "/opt-out")}`, (r) => r.abort("failed"));
       await page.click("#rv-optout-yes");
-      await page.waitForSelector("#rv-optout-error", { state: "visible" });
+      await page.waitForSelector("#rv-optout-error", { state: "visible", ...SLOW });
       assert.equal(await text(page.locator("#rv-optout-error")), "Не вдалося виконати. Перевірте інтернет і спробуйте ще раз.");
       assert.equal(await visibleScreen(page), "optout-confirm");
       assert.equal(await page.locator("#rv-optout-yes").isDisabled(), false);
@@ -544,8 +551,9 @@ describe("responsive", () => {
         await ok("#rv-optout-yes");
         await noScroll("opt-out confirm");
         await page.click("#rv-optout-back");
+        await widgetReady(page, "ts-form");
         await page.click("#rv-submit");
-        await page.waitForSelector("[data-screen=success]:not([hidden])");
+        await page.waitForSelector("[data-screen=success]:not([hidden])", SLOW);
         await page.waitForFunction(() => getComputedStyle(document.querySelector("[data-screen=success] .reveal")).opacity === "1");
         await ok(".medallion");
         await ok("[data-screen=success] .cta2");
@@ -564,16 +572,23 @@ describe("fonts ahead of the first paint (audit cycle 2)", () => {
     test(`${token.slice(0, 6)}: no Latin letters on the page, so 4 font files / <= 110 KB and the big Latin files are never requested`, async () => {
       const env = await reviewPage(token);
       try {
-        const fonts = [];
-        env.page.on("response", async (r) => {
-          if (/\.woff2(\?|$)/.test(r.url())) fonts.push({ file: new URL(r.url()).pathname.split("/").pop(), bytes: (await r.body().catch(() => Buffer.alloc(0))).length });
+        // Distinct files keyed by name: a font fetched twice (late first-load response, reload refetch) counts once.
+        const byFile = new Map();
+        const pending = [];
+        env.page.on("response", (r) => {
+          if (!/\.woff2(\?|$)/.test(r.url())) return;
+          const file = new URL(r.url()).pathname.split("/").pop();
+          pending.push(r.body().catch(() => Buffer.alloc(0)).then((b) => { byFile.set(file, Math.max(byFile.get(file) ?? 0, b.length)); }));
         });
         await env.page.reload({ waitUntil: "networkidle" });
         await env.page.evaluate(() => document.fonts.ready);
         await env.page.waitForLoadState("networkidle");
-        assert.deepEqual(fonts.filter((f) => /^(nunito|comfortaa)-latin-wght/.test(f.file)), [], "a visible Latin letter (e.g. SMS) pulls the full Latin face");
-        assert.ok(fonts.length <= 4, `${fonts.length} font files`);
-        assert.ok(fonts.reduce((n, f) => n + f.bytes, 0) <= 110 * 1024, "fonts <= 110 KB");
+        await Promise.all(pending);
+        const files = [...byFile.keys()].sort();
+        const total = [...byFile.values()].reduce((n, b) => n + b, 0);
+        assert.deepEqual(files.filter((f) => /^(nunito|comfortaa)-latin-wght/.test(f)), [], "a visible Latin letter (e.g. SMS) pulls the full Latin face");
+        assert.ok(files.length <= 4, `${files.length} font files: ${files.join(", ")}`);
+        assert.ok(total <= 110 * 1024, `fonts <= 110 KB (got ${total} B: ${files.join(", ")})`);
       } finally {
         await env.context.close();
       }
